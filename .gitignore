@@ -1,0 +1,49 @@
+# Local tooling metadata
+.zcode/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+.dist/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.wrangler/
+.dev.vars
+
+# Local data and book files
+*.sqlite
+*.sqlite3
+*.db
+*.epub
+*.mobi
+*.azw3
+*.pdf
+*.fb2
+*.cbz
+books/
+local-data/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+*.tmp
+*.part
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

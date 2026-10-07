@@ -1,0 +1,29 @@
+name: Documentation improvement
+description: Report unclear, missing, or inconsistent project documentation
+title: "docs: "
+labels:
+  - documentation
+assignees: []
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is unclear or missing?
+      description: Point to the relevant document and explain the user or implementation impact.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested change
+      description: Describe a concrete improvement, or explain what needs investigation.
+    validations:
+      required: false
+  - type: textarea
+    id: related
+    attributes:
+      label: Related requirements or decisions
+      description: Include relevant IDs, document links, or ADRs.
+    validations:
+      required: false
