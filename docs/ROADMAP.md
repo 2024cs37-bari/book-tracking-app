@@ -34,7 +34,7 @@ Done:
   extraction, cover storage, incomplete-metadata fallback to filename.
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
-- 131 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
+- 133 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
   progress/debounce/outbox integration; 13 browser cases across Chromium, Firefox and Playwright
   WebKit projects (39 checks).
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
@@ -52,14 +52,18 @@ Done:
   deterministic late-font-ready teardown regression.
 - Probed durable IndexedDB binary fallback when OPFS cannot write, and bounded optional persistence
   permission waiting (ADR 0004); the released metadata schema remains unchanged.
+- External checksum-pinned Moby-Dick, SVG in Spine and Hello World PDF corpus, without committing
+  book files; mobile-sized checks and generated 240-page image-PDF resource measurements.
+- Chapter-level package-CFI restoration corrected using the real Moby-Dick TOC as a regression.
 
 Evidence: [CI run 37742014444](https://github.com/2024cs37-bari/book-tracking-app/actions/runs/37742014444)
 on 2026-10-08 passes the full quality gate, 131 Vitest tests and all 39 browser checks.
 
 **Next milestone selected: reader usability and validation (Phase 1 completion).**
-EPUB contents navigation and the generated asset/fixed-layout slice are implemented. Next establish
-a legally usable real-file corpus and mobile memory measurements, and expand fixed-layout spread,
-SVG and obfuscated-font cases. Finish PDF covers and manual metadata editing alongside validation.
+EPUB contents, generated assets and selected real-file corpus slices are implemented. Desktop
+mobile-sized measurements are recorded in [Reader validation](READER-VALIDATION.md). Next obtain
+physical-device measurements and a diverse real/image-heavy PDF corpus, and expand obfuscated-font
+and layout variants. Finish PDF covers and manual metadata editing alongside validation.
 Phase 2 bookmarks/annotations will build on these navigation and locator guarantees.
 
 Remaining:

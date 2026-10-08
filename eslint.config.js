@@ -38,7 +38,7 @@ export default tseslint.config(
     ...solid,
   },
   {
-    files: ['tests/**/*.ts', 'vite.config.ts', 'playwright.config.ts', 'tooling/**/*.ts'],
+    files: ['tests/**/*.ts', 'vite.config.ts', 'playwright*.config.ts', 'tooling/**/*.ts'],
     languageOptions: {
       globals: {
         ...globals.node,

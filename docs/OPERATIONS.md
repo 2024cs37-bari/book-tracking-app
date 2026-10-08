@@ -71,6 +71,13 @@ Playwright WebKit on Linux is not evidence for Safari/iOS hardware; native libra
 also varies outside Playwright's supported host distributions.
 CI runs both gates. `PLAYWRIGHT_PORT=4175` can select a different test server port.
 
+Real-file acquisition is explicit: `npm run corpus:fetch` writes outside the repository (set
+`BOOK_CORPUS_DIR` to an external cache). `npm run test:corpus` adds four cases per browser using
+390×844/DPR-2 desktop contexts, with Chromium-only 4× CPU throttling. CI fetches pinned files and
+retains JSON measurements; the normal Vitest quality gate does not fetch the corpus. See
+[Reader validation](READER-VALIDATION.md) for license/hash evidence, reproduction, timing/memory
+scope and the outstanding physical-hardware protocol.
+
 The production service worker precaches application and renderer assets only; no book bytes or
 dynamic library metadata enter CacheStorage. Offline cold navigation/reload requires one completed
 online installation. Dev mode has no service worker. Browser CacheStorage/OPFS eviction can still

@@ -147,6 +147,7 @@ export class PdfRenderer implements Renderer {
         canvas.style.width = `${canvas.width / pixelRatio}px`;
         canvas.style.height = `${canvas.height / pixelRatio}px`;
         canvas.setAttribute('aria-label', `Page ${target + 1} of ${pdf.numPages}`);
+        canvas.dataset.renderState = 'pending';
         this.canvas = canvas;
         this.scroller!.replaceChildren(canvas);
         this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
@@ -160,6 +161,7 @@ export class PdfRenderer implements Renderer {
           if (this.task === task) this.task = undefined;
         }
         if (generation === this.generation && !this.dead) {
+          canvas.dataset.renderState = 'ready';
           this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
           this.emit();
         }

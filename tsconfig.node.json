@@ -11,5 +11,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "tooling/**/*.ts"]
+  "include": ["vite.config.ts", "playwright*.config.ts", "tooling/**/*.ts"]
 }

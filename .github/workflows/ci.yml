@@ -34,6 +34,25 @@ jobs:
       - name: Browser reader checks
         run: npm run test:browser
 
+      - name: Fetch pinned external corpus
+        env:
+          BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
+        run: npm run corpus:fetch
+
+      - name: Real-file and mobile-sized reader checks
+        env:
+          BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
+        run: npm run test:corpus
+
+      - name: Retain reader measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reader-measurements
+          path: test-results/**/attachments/*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Retain browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

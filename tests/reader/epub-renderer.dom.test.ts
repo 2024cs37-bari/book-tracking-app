@@ -113,6 +113,10 @@ it('opens generated EPUB through the custom element, applies CSP before URLs, tr
     { label: 'Chapter 1', locator: { kind: 'cfi' } },
     { label: 'Chapter 2', locator: { kind: 'cfi' } },
   ]);
+  const root = (await renderer.getToc())[1]!.locator!;
+  const navigation = vi.spyOn((host.querySelector('foliate-view') as TestView).renderer, 'goTo');
+  renderer.goTo(root);
+  await vi.waitFor(() => expect(navigation).toHaveBeenLastCalledWith({ index: 1, anchor: 0 }));
   const unsubscribe = renderer.onRelocate(vi.fn());
   unsubscribe();
   const view = host.querySelector('foliate-view') as TestView;

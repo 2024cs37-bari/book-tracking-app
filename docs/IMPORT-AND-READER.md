@@ -2,20 +2,22 @@
 
 ## 1. Format policy
 
-| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                                                                                                         |
-| --------- | ----------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3, RTL, nested TOC, PNG/CSS/OpenType assets, single-page fixed layout, script blocking and offline resume; Chromium/Firefox/Playwright WebKit CI projects. Real-file corpus, spreads/SVG/obfuscated fonts and hardware validation pending. |
-| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated 30-page PDF with text, rotation and varied sizes: one canvas, pixel cap, page/offset offline resume; same three browser projects. Large real files/images/mobile profiling pending.                                                               |
-| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                                                                                                         |
-| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                                                                                                     |
-| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                                                                                                    |
+| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                                                                                               |
+| --------- | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3/RTL/assets/CSP/offline checks plus pinned Moby-Dick and SVG in Spine samples. Selected TOC/font/SVG-spread navigation and mobile-sized measurements; broader layouts, obfuscated fonts and physical-device validation pending. |
+| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated text/rotation/page-size checks, 240-page shared-image raster stress, and pinned Hello World PDF paint/zoom/offline checks. One canvas/pixel bounds measured; diverse real/image-heavy PDFs and physical-device profiling pending.       |
+| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                                                                                               |
+| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                                                                                           |
+| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                                                                                          |
 
 DRM-protected inputs are unsupported. Never bypass DRM. An extension alone is not proof of format; sniff content and report mismatches.
 
 Evidence is reproducible in `tests/reader/*.dom.test.ts` and `tests/browser/reader.spec.ts`,
-using in-memory generators in `tests/support/fixtures.ts`. No real-file corpus has been verified
-for this milestone. EPUB/PDF Read actions are enabled because their adapters are implemented and
-basic generated reading is verified; the UI explicitly labels their wider support experimental.
+using in-memory generators in `tests/support/fixtures.ts`. Selected upstream Moby-Dick, SVG in Spine
+and Mozilla Hello World originals are also pinned and checked by the external corpus suite; see
+[Reader validation](READER-VALIDATION.md) for provenance, hashes and precise scope. EPUB/PDF Read
+actions are enabled because their adapters are implemented and basic reading is verified; the UI
+explicitly labels their wider support experimental.
 MOBI/AZW3 have no registered adapters; FB2/CBZ reading remains unimplemented.
 See [ADR 0003](decisions/0003-reader-engines.md) for the full upstream SHA and npm provenance decision.
 
@@ -106,6 +108,9 @@ type Locator = {
 ```
 
 - EPUB positions use CFI or the engine's stable equivalent plus fraction.
+- Package-only CFIs (no `!` content path), used by chapter-level TOC entries and fixed-layout pages,
+  restore the spine item at anchor zero. They must not be passed to a document-range resolver or
+  silently replaced by a percentage approximation.
 - MOBI/AZW3 locator behavior is engine-specific and must be validated.
 - PDF stores page and vertical offset plus fraction; page alone is inadequate for different layouts/zoom.
 - PDF page is zero-based; vertical offset is rounded PDF viewport points at scale 1 (after rotation),
@@ -167,6 +172,12 @@ Maintain test fixtures that are legally distributable or generated for testing. 
 - Wrong extension, duplicate bytes, truncated file, and oversized file cases.
 
 For each supported fixture, test import metadata, open, TOC, locator round-trip, search where claimed, memory behavior, and error cleanup. Record engine version and expected results. Do not check copyrighted books into the repository.
+
+The separate `corpus:fetch` command downloads unmodified, checksum-pinned originals outside the
+workspace; `test:corpus` runs small-viewport cross-browser checks and emits measurement JSON.
+This adds selected-file evidence, including actual SVG spine content and Moby-Dick fonts; it is
+not broad conformance or physical-mobile certification. The 240-page image PDF stress workload is
+generated, while the real PDF corpus is currently only a small upstream demo.
 
 ## 8. Metadata enrichment
 

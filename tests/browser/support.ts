@@ -9,14 +9,15 @@ export async function importBook(
   await page.goto('/');
   await page.locator('.app-nav').waitFor();
   await page.evaluate(
-    ({ bytes, filename }) => {
+    ({ base64, filename }) => {
       const transfer = new DataTransfer();
-      transfer.items.add(new File([new Uint8Array(bytes)], filename));
+      const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+      transfer.items.add(new File([bytes], filename));
       const input = document.querySelector<HTMLInputElement>('#library-import')!;
       input.files = transfer.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
     },
-    { bytes: Array.from(bytes), filename },
+    { base64: Buffer.from(bytes).toString('base64'), filename },
   );
   await page
     .getByRole('link', { name: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })

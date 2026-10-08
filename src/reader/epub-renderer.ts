@@ -169,7 +169,12 @@ export class EpubRenderer implements Renderer {
       if (!target || target.index < 0 || target.index >= view.book.sections.length)
         throw new Error('Unresolved CFI');
       // Low-level goTo propagates errors; high-level upstream goTo swallows them.
-      await view.renderer.goTo(target);
+      // Package-only CFIs identify a spine item, not a range in its document.
+      // Upstream resolveCFI creates a range resolver even when no `!` path
+      // exists; explicitly start the section instead of falling back by fraction.
+      await view.renderer.goTo(
+        locator.value.includes('!') ? target : { index: target.index, anchor: 0 },
+      );
     } catch {
       await view.goToFraction(locator.fraction);
       this.host?.dispatchEvent(

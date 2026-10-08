@@ -334,6 +334,79 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
   return strToU8(text);
 }
 
+/** Generated stress PDF: many pages sharing a real 1200×1600 Flate RGB image. */
+export function buildImageHeavyPdfFixture(pageCount = 240): Uint8Array<ArrayBuffer> {
+  const width = 1200;
+  const height = 1600;
+  const pixels = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 3;
+      pixels[offset] = x % 251;
+      pixels[offset + 1] = y % 251;
+      pixels[offset + 2] = (x + y) % 251;
+    }
+  const image = zlibSync(pixels);
+  const chunks: Uint8Array[] = [strToU8('%PDF-1.7\n')];
+  const offsets = [0];
+  let length = chunks[0]!.length;
+  const append = (bytes: Uint8Array) => {
+    chunks.push(bytes);
+    length += bytes.length;
+  };
+  const object = (id: number, dictionary: string, stream?: Uint8Array) => {
+    offsets[id] = length;
+    append(strToU8(`${id} 0 obj\n${dictionary}\n`));
+    if (stream) {
+      append(strToU8('stream\n'));
+      append(stream);
+      append(strToU8('\nendstream\n'));
+    }
+    append(strToU8('endobj\n'));
+  };
+  const imageId = pageCount + 3;
+  const fontId = 2 * pageCount + 4;
+  object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  object(
+    2,
+    `<< /Type /Pages /Kids [${Array.from({ length: pageCount }, (_, index) => `${index + 3} 0 R`).join(' ')}] /Count ${pageCount} >>`,
+  );
+  for (let index = 0; index < pageCount; index++) {
+    object(
+      index + 3,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im1 ${imageId} 0 R >> /Font << /F1 ${fontId} 0 R >> >> /Contents ${imageId + index + 1} 0 R >>`,
+    );
+  }
+  object(
+    imageId,
+    `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>`,
+    image,
+  );
+  for (let index = 0; index < pageCount; index++) {
+    const content = strToU8(
+      `q 540 0 0 720 36 36 cm /Im1 Do Q\nBT /F1 12 Tf 40 770 Td (Stress page ${index + 1}) Tj ET\n`,
+    );
+    object(imageId + index + 1, `<< /Length ${content.length} >>`, content);
+  }
+  object(fontId, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const xref = length;
+  append(
+    strToU8(
+      `xref\n0 ${offsets.length}\n0000000000 65535 f \n${offsets
+        .slice(1)
+        .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
+        .join('')}trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`,
+    ),
+  );
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
 /** Builds a Palm database container with a MOBI header of the given version. */
 export function buildMobiFixture(options: { fileVersion?: number } = {}): Uint8Array<ArrayBuffer> {
   const fileVersion = options.fileVersion ?? 6;
