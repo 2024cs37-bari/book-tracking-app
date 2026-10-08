@@ -92,6 +92,11 @@ repository writes and flushes on close/hide. UI only mounts the contract and cal
 Vendored engines are loaded exclusively inside `reader`; see [ADR 0003](decisions/0003-reader-engines.md).
 The schema remains v1. Settings are local device defaults in localStorage, not replicated rows.
 
+The reader shell renders EPUB TOC trees through the `TocItem` contract, without engine imports.
+Contents load after basic reading is ready; navigation uses the same CFI/progress pathway as
+page turns. Conversion is sequential, retains at most one section document, and caches the result
+for the session. Missing/external destinations are unavailable entries rather than invented locators.
+
 ## 5. Data flow and invariants
 
 1. A user mutation is validated and committed to the local database first.

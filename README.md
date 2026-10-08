@@ -32,6 +32,8 @@ interface; Cloudflare provides synchronization and durable file storage in later
 - **JSON export** of library metadata, generated entirely on the client.
 - **Reader** at `/read/:id`: EPUB via pinned upstream foliate-js, PDF via pdf.js directly,
   previous/next navigation, font size/PDF zoom, line height, margins and themes.
+- **EPUB contents**: nested EPUB 2 NCX / EPUB 3 navigation entries, keyboard-accessible chapter
+  and fragment jumps, with unavailable destinations disabled.
 - **Progress**: EPUB CFI or zero-based PDF page/vertical offset plus normalized fraction,
   debounced local saves with an atomic outbox row, and restoration on reopen.
 - **Offline app shell** in production builds: service-worker precache includes renderer modules,
@@ -43,7 +45,7 @@ interface; Cloudflare provides synchronization and durable file storage in later
 
 - No sync, no server, no accounts. The outbox grows locally and is reported in Settings.
 - No annotations, shelves, tags, statistics, or selective offline pinning.
-- No reader TOC UI or in-book search. Real-file EPUB/PDF corpus, mobile memory profiling and
+- No PDF outline or in-book search. Real-file EPUB/PDF corpus, mobile memory profiling and
   Firefox/WebKit validation remain pending. Generated-fixture checks run in Chromium.
 - MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
   explicitly marked as unimplemented.

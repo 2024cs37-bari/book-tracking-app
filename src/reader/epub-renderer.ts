@@ -10,7 +10,7 @@ import {
 
 interface EpubBook {
   transformTarget: EventTarget;
-  toc?: { label: string; href: string; subitems?: EpubBook['toc'] }[];
+  toc?: { label: string; href?: string | null; subitems?: EpubBook['toc'] }[];
   sections: { cfi?: string; createDocument(): Promise<Document> }[];
   destroy(): void;
 }
@@ -76,6 +76,7 @@ export class EpubRenderer implements Renderer {
   private opening?: Promise<void>;
   private tasks = new Set<Promise<unknown>>();
   private closedRenderers = new WeakSet<object>();
+  private toc?: Promise<TocItem[]>;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
   private readonly relocate = (event: Event) => {
     const { cfi, fraction } = (event as CustomEvent<{ cfi: string; fraction: number }>).detail;
@@ -192,37 +193,62 @@ export class EpubRenderer implements Renderer {
 
   async getToc(): Promise<TocItem[]> {
     const view = this.view;
-    if (!view) return [];
-    const convert = (items: NonNullable<EpubBook['toc']>): Promise<TocItem[]> =>
-      Promise.all(
-        items.map(async (item) => {
-          const target = view.resolveNavigation(item.href);
-          let locator: Locator | undefined;
-          if (target) {
-            const doc = await view.book.sections[target.index]!.createDocument();
-            const anchor =
-              typeof target.anchor === 'function'
-                ? (target.anchor as (doc: Document) => unknown)(doc)
-                : undefined;
-            let range: Range | undefined;
-            if (anchor instanceof Range) range = anchor;
-            else if (anchor instanceof Element) {
-              range = doc.createRange();
+    if (!view || this.dead) return [];
+    this.toc ??= this.readToc(view);
+    return this.toc;
+  }
+
+  private async readToc(view: FoliateView): Promise<TocItem[]> {
+    // Convert sequentially and retain at most one parsed section. A large TOC
+    // must not eagerly parse every chapter or retain Documents in UI state.
+    let parsed: { index: number; doc: Document } | undefined;
+    const convert = async (items: NonNullable<EpubBook['toc']>): Promise<TocItem[]> => {
+      const result: TocItem[] = [];
+      for (const item of items) {
+        if (this.dead) return [];
+        const target = item.href ? view.resolveNavigation(item.href) : undefined;
+        let locator: Locator | undefined;
+        if (
+          item.href &&
+          target &&
+          Number.isInteger(target.index) &&
+          target.index >= 0 &&
+          target.index < view.book.sections.length
+        ) {
+          let range: Range | undefined;
+          let resolved = !item.href.includes('#') || item.href.endsWith('#');
+          if (!resolved && typeof target.anchor === 'function') {
+            if (parsed?.index !== target.index)
+              parsed = {
+                index: target.index,
+                doc: await view.book.sections[target.index]!.createDocument(),
+              };
+            if (this.dead) return [];
+            const anchor = (target.anchor as (doc: Document) => unknown)(parsed.doc);
+            if (anchor instanceof Range) {
+              range = anchor;
+              resolved = true;
+            } else if (anchor instanceof Element) {
+              range = parsed.doc.createRange();
               range.selectNodeContents(anchor);
               range.collapse(true);
+              resolved = true;
             }
+          }
+          if (resolved)
             locator = createCfiLocator(
               view.getCFI(target.index, range),
               target.index / view.book.sections.length,
             );
-          }
-          return {
-            label: item.label,
-            locator,
-            children: item.subitems ? await convert(item.subitems) : undefined,
-          };
-        }),
-      );
+        }
+        result.push({
+          label: item.label,
+          locator,
+          children: item.subitems ? await convert(item.subitems) : undefined,
+        });
+      }
+      return result;
+    };
     return convert(view.book.toc ?? []);
   }
   onRelocate(callback: (locator: Locator, fraction: number) => void): () => void {
@@ -273,6 +299,7 @@ export class EpubRenderer implements Renderer {
     }
     book?.destroy();
     this.callbacks.clear();
+    this.toc = undefined;
   }
 
   private closeView(view: FoliateView): void {

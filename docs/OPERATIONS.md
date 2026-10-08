@@ -58,7 +58,8 @@ and page-request ordering. Neither is evidence that jsdom enforces CSP.
 
 `npm run test:browser` builds and serves production assets, runs both actual engines in Chromium,
 injects generated files through `DataTransfer`, and verifies script blocking, EPUB 2/3/RTL, offline
-CFI resume, PDF painting/rotation/page-size variations, one-canvas/pixel bounds and offline PDF
+CFI resume, nested NCX/EPUB 3 contents keyboard navigation, missing destinations, fragment CFI
+round-trips, PDF painting/rotation/page-size variations, one-canvas/pixel bounds and offline PDF
 page/offset resume. Install Chromium with `npx playwright install chromium` (CI uses `--with-deps`).
 CI runs both gates. `PLAYWRIGHT_PORT=4175` can select a different test server port.
 

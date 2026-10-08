@@ -34,17 +34,25 @@ Done:
   extraction, cover storage, incomplete-metadata fallback to filename.
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
-- 126 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
-  progress/debounce/outbox integration; 5 Chromium browser checks.
+- 127 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
+  progress/debounce/outbox integration; 7 Chromium browser checks.
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
 - Vendored upstream foliate-js at `78914aef4466eb960965702401634c2cb348e9b1` (ADR 0003).
 - EPUB/PDF adapters, `/read/:id`, reader settings, native locators plus fractions, debounced progress
   and offline close/reopen/reload resume. PDF keeps one visible canvas with a 4-million-pixel cap.
 - Production app-shell precache, including local renderer assets and the PDF worker.
+- EPUB TOC UI: nested NCX/navigation entries, fragment-to-CFI translation, native keyboard controls,
+  unavailable destinations disabled, and generated-fixture offline navigation/resume evidence.
+
+**Next milestone selected: reader usability and validation (Phase 1 completion).**
+The first slice, EPUB contents navigation, is implemented. Next establish image/font/fixed-layout
+fixtures and cross-browser evidence, then a legally usable real-file corpus and mobile memory
+measurements. Finish PDF covers and manual metadata editing alongside this validation work.
+Phase 2 bookmarks/annotations will build on these navigation and locator guarantees.
 
 Remaining:
 
-- TOC UI and in-book search (engine TOC translation exists for EPUB).
+- PDF outline UI and in-book search.
 - Cover generation for PDFs.
 - Manual metadata editing.
 - Real-file format corpus, images/fonts/fixed-layout coverage, other browsers and mobile memory

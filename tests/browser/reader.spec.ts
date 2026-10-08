@@ -143,6 +143,9 @@ test('PDF uses one bounded visible canvas, handles varied/rotated pages and rest
   );
   const canvas = page.locator('.pdf-scroll canvas');
   await expect(canvas).toHaveAttribute('aria-label', 'Page 1 of 30');
+  await page.getByText('Table of contents', { exact: true }).click();
+  await expect(page.getByText('No table of contents available.', { exact: true })).toBeVisible();
+  await page.getByText('Table of contents', { exact: true }).click();
   // Ensure actual text pixels were painted, not just a blank allocated canvas.
   expect(
     await canvas.evaluate((element) => {
@@ -178,3 +181,79 @@ test('PDF uses one bounded visible canvas, handles varied/rotated pages and rest
   await expect(canvas).toHaveAttribute('aria-label', 'Page 9 of 30');
   await expect.poll(async () => (await position(page)).locatorValue).toBe(saved.locatorValue);
 });
+
+async function targetParagraphVisible(page: Page): Promise<boolean> {
+  // The engine's public relocation range describes the actual visible page;
+  // merely finding paragraph text in a loaded chapter would be a false positive.
+  return page.evaluate(() => {
+    const view = document.querySelector('foliate-view') as HTMLElement & {
+      lastLocation?: { range?: Range };
+    };
+    const range = view?.lastLocation?.range;
+    const paragraph = range?.startContainer.ownerDocument?.getElementById('paragraph-40');
+    return !!paragraph && !!range?.intersectsNode(paragraph);
+  });
+}
+
+for (const version of ['2.0', '3.0'] as const) {
+  test(`EPUB ${version} nested contents uses keyboard navigation and resumes the fragment offline`, async ({
+    page,
+    context,
+  }) => {
+    await importBook(
+      page,
+      buildEpubFixture({
+        title: `Contents ${version}`,
+        epubVersion: version,
+        chapters: 3,
+        paragraphs: 80,
+        toc: [
+          { label: 'First chapter', href: 'chapter1.xhtml' },
+          {
+            label: 'Second chapter',
+            href: 'chapter2.xhtml',
+            children: [
+              { label: 'Middle <em>section</em>', href: 'chapter2.xhtml#paragraph-40' },
+              { label: 'Missing section', href: 'chapter2.xhtml#missing' },
+              { label: 'External link', href: 'https://example.invalid/' },
+            ],
+          },
+          { label: 'Last chapter', href: 'chapter3.xhtml' },
+        ],
+      }),
+      'contents.epub',
+      `Contents ${version}`,
+    );
+    const summary = page.getByText('Table of contents', { exact: true });
+    await summary.focus();
+    await page.keyboard.press('Enter');
+    const contents = page.getByRole('navigation', { name: 'Book contents' });
+    await expect(contents.getByRole('button', { name: 'Missing section' })).toBeDisabled();
+    await expect(contents.getByRole('button', { name: 'External link' })).toBeDisabled();
+    await expect(contents.locator('ol ol')).toHaveCount(1);
+    await expect(contents.locator('em')).toHaveCount(0);
+    const target = contents.getByRole('button', { name: 'Middle <em>section</em>', exact: true });
+    await target.focus();
+    await page.keyboard.press('Enter');
+    await expect(summary).toBeFocused();
+    await expect(contents).not.toBeVisible();
+    await expect.poll(() => targetParagraphVisible(page)).toBe(true);
+    await expect.poll(async () => (await position(page)).fraction).toBeGreaterThan(0.4);
+    const saved = await position(page);
+    expect(saved.locatorValue).toMatch(/^epubcfi\(/);
+    await page.getByRole('link', { name: '← Close reader' }).click();
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    await context.setOffline(true);
+    await page.getByRole('button', { name: 'Read', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+    await page.reload();
+    await expect.poll(() => targetParagraphVisible(page)).toBe(true);
+    await summary.click();
+    await expect(contents.getByRole('button', { name: 'Last chapter' })).toBeEnabled();
+    await contents.getByRole('button', { name: 'Last chapter' }).click();
+    await expect.poll(async () => (await position(page)).fraction).toBeGreaterThan(0.65);
+  });
+}

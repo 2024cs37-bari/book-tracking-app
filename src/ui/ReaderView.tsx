@@ -1,8 +1,9 @@
 import { A, useParams } from '@solidjs/router';
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import { useApp } from '~/app/context';
-import type { ReaderSettings, ReaderTheme } from '~/reader/renderer';
+import type { ReaderSettings, ReaderTheme, TocItem } from '~/reader/renderer';
 import type { ReaderSession } from '~/services/reader-service';
+import ReaderContents from './ReaderContents';
 
 export default function ReaderView() {
   const app = useApp();
@@ -12,6 +13,9 @@ export default function ReaderView() {
   const [ready, setReady] = createSignal(false);
   const [fraction, setFraction] = createSignal(0);
   const [settings, setSettings] = createSignal(app.reader.loadSettings());
+  const [toc, setToc] = createSignal<readonly TocItem[]>([]);
+  const [tocLoading, setTocLoading] = createSignal(true);
+  const [tocError, setTocError] = createSignal('');
   let host!: HTMLDivElement;
   let session: ReaderSession | undefined;
 
@@ -31,6 +35,9 @@ export default function ReaderView() {
     let disposed = false;
     let current: ReaderSession | undefined;
     setReady(false);
+    setToc([]);
+    setTocLoading(true);
+    setTocError('');
     const readerMessage = (event: Event) => setMessage(String((event as CustomEvent).detail));
     const flush = () => {
       void current?.flush();
@@ -57,7 +64,17 @@ export default function ReaderView() {
         await current.open(prepared.file, prepared.startAt, (locator) =>
           setFraction(locator.fraction),
         );
-        if (!disposed) setReady(true);
+        if (disposed) return;
+        setReady(true);
+        // Contents are optional: their parsing must not delay basic reading.
+        try {
+          const items = await current.renderer.getToc();
+          if (!disposed) setToc(items);
+        } catch (error) {
+          if (!disposed) setTocError(`Contents could not be loaded: ${String(error)}`);
+        } finally {
+          if (!disposed) setTocLoading(false);
+        }
       })
       .catch((error: unknown) => {
         if (!disposed) setMessage(`Could not open book: ${String(error)}`);
@@ -142,6 +159,14 @@ export default function ReaderView() {
           </div>
         </details>
       </div>
+      <Show when={ready()}>
+        <ReaderContents
+          items={toc()}
+          loading={tocLoading()}
+          error={tocError()}
+          onSelect={(locator) => session?.renderer.goTo(locator)}
+        />
+      </Show>
       <Show when={message()}>
         <p class="note" role="status">
           {message()}

@@ -62,8 +62,14 @@ Adapters own engine lifecycle, event translation, settings mapping, search cance
 Each session owns a fresh adapter: mount once, open once, destroy on close. `prev()`/`next()`
 are explicit contract additions for the reader toolbar. Adapters dispatch `reader-message` on
 the mount host to report asynchronous navigation errors or approximate restoration; the shell
-displays these messages. EPUB exposes engine TOC as CFI locators; no TOC UI is advertised yet.
-PDF returns an empty TOC. Both `search()` implementations explicitly reject iteration because
+displays these messages. EPUB exposes engine TOC as CFI locators, rendered as nested lists with
+native buttons and a collapsible contents panel. EPUB 2 NCX and EPUB 3 navigation documents,
+including fragment anchors, are verified with generated fixtures. Keyboard activation returns focus
+to the panel summary, and navigation persists/restores through the existing progress pipeline.
+Missing chapters/fragments and external links have no locator and are disabled; labels are rendered
+as text. TOC conversion is cached per session, sequential and retains at most one parsed section.
+Contents errors are reported separately and do not prevent reading. PDF returns an empty TOC,
+shown as unavailable rather than a fabricated outline. Both `search()` implementations reject iteration because
 in-book search is deferred.
 
 ### Untrusted book content

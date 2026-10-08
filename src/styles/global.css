@@ -504,3 +504,23 @@ input[type='file'] {
   display: block;
   margin: 0 auto;
 }
+
+.reader-contents nav {
+  max-height: 30vh;
+  overflow: auto;
+}
+.reader-contents ol {
+  padding-inline-start: 1.5rem;
+}
+.contents-entry {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  text-align: start;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+.contents-entry:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}

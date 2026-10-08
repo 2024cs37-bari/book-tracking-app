@@ -12,6 +12,12 @@ import { strToU8, zipSync, type Zippable } from 'fflate';
 
 const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
+export interface EpubTocFixtureItem {
+  readonly label: string;
+  readonly href: string;
+  readonly children?: readonly EpubTocFixtureItem[];
+}
+
 export interface EpubFixtureOptions {
   readonly title?: string;
   readonly creator?: string;
@@ -33,6 +39,7 @@ export interface EpubFixtureOptions {
   readonly paragraphs?: number;
   readonly epubVersion?: '2.0' | '3.0';
   readonly rtl?: boolean;
+  readonly toc?: readonly EpubTocFixtureItem[];
 }
 
 function containerXml(opfPath: string): string {
@@ -70,7 +77,7 @@ function packageXml(options: EpubFixtureOptions): string {
   </metadata>
   <manifest>
     ${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<item id="chapter${index + 1}" href="chapter${index + 1}.xhtml" media-type="application/xhtml+xml"/>`).join('\n')}${coverManifest}
-    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    ${options.epubVersion === '2.0' ? '' : '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'}
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
   </manifest>
   <spine toc="ncx"${options.rtl ? ' page-progression-direction="rtl"' : ''}>
@@ -102,7 +109,7 @@ export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<A
     if (options.paragraphs)
       chapter = chapter.replace(
         '<p>Content.</p>',
-        `<h1>Chapter ${index}</h1>${Array.from({ length: options.paragraphs }, (_, paragraph) => `<p>Chapter ${index} paragraph ${paragraph + 1}. Generated reader content with enough words to exercise pagination, settings and stable CFI positions.</p>`).join('')}`,
+        `<h1>Chapter ${index}</h1>${Array.from({ length: options.paragraphs }, (_, paragraph) => `<p id="paragraph-${paragraph + 1}">Chapter ${index} paragraph ${paragraph + 1}. Generated reader content with enough words to exercise pagination, settings and stable CFI positions.</p>`).join('')}`,
       );
     if (options.rtl) chapter = chapter.replace('<body>', '<body dir="rtl">');
     if (options.hostileScript)
@@ -112,15 +119,34 @@ export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<A
       );
     files[`${opfDirectory}/chapter${index}.xhtml`] = strToU8(chapter);
   }
-  const navigation = Array.from(
-    { length: options.chapters ?? 1 },
-    (_, index) => `<li><a href="chapter${index + 1}.xhtml">Chapter ${index + 1}</a></li>`,
-  ).join('');
+  const toc =
+    options.toc ??
+    Array.from({ length: options.chapters ?? 1 }, (_, index) => ({
+      label: `Chapter ${index + 1}`,
+      href: `chapter${index + 1}.xhtml`,
+    }));
+  const escapeXml = (value: string) =>
+    value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
+  const navItems = (items: readonly EpubTocFixtureItem[]): string =>
+    items
+      .map(
+        (item) =>
+          `<li><a href="${escapeXml(item.href)}">${escapeXml(item.label)}</a>${item.children ? `<ol>${navItems(item.children)}</ol>` : ''}</li>`,
+      )
+      .join('');
+  let navPoint = 0;
+  const ncxItems = (items: readonly EpubTocFixtureItem[]): string =>
+    items
+      .map((item) => {
+        const index = ++navPoint;
+        return `<navPoint id="entry${index}" playOrder="${index}"><navLabel><text>${escapeXml(item.label)}</text></navLabel><content src="${escapeXml(item.href)}"/>${item.children ? ncxItems(item.children) : ''}</navPoint>`;
+      })
+      .join('');
   files[`${opfDirectory}/nav.xhtml`] = strToU8(
-    `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>${navigation}</ol></nav></body></html>`,
+    `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>${navItems(toc)}</ol></nav></body></html>`,
   );
   files[`${opfDirectory}/toc.ncx`] = strToU8(
-    `<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head/><docTitle><text>Contents</text></docTitle><navMap>${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<navPoint id="chapter${index + 1}" playOrder="${index + 1}"><navLabel><text>Chapter ${index + 1}</text></navLabel><content src="chapter${index + 1}.xhtml"/></navPoint>`).join('')}</navMap></ncx>`,
+    `<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head/><docTitle><text>Contents</text></docTitle><navMap>${ncxItems(toc)}</navMap></ncx>`,
   );
 
   if (options.withCover === true && options.coverFileMissing !== true) {

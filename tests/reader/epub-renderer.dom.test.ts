@@ -5,11 +5,14 @@ import { EpubRenderer, BOOK_CSP } from '~/reader/epub-renderer';
 import { buildEpubFixture } from '../support/fixtures';
 
 interface TestBook {
-  sections: { load(): Promise<string>; cfi: string }[];
+  sections: { load(): Promise<string>; createDocument(): Promise<Document>; cfi: string }[];
+  resolveHref(value: string): { index: number; anchor: (doc: Document) => unknown } | undefined;
+  resolveCFI(value: string): { index: number; anchor: (doc: Document) => Range };
   destroy(): void;
 }
 
 const urls = new Map<string, Blob>();
+let cfi: { joinIndir(base: string, anchor: string): string; fromRange(range: Range): string };
 // jsdom has no layout; only the view's pagination is replaced. Parsing, book
 // transforms and object URL creation use the real pinned EPUB implementation.
 class TestView extends HTMLElement {
@@ -35,12 +38,9 @@ class TestView extends HTMLElement {
   }
   close = vi.fn();
   resolveNavigation(value: string) {
-    const chapter = /chapter(\d+)\.xhtml/.exec(value);
-    return chapter
-      ? { index: Number(chapter[1]) - 1 }
-      : value.startsWith('epubcfi(')
-        ? { index: 1 }
-        : undefined;
+    return value.startsWith('epubcfi(')
+      ? this.book.resolveCFI(value)
+      : this.book.resolveHref(value);
   }
   async goTo(index: number) {
     await this.renderer.goTo({ index });
@@ -48,8 +48,9 @@ class TestView extends HTMLElement {
   async goToFraction(fraction: number) {
     await this.renderer.goTo({ index: Math.floor(fraction * this.book.sections.length) });
   }
-  getCFI(index: number) {
-    return this.book.sections[index]!.cfi;
+  getCFI(index: number, range?: Range) {
+    const base = this.book.sections[index]!.cfi;
+    return range ? cfi.joinIndir(base, cfi.fromRange(range)) : base;
   }
   async prev() {
     await this.goTo(0);
@@ -69,6 +70,11 @@ afterEach(() => {
 });
 
 async function adapter() {
+  // jsdom lacks CSS.escape; these fixtures use simple identifiers/quoted attributes.
+  vi.stubGlobal('CSS', {
+    escape: (value: string) => value.replaceAll('\\', '\\\\').replaceAll('"', '\\"'),
+  });
+  cfi = (await import('../../vendor/foliate-js/epubcfi.js' as string)) as typeof cfi;
   vi.stubGlobal('Blob', NodeBlob);
   vi.stubGlobal(
     'URL',
@@ -144,4 +150,46 @@ it('rejects malformed archives without leaving a mounted view', async () => {
   ).rejects.toThrow();
   renderer.destroy();
   expect(host.children.length).toBe(0);
+});
+
+it('translates nested fragment entries with real CFI round-trips, disables missing targets and caches section parsing', async () => {
+  const { renderer, host } = await adapter();
+  await renderer.open(
+    new Blob([
+      buildEpubFixture({
+        paragraphs: 10,
+        toc: [
+          {
+            label: 'Chapter 1',
+            href: 'chapter1.xhtml',
+            children: [
+              { label: 'Earlier', href: 'chapter1.xhtml#paragraph-2' },
+              { label: 'Later', href: 'chapter1.xhtml#paragraph-4' },
+              { label: 'Missing fragment', href: 'chapter1.xhtml#missing' },
+              { label: 'Missing chapter', href: 'missing.xhtml' },
+              { label: 'External', href: 'https://example.invalid/' },
+            ],
+          },
+        ],
+      }),
+    ]),
+  );
+  const view = host.querySelector('foliate-view') as TestView;
+  const parse = vi.spyOn(view.book.sections[0]!, 'createDocument');
+  const toc = await renderer.getToc();
+  expect(toc[0]?.label).toBe('Chapter 1');
+  expect(parse).toHaveBeenCalledOnce();
+  expect(await renderer.getToc()).toBe(toc);
+  expect(parse).toHaveBeenCalledOnce();
+  const children = toc[0]!.children!;
+  const target = view.book.resolveCFI(children[1]!.locator!.value);
+  const doc = await view.book.sections[target.index]!.createDocument();
+  const range = target.anchor(doc);
+  const element =
+    range.startContainer instanceof Element
+      ? range.startContainer
+      : range.startContainer.parentElement;
+  expect(element?.closest('p')?.id).toBe('paragraph-4');
+  expect(children.slice(2).every((item) => item.locator === undefined)).toBe(true);
+  renderer.destroy();
 });
