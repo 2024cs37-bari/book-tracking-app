@@ -19,7 +19,7 @@ Implemented commands:
 | `npm run lint`         | ESLint including Solid reactivity rules.                 |
 | `npm run format`       | Prettier write; `format:check` verifies without writing. |
 | `npm test`             | Vitest suite (Node plus adapter jsdom tests).            |
-| `npm run test:browser` | Playwright Chromium production/offline/CSP checks.       |
+| `npm run test:browser` | Playwright Chromium/Firefox/WebKit checks.               |
 | `npm run check`        | Full gate; this is what CI runs.                         |
 
 Configuration and deployment for Cloudflare, and any runtime observability beyond the in-app Settings
@@ -56,11 +56,19 @@ Node. EPUB DOM tests use the real pinned parser with a custom-element pagination
 jsdom has no browser layout. PDF DOM tests replace pdf.js rasterization to inspect cache/cleanup
 and page-request ordering. Neither is evidence that jsdom enforces CSP.
 
-`npm run test:browser` builds and serves production assets, runs both actual engines in Chromium,
+`npm run test:browser` builds and serves production assets, runs actual renderer engines through
+Chromium, Firefox and Playwright WebKit projects,
 injects generated files through `DataTransfer`, and verifies script blocking, EPUB 2/3/RTL, offline
 CFI resume, nested NCX/EPUB 3 contents keyboard navigation, missing destinations, fragment CFI
 round-trips, PDF painting/rotation/page-size variations, one-canvas/pixel bounds and offline PDF
-page/offset resume. Install Chromium with `npx playwright install chromium` (CI uses `--with-deps`).
+page/offset resume. Asset cases assert CSS application, generated-font load status and decoded PNG
+pixels, plus fixed-layout page geometry/progress/CSP and missing/malformed asset degradation.
+`opentype.js` is a test-only font generator using original synthetic glyphs; it is not bundled into
+the application. No font/image/book binaries are committed.
+Install browsers with `npx playwright install chromium firefox webkit` (CI uses `--with-deps`).
+Run a targeted project with `npm run test:browser -- --project=chromium`.
+Playwright WebKit on Linux is not evidence for Safari/iOS hardware; native library availability
+also varies outside Playwright's supported host distributions.
 CI runs both gates. `PLAYWRIGHT_PORT=4175` can select a different test server port.
 
 The production service worker precaches application and renderer assets only; no book bytes or

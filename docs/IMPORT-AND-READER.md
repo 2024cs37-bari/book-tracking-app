@@ -2,13 +2,13 @@
 
 ## 1. Format policy
 
-| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                               |
-| --------- | ----------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3, RTL, pagination, inline-script blocking, CFI/offline resume pass in Chromium. Real-file corpus, images/fonts and other browsers pending.                      |
-| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated 30-page PDF with text, rotation and varied sizes: one canvas, pixel cap, page/offset offline resume pass in Chromium. Large real files/images/mobile profiling pending. |
-| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                               |
-| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                           |
-| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                          |
+| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                                                                                                         |
+| --------- | ----------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3, RTL, nested TOC, PNG/CSS/OpenType assets, single-page fixed layout, script blocking and offline resume; Chromium/Firefox/Playwright WebKit CI projects. Real-file corpus, spreads/SVG/obfuscated fonts and hardware validation pending. |
+| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated 30-page PDF with text, rotation and varied sizes: one canvas, pixel cap, page/offset offline resume; same three browser projects. Large real files/images/mobile profiling pending.                                                               |
+| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                                                                                                         |
+| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                                                                                                     |
+| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                                                                                                    |
 
 DRM-protected inputs are unsupported. Never bypass DRM. An extension alone is not proof of format; sniff content and report mismatches.
 
@@ -80,6 +80,10 @@ The EPUB adapter additionally inserts `script-src 'none'` and `connect-src 'none
 foliate creates content URLs, strips active embedding/base/refresh elements, and removes SVG
 scripts/foreignObject. Inline styles are allowed for book layout and user settings; inline scripts
 are never allowed. Upstream iframe sandbox flags are not relied on for security.
+Blob stylesheets are allowed by both app and book policies so embedded CSS can apply; scripts
+remain restricted to self at app level and none in book documents. Decoded PNG pixels and a
+successfully loaded synthetic font are asserted, rather than inferring support from URLs or CSS
+font-family strings. Fixed-layout frames also exercise inline-script blocking.
 EPUB input/expanded content is capped at 256 MiB and each archive entry at 64 MiB.
 Chromium verifies the hostile script stays unexecuted while actual book text renders.
 
@@ -124,6 +128,13 @@ close, pagehide and visibility hide. Close starts a durable write; abrupt proces
 still interrupt a browser transaction. Save errors are displayed rather than treated as success.
 Settings are localStorage device defaults (font size, line height, margin, theme); font size maps to
 PDF zoom, and PDF page typography remains fixed.
+
+Fixed-layout EPUB currently preserves publisher typography and page geometry, fits each page to
+the reader surface and applies theme to the backdrop. The reader displays this limitation; font
+size, line height and margins do not reflow those pages. Generated validation uses
+`rendition:spread=none` with 600×800 XHTML pages; multi-page spreads and SVG spine items remain
+separate validation work. Missing/malformed image/font resources are checked for usable text and
+chapter navigation; this is graceful degradation, not a claim to repair damaged books.
 
 ## 6. PDF performance and safety
 

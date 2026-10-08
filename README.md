@@ -45,8 +45,8 @@ interface; Cloudflare provides synchronization and durable file storage in later
 
 - No sync, no server, no accounts. The outbox grows locally and is reported in Settings.
 - No annotations, shelves, tags, statistics, or selective offline pinning.
-- No PDF outline or in-book search. Real-file EPUB/PDF corpus, mobile memory profiling and
-  Firefox/WebKit validation remain pending. Generated-fixture checks run in Chromium.
+- No PDF outline or in-book search. Real-file EPUB/PDF corpus and mobile memory profiling remain
+  pending. Generated-fixture checks target Chromium, Firefox and Playwright WebKit in CI.
 - MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
   explicitly marked as unimplemented.
 - DRM-protected books are unsupported and always will be.
@@ -76,11 +76,13 @@ Open the printed URL and import a book. Everything stays in the browser.
 | `npm run format:check` | Verify formatting without writing                         |
 | `npm test`             | Run the unit test suite once                              |
 | `npm run test:watch`   | Run tests in watch mode                                   |
-| `npm run test:browser` | Chromium checks against a production build (Playwright)   |
+| `npm run test:browser` | Cross-browser production checks (Playwright)              |
 | `npm run check`        | Full gate: typecheck, lint, format check, tests and build |
 
 CI runs `npm run check` and `npm run test:browser`. Install the test browser once with
-`npx playwright install chromium`. Run both gates before pushing reader changes.
+`npx playwright install chromium firefox webkit`. On supported Linux distributions add
+`--with-deps` to install required browser libraries. Run both gates before pushing reader changes.
+Use `npm run test:browser -- --project=chromium` for a targeted local run.
 Offline navigation/reload needs a production build (`npm run build && npm run preview`)
 and a completed first-online service-worker installation; development mode has no precache.
 

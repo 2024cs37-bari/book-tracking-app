@@ -16,6 +16,7 @@ interface EpubBook {
 }
 
 interface FoliateView extends HTMLElement {
+  isFixedLayout?: boolean;
   book: EpubBook;
   renderer: {
     setStyles?(css: string): void;
@@ -145,6 +146,13 @@ export class EpubRenderer implements Renderer {
         return;
       }
       this.applySettings(this.settings);
+      if (view.isFixedLayout)
+        this.host.dispatchEvent(
+          new CustomEvent('reader-message', {
+            detail:
+              'Fixed-layout EPUB preserves publisher typography. Font size, line height and margins do not reflow its pages; theme changes the reader backdrop.',
+          }),
+        );
       if (startAt) await this.restore(startAt);
       else await view.goTo(0);
     } catch (error) {
@@ -271,6 +279,8 @@ export class EpubRenderer implements Renderer {
       sepia: ['#f4ecd8', '#403421'],
       dark: ['#191919', '#eee'],
     }[settings.theme];
+    if (this.view) this.view.style.background = colors[0]!;
+    if (this.view?.isFixedLayout) return;
     this.view?.renderer?.setStyles?.(
       `html { color-scheme: ${settings.theme === 'dark' ? 'dark' : 'light'}; background: ${colors[0]} !important; color: ${colors[1]} !important; } body { font-size: ${settings.fontSizePx}px !important; line-height: ${settings.lineHeight} !important; }`,
     );

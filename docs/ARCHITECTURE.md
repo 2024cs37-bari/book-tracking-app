@@ -97,6 +97,11 @@ Contents load after basic reading is ready; navigation uses the same CFI/progres
 page turns. Conversion is sequential, retains at most one section document, and caches the result
 for the session. Missing/external destinations are unavailable entries rather than invented locators.
 
+Browser regression projects target Chromium, Firefox and Playwright WebKit, including generated
+PNG/CSS/OpenType assets and single-page fixed-layout EPUB. Asset bytes/glyphs are test-generated;
+the font-generation dependency is development-only. Fixed layout retains publisher typography,
+with reader theme applied to the backdrop rather than reflowing pages.
+
 ## 5. Data flow and invariants
 
 1. A user mutation is validated and committed to the local database first.

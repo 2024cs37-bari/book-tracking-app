@@ -1,4 +1,9 @@
-import { strToU8, zipSync, type Zippable } from 'fflate';
+import { strToU8, zipSync, zlibSync, type Zippable } from 'fflate';
+import * as fontModule from 'opentype.js';
+
+// Node uses the package's UMD entry; Vite uses its native ESM entry.
+const { Font, Glyph, Path } =
+  (fontModule as unknown as { default?: typeof fontModule }).default ?? fontModule;
 
 /**
  * Synthetic book fixtures.
@@ -40,6 +45,8 @@ export interface EpubFixtureOptions {
   readonly epubVersion?: '2.0' | '3.0';
   readonly rtl?: boolean;
   readonly toc?: readonly EpubTocFixtureItem[];
+  readonly assets?: 'valid' | 'missing' | 'malformed';
+  readonly fixedLayout?: boolean;
 }
 
 function containerXml(opfPath: string): string {
@@ -74,11 +81,13 @@ function packageXml(options: EpubFixtureOptions): string {
     <dc:language>${language}</dc:language>
     <dc:identifier id="bookid">${identifier}</dc:identifier>
     <dc:publisher>${publisher}</dc:publisher>${coverDeclarations}
+    ${options.fixedLayout ? '<meta property="rendition:layout">pre-paginated</meta><meta property="rendition:spread">none</meta>' : ''}
   </metadata>
   <manifest>
     ${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<item id="chapter${index + 1}" href="chapter${index + 1}.xhtml" media-type="application/xhtml+xml"/>`).join('\n')}${coverManifest}
     ${options.epubVersion === '2.0' ? '' : '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'}
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    ${options.assets ? '<item id="css" href="styles/book.css" media-type="text/css"/><item id="image" href="images/test.png" media-type="image/png"/><item id="font" href="fonts/fixture.otf" media-type="font/otf"/>' : ''}
   </manifest>
   <spine toc="ncx"${options.rtl ? ' page-progression-direction="rtl"' : ''}>
     ${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<itemref idref="chapter${index + 1}"/>`).join('\n')}
@@ -89,6 +98,77 @@ function packageXml(options: EpubFixtureOptions): string {
 const CHAPTER_XHTML = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter 1</title></head>
 <body><p>Content.</p></body></html>`;
+
+/** A tiny RGBA PNG with real chunk checksums; no committed image bytes. */
+export function buildImageFixture(): Uint8Array<ArrayBuffer> {
+  const crc32 = (bytes: Uint8Array): number => {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Uint8Array): Uint8Array<ArrayBuffer> => {
+    const bytes = new Uint8Array(data.length + 12);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(0, data.length);
+    bytes.set(strToU8(type), 4);
+    bytes.set(data, 8);
+    view.setUint32(bytes.length - 4, crc32(bytes.subarray(4, bytes.length - 4)));
+    return bytes;
+  };
+  const header = new Uint8Array(13);
+  const view = new DataView(header.buffer);
+  view.setUint32(0, 64);
+  view.setUint32(4, 32);
+  header[8] = 8;
+  header[9] = 6;
+  const pixels = new Uint8Array(32 * (64 * 4 + 1));
+  for (let y = 0; y < 32; y++)
+    for (let x = 0; x < 64; x++) pixels.set([35, 100, 220, 255], y * 257 + 1 + x * 4);
+  const chunks = [
+    new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', header),
+    chunk('IDAT', zlibSync(pixels)),
+    chunk('IEND', new Uint8Array()),
+  ];
+  const result = new Uint8Array(chunks.reduce((size, bytes) => size + bytes.length, 0));
+  let offset = 0;
+  for (const bytes of chunks) {
+    result.set(bytes, offset);
+    offset += bytes.length;
+  }
+  return result;
+}
+
+/** Original synthetic glyph outlines, generated into an OpenType font in memory. */
+export function buildFontFixture(): Uint8Array<ArrayBuffer> {
+  const glyphs = [new Glyph({ name: '.notdef', advanceWidth: 600, path: new Path() })];
+  for (let unicode = 32; unicode < 127; unicode++) {
+    const path = new Path();
+    if (unicode !== 32) {
+      path.moveTo(80, 0);
+      path.lineTo(300, 700);
+      path.lineTo(520, 0);
+      path.lineTo(420, 0);
+      path.lineTo(300, 450);
+      path.lineTo(180, 0);
+      path.close();
+    }
+    glyphs.push(new Glyph({ name: `fixture-${unicode}`, unicode, advanceWidth: 600, path }));
+  }
+  return new Uint8Array(
+    new Font({
+      familyName: 'Fixture Serif',
+      styleName: 'Regular',
+      unitsPerEm: 1000,
+      ascender: 800,
+      descender: -200,
+      glyphs,
+    }).toArrayBuffer(),
+  );
+}
 
 export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<ArrayBuffer> {
   const opfPath = options.opfPath ?? 'OEBPS/content.opf';
@@ -112,6 +192,26 @@ export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<A
         `<h1>Chapter ${index}</h1>${Array.from({ length: options.paragraphs }, (_, paragraph) => `<p id="paragraph-${paragraph + 1}">Chapter ${index} paragraph ${paragraph + 1}. Generated reader content with enough words to exercise pagination, settings and stable CFI positions.</p>`).join('')}`,
       );
     if (options.rtl) chapter = chapter.replace('<body>', '<body dir="rtl">');
+    if (options.fixedLayout)
+      chapter = chapter.replace(
+        '</head>',
+        '<meta name="viewport" content="width=600,height=800"/><style>html,body { width:600px; height:800px; margin:0; } #asset-image { position:absolute; left:40px; top:200px; } #asset-caption { position:absolute; left:40px; top:80px; }</style></head>',
+      );
+    if (options.assets) {
+      chapter = chapter.replace(
+        '</head>',
+        '<link rel="stylesheet" href="styles/book.css"/></head>',
+      );
+      chapter = chapter.replace(
+        '<body>',
+        `<body><p id="asset-caption">Asset fixture chapter ${index}</p><img id="asset-image" src="images/test.png" alt="Generated blue rectangle"/>`,
+      );
+      if (options.rtl)
+        chapter = chapter.replace(
+          '<body dir="rtl">',
+          `<body dir="rtl"><p id="asset-caption">Asset fixture chapter ${index}</p><img id="asset-image" src="images/test.png" alt="Generated blue rectangle"/>`,
+        );
+    }
     if (options.hostileScript)
       chapter = chapter.replace(
         '</head>',
@@ -151,6 +251,17 @@ export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<A
 
   if (options.withCover === true && options.coverFileMissing !== true) {
     files[`${opfDirectory}/images/cover.jpg`] = JPEG_BYTES;
+  }
+  if (options.assets) {
+    files[`${opfDirectory}/styles/book.css`] = strToU8(
+      '@font-face { font-family: "Fixture Serif"; src: url("../fonts/fixture.otf") format("opentype"); } #asset-caption { font-family: "Fixture Serif"; color: rgb(17, 85, 34); border-top: 3px solid rgb(17, 85, 34); } #asset-image { width:64px; height:32px; }',
+    );
+    if (options.assets !== 'missing') {
+      files[`${opfDirectory}/images/test.png`] =
+        options.assets === 'malformed' ? strToU8('invalid PNG') : buildImageFixture();
+      files[`${opfDirectory}/fonts/fixture.otf`] =
+        options.assets === 'malformed' ? strToU8('invalid font') : buildFontFixture();
+    }
   }
 
   return zipSync(files, { level: 6 });

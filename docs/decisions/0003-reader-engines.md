@@ -20,7 +20,10 @@ zip.js (BSD-3-Clause) / fflate (MIT). Upstream's PDF.js assets (Apache-2.0), dem
 tests, and tooling/package manifests are omitted. Its proof-of-concept PDF adapter is
 never selected. PDF uses the official `pdfjs-dist@5.4.624` package (Apache-2.0) directly instead,
 pinned exactly in package.json/lockfile and compatible with the project's Node baseline.
-Retain upstream source verbatim; put integration changes in `src/reader`. Updates must
+Retain upstream source verbatim except narrowly scoped, documented compatibility patches;
+keep integration code in `src/reader`. `vendor/PROVENANCE.md` records the paginator lifecycle
+guards required after asset tests reproduced deferred font-ready callbacks touching closed frames.
+Updates must
 record a new full SHA, review upstream changes, and rerun security and fixture checks.
 
 ## Security and consequences

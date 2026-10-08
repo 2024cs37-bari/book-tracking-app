@@ -35,7 +35,8 @@ Done:
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
 - 127 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
-  progress/debounce/outbox integration; 7 Chromium browser checks.
+  progress/debounce/outbox integration; 13 browser cases across Chromium, Firefox and Playwright
+  WebKit projects (39 checks).
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
 - Vendored upstream foliate-js at `78914aef4466eb960965702401634c2cb348e9b1` (ADR 0003).
 - EPUB/PDF adapters, `/read/:id`, reader settings, native locators plus fractions, debounced progress
@@ -43,11 +44,17 @@ Done:
 - Production app-shell precache, including local renderer assets and the PDF worker.
 - EPUB TOC UI: nested NCX/navigation entries, fragment-to-CFI translation, native keyboard controls,
   unavailable destinations disabled, and generated-fixture offline navigation/resume evidence.
+- Generated EPUB asset/layout corpus: decoded PNG pixels, embedded CSS, a synthetic OpenType font,
+  single-page fixed layouts, missing/malformed image/font handling, script blocking and offline resume.
+- CI browser projects for Chromium, Firefox and Playwright WebKit; fixture bytes and font glyphs
+  are generated in memory, with no book/image/font binaries committed.
+- CSP blob-stylesheet allowance and documented upstream paginator lifecycle guards, with a
+  deterministic late-font-ready teardown regression.
 
 **Next milestone selected: reader usability and validation (Phase 1 completion).**
-The first slice, EPUB contents navigation, is implemented. Next establish image/font/fixed-layout
-fixtures and cross-browser evidence, then a legally usable real-file corpus and mobile memory
-measurements. Finish PDF covers and manual metadata editing alongside this validation work.
+EPUB contents navigation and the generated asset/fixed-layout slice are implemented. Next establish
+a legally usable real-file corpus and mobile memory measurements, and expand fixed-layout spread,
+SVG and obfuscated-font cases. Finish PDF covers and manual metadata editing alongside validation.
 Phase 2 bookmarks/annotations will build on these navigation and locator guarantees.
 
 Remaining:
@@ -55,9 +62,9 @@ Remaining:
 - PDF outline UI and in-book search.
 - Cover generation for PDFs.
 - Manual metadata editing.
-- Real-file format corpus, images/fonts/fixed-layout coverage, other browsers and mobile memory
-  profiling. Chromium generated-file OPFS persistence/offline reload is verified; broader platform
-  storage behavior and browser restart remain pending.
+- Real-file format corpus, fixed-layout spreads/SVG, obfuscated fonts and mobile memory profiling.
+  The cross-browser generated-file suite covers offline reload; broader platform storage behavior,
+  browser restart and actual Safari/iOS/Android hardware validation remain pending.
 
 Acceptance criteria (unchanged):
 

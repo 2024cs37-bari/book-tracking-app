@@ -283,7 +283,7 @@ class View {
         })
     }
     render(layout) {
-        if (!layout) return
+        if (!layout || !this.document?.body) return
         this.#column = layout.flow !== 'scrolled'
         this.#layout = layout
         if (this.#column) this.columnize(layout)
@@ -360,7 +360,9 @@ class View {
         }
     }
     expand() {
-        const { documentElement } = this.document
+        const doc = this.document
+        if (!doc?.documentElement || !doc.body) return
+        const { documentElement } = doc
         if (this.#column) {
             const side = this.#vertical ? 'height' : 'width'
             const otherSide = this.#vertical ? 'width' : 'height'
@@ -1109,11 +1111,13 @@ export class Paginator extends HTMLElement {
         } else $style.textContent = styles
 
         // NOTE: needs `requestAnimationFrame` in Chromium
-        requestAnimationFrame(() =>
-            this.#background.style.background = getBackground(this.#view.document))
+        requestAnimationFrame(() => {
+            const doc = this.#view?.document
+            if (doc?.body) this.#background.style.background = getBackground(doc)
+        })
 
         // needed because the resize observer doesn't work in Firefox
-        this.#view?.document?.fonts?.ready?.then(() => this.#view.expand())
+        this.#view?.document?.fonts?.ready?.then(() => this.#view?.expand())
     }
     focusView() {
         this.#view.document.defaultView.focus()
