@@ -1,10 +1,14 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setDefaultAutoSelectFamilyAttemptTimeout } from 'node:net';
 import { CORPUS } from './corpus-manifest.ts';
 import { corpusDirectory, verifyCorpusBytes } from './corpus-files.ts';
 
 const directory = corpusDirectory();
+// Node's 250 ms address-family fallback can abandon a reachable IPv4 host
+// before connecting, then fail on a runner with no IPv6 route.
+setDefaultAutoSelectFamilyAttemptTimeout(3000);
 const location = relative(fileURLToPath(new URL('../', import.meta.url)), directory);
 if (!isAbsolute(location) && location !== '..' && !location.startsWith(`..${sep}`))
   throw new Error('BOOK_CORPUS_DIR must be outside the repository. Never commit book files.');
