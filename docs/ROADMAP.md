@@ -34,7 +34,7 @@ Done:
   extraction, cover storage, incomplete-metadata fallback to filename.
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
-- 130 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
+- 131 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
   progress/debounce/outbox integration; 13 browser cases across Chromium, Firefox and Playwright
   WebKit projects (39 checks).
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.

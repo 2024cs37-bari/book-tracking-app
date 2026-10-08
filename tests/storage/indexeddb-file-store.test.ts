@@ -59,3 +59,43 @@ it('an unanswered persistence permission request has a bounded wait', async () =
   await vi.advanceTimersByTimeAsync(1500);
   expect(await request).toBeNull();
 });
+
+it('upgrades binary v1 without editing its schema or deleting originals, converting Blob rows lazily', async () => {
+  const name = `legacy-files-${crypto.randomUUID()}`;
+  names.push(name);
+  const legacy = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(name, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('files', { keyPath: 'key' });
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise<void>((resolve, reject) => {
+    const transaction = legacy.transaction('files', 'readwrite');
+    transaction.objectStore('files').put({
+      key: 'books/legacy.bin',
+      blob: new Blob(['legacy original'], { type: 'application/pdf' }),
+    });
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error);
+  });
+  legacy.close();
+  const store = new IndexedDbBookFileStore(name);
+  stores.push(store);
+  expect(await store.keys()).toEqual(['books/legacy.bin']);
+  const file = await store.get('books/legacy.bin');
+  expect(await file.text()).toBe('legacy original');
+  expect(file.type).toBe('application/pdf');
+  await store.close();
+  const db = await new Promise<IDBDatabase>((resolve) => {
+    const request = indexedDB.open(name);
+    request.onsuccess = () => resolve(request.result);
+  });
+  expect(db.version).toBe(2);
+  const row = await new Promise<{ bytes: ArrayBuffer; blob?: Blob }>((resolve) => {
+    const request = db.transaction('files').objectStore('files').get('books/legacy.bin');
+    request.onsuccess = () => resolve(request.result);
+  });
+  expect(new TextDecoder().decode(row.bytes)).toBe('legacy original');
+  expect(row.blob).toBeUndefined();
+  db.close();
+});

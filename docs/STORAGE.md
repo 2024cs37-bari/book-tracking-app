@@ -25,9 +25,11 @@ Requirements:
 - Provide a local export before destructive reset or risky migration.
 - Detect unavailable/quota-exceeded storage and surface actionable errors.
 
-Original bytes have a separate native IndexedDB fallback database, `book-reader-files` (version 1,
+Original bytes have a separate native IndexedDB fallback database, `book-reader-files` (version 2,
 object store `files`, keyPath `key`), used only after OPFS capability/write probing fails. It stores
-Blobs under the existing file-store keys and resolves writes after transaction commit. It does not
+ArrayBuffers plus MIME under the existing file-store keys and resolves writes after transaction
+commit, recreating Blobs on read. Released binary v1 Blob rows are retained and lazily converted
+on successful read; inaccessible legacy Blobs may require an online read to convert. It does not
 add binary data to the released Dexie metadata tables. See [ADR 0004](decisions/0004-durable-file-fallback.md).
 
 IndexedDB is not a guaranteed durable disk. Browser eviction, private browsing, user clearing, and platform-specific behavior must be handled. `navigator.storage.persist()` may be requested where available; the app must work if permission is denied.

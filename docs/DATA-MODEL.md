@@ -186,8 +186,10 @@ constrains a few details. These are deliberate and must be preserved by migratio
   `fraction` column, and all three are absent until the reader reports a position. A book therefore
   has a reading status from the moment it is imported, without inventing a placeholder position.
 - Table names: `books`, `progress`, `changes`, `syncMeta`, `deviceState`, `fileTransfers`.
-- A separate native IndexedDB file fallback uses `book-reader-files` version 1 with object store
-  `files` keyed by `key`, containing `{ key, blob }`. It is local binary storage, not a replicated
+- A separate native IndexedDB file fallback uses `book-reader-files` version 2 with object store
+  `files` keyed by `key`, containing `{ key, bytes: ArrayBuffer, contentType }`. Released binary
+  v1 `{ key, blob }` rows remain readable and are converted lazily without losing originals.
+  It is local binary storage, not a replicated
   Dexie entity or a change to released metadata schema v1 (ADR 0004).
 - Reader milestone uses these existing fields without a schema change (v1 remains released and
   unchanged). EPUB locator values are CFI; PDF values are zero-based `page:yOffset`, where offset
