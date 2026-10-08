@@ -98,7 +98,7 @@ test('PDF uses one bounded visible canvas, handles varied/rotated pages and rest
     'reader.pdf',
     'Reader PDF',
   );
-  const canvas = page.locator('.pdf-scroll canvas');
+  const canvas = page.locator('.pdf-scroll canvas[data-render-state="ready"]');
   await expect(canvas).toHaveAttribute('aria-label', 'Page 1 of 30');
   await page.getByText('Table of contents', { exact: true }).click();
   await expect(page.getByText('No table of contents available.', { exact: true })).toBeVisible();

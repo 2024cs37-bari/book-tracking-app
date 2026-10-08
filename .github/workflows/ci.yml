@@ -28,16 +28,16 @@ jobs:
       - name: Verify
         run: npm run check
 
+      - name: Fetch pinned external corpus
+        env:
+          BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
+        run: npm run corpus:fetch
+
       - name: Install browsers
         run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Browser reader checks
         run: npm run test:browser
-
-      - name: Fetch pinned external corpus
-        env:
-          BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
-        run: npm run corpus:fetch
 
       - name: Real-file and mobile-sized reader checks
         env:

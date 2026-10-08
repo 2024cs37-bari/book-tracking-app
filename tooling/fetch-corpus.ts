@@ -30,7 +30,10 @@ for (const sample of CORPUS) {
       Accept: 'application/pdf,application/epub+zip,application/octet-stream;q=0.9,*/*;q=0.5',
     },
   });
-  if (!response.ok) throw new Error(`${sample.id}: download failed with HTTP ${response.status}`);
+  if (!response.ok) {
+    const detail = (await response.text()).replace(/\s+/g, ' ').slice(0, 240);
+    throw new Error(`${sample.id}: download failed with HTTP ${response.status}: ${detail}`);
+  }
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of response.body!) {
