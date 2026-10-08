@@ -50,6 +50,8 @@ interface; Cloudflare provides synchronization and durable file storage in later
 - No PDF outline or in-book search. Real-file EPUB/PDF corpus and mobile memory profiling remain
   limited to selected upstream samples and desktop mobile-sized measurements. Physical-device
   profiling and a broader corpus remain pending. See [Reader validation](docs/READER-VALIDATION.md).
+- Oversized PDF source images fail visibly at the decode limit; they are not silently treated as
+  readable blank pages. Valid pages remain navigable and failed pages do not overwrite progress.
 - MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
   explicitly marked as unimplemented.
 - DRM-protected books are unsupported and always will be.

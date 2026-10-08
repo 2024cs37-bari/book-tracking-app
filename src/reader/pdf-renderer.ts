@@ -5,6 +5,7 @@ import type {
   RenderTask,
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { observePdfStreamErrors } from './pdf-stream-errors';
 import { assertLocator, createPdfLocator, parsePdfLocator, type Locator } from '~/domain/locator';
 import {
   DEFAULT_READER_SETTINGS,
@@ -27,10 +28,12 @@ export class PdfRenderer implements Renderer {
   private task?: RenderTask;
   private canvas?: HTMLCanvasElement;
   private index = 0;
+  private renderedIndex?: number;
   private scale = 1;
   private height = 1;
   private dead = false;
   private generation = 0;
+  private streamError?: unknown;
   private queue: Promise<void> = Promise.resolve();
   private settings = DEFAULT_READER_SETTINGS;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
@@ -47,7 +50,7 @@ export class PdfRenderer implements Renderer {
     host.append(scroller);
     this.scroller = scroller;
     this.resize = new ResizeObserver(() => {
-      if (this.document) this.schedule(this.index, this.offset());
+      if (this.document) this.move(this.index, this.offset());
     });
     this.resize.observe(host);
   }
@@ -61,6 +64,7 @@ export class PdfRenderer implements Renderer {
     this.loading = getDocument({
       data: new Uint8Array(await file.arrayBuffer()),
       isEvalSupported: false,
+      stopAtErrors: true,
       cMapUrl: `${base}cmaps/`,
       cMapPacked: true,
       standardFontDataUrl: `${base}standard_fonts/`,
@@ -75,6 +79,14 @@ export class PdfRenderer implements Renderer {
         return;
       }
       this.document = pdf;
+      observePdfStreamErrors(pdf, (pageIndex) => {
+        const generation = this.generation;
+        return (error) => {
+          if (this.dead || generation !== this.generation || pageIndex !== this.index) return;
+          this.streamError = error;
+          this.task?.cancel();
+        };
+      });
       let index = 0;
       let offset = 0;
       if (startAt) {
@@ -103,12 +115,19 @@ export class PdfRenderer implements Renderer {
     return Math.max(0, (this.scroller?.scrollTop ?? 0) - this.settings.marginPx) / this.scale;
   }
   private emit(): void {
-    if (!this.document || !this.canvas || this.dead) return;
+    if (
+      !this.document ||
+      !this.canvas ||
+      this.renderedIndex === undefined ||
+      this.canvas.dataset.renderState !== 'ready' ||
+      this.dead
+    )
+      return;
     const offset = this.offset();
     const locator = createPdfLocator(
-      this.index,
+      this.renderedIndex,
       offset,
-      (this.index + Math.min(1, offset / this.height)) / this.document.numPages,
+      (this.renderedIndex + Math.min(1, offset / this.height)) / this.document.numPages,
     );
     for (const callback of this.callbacks) callback(locator, locator.fraction);
   }
@@ -124,6 +143,7 @@ export class PdfRenderer implements Renderer {
       .then(async () => {
         if (this.dead || generation !== this.generation) return;
         this.releasePage();
+        this.streamError = undefined;
         await pdf.cleanup();
         const page = await pdf.getPage(target + 1);
         if (this.dead || generation !== this.generation) {
@@ -156,11 +176,19 @@ export class PdfRenderer implements Renderer {
         try {
           await task.promise;
         } catch (error) {
-          if (generation === this.generation && !this.dead) throw error;
+          if (generation === this.generation && !this.dead) {
+            this.releasePage();
+            throw this.streamError ?? error;
+          }
         } finally {
           if (this.task === task) this.task = undefined;
         }
         if (generation === this.generation && !this.dead) {
+          if (this.streamError) {
+            this.releasePage();
+            throw this.streamError;
+          }
+          this.renderedIndex = target;
           canvas.dataset.renderState = 'ready';
           this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
           this.emit();
@@ -221,6 +249,7 @@ export class PdfRenderer implements Renderer {
       this.canvas.height = 0;
     }
     this.canvas = undefined;
+    this.renderedIndex = undefined;
     this.page?.cleanup();
     this.page = undefined;
   }

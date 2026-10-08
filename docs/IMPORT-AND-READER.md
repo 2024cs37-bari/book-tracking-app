@@ -2,13 +2,13 @@
 
 ## 1. Format policy
 
-| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                                                                                               |
-| --------- | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3/RTL/assets/CSP/offline checks plus pinned Moby-Dick and SVG in Spine samples. Selected TOC/font/SVG-spread navigation and mobile-sized measurements; broader layouts, obfuscated fonts and physical-device validation pending. |
-| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated text/rotation/page-size checks, 240-page shared-image raster stress, and pinned Hello World PDF paint/zoom/offline checks. One canvas/pixel bounds measured; diverse real/image-heavy PDFs and physical-device profiling pending.       |
-| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                                                                                               |
-| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                                                                                           |
-| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                                                                                          |
+| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                                                                                                                 |
+| --------- | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3/RTL/assets/CSP/offline checks plus pinned Moby-Dick and SVG in Spine samples. Selected TOC/font/SVG-spread navigation and mobile-sized measurements; broader layouts, obfuscated fonts and physical-device validation pending.                   |
+| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated raster stress plus pinned GNU Make text, scan/image assemblies, mixed sizes, rotated pages and invalid input. Tested pages, offline restore, pixel bounds and explicit oversized-image rejection; broader variants and physical-device profiling pending. |
+| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                                                                                                                 |
+| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                                                                                                             |
+| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                                                                                                            |
 
 DRM-protected inputs are unsupported. Never bypass DRM. An extension alone is not proof of format; sniff content and report mismatches.
 
@@ -162,6 +162,14 @@ process memory. Blob-backed loading uses a whole-file byte buffer, not range rea
 PDFs, WASM-based decoders under the strict CSP, text selection, forms and mobile performance are
 not yet validated or claimed. `isEvalSupported` is disabled.
 
+Selected real-PDF evidence also includes GNU Make's 229-page text manual (first 12 pages checked),
+scanned/image assemblies, mixed page dimensions, five 90-degree rotated pages and an intentionally
+invalid file. Oversized source images still exceed the decode budget and fail visibly; their pages
+are not claimed readable. `stopAtErrors` plus a version-sensitive, per-document operator-stream
+guard prevents pdf.js from treating rejected streams as completed blank renders. Failed/pending
+pages never replace the last successfully rendered position. See
+[ADR 0005](decisions/0005-pdf-render-errors.md) and [Reader validation](READER-VALIDATION.md).
+
 ## 7. Regression corpus
 
 Maintain test fixtures that are legally distributable or generated for testing. Include:
@@ -177,7 +185,8 @@ The separate `corpus:fetch` command downloads unmodified, checksum-pinned origin
 workspace; `test:corpus` runs small-viewport cross-browser checks and emits measurement JSON.
 This adds selected-file evidence, including actual SVG spine content and Moby-Dick fonts; it is
 not broad conformance or physical-mobile certification. The 240-page image PDF stress workload is
-generated, while the real PDF corpus is currently only a small upstream demo.
+generated; the real PDF corpus includes the additional text/scan/geometry/error cases above,
+with tested page ranges and known decode limits explicitly recorded.
 
 ## 8. Metadata enrichment
 

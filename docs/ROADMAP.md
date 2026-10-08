@@ -34,7 +34,7 @@ Done:
   extraction, cover storage, incomplete-metadata fallback to filename.
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
-- 133 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
+- 137 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
   progress/debounce/outbox integration; 13 browser cases across Chromium, Firefox and Playwright
   WebKit projects (39 checks).
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
@@ -55,6 +55,11 @@ Done:
 - External checksum-pinned Moby-Dick, SVG in Spine and Hello World PDF corpus, without committing
   book files; mobile-sized checks and generated 240-page image-PDF resource measurements.
 - Chapter-level package-CFI restoration corrected using the real Moby-Dick TOC as a regression.
+- Five additional pinned PDFs: long embedded-font text, scans, mixed page sizes, rotation and an
+  invalid structure. Corpus suite has nine cases per browser (27 checks) alongside 39 generated
+  browser checks. Oversized-image cases assert explicit limits and recovery, not full readability.
+- Per-document pdf.js stream-error guard, failed-page progress protection and cancellation/resize
+  handling (ADR 0005); no schema changes or original-file deletion.
 
 Evidence: [CI run 37742014444](https://github.com/2024cs37-bari/book-tracking-app/actions/runs/37742014444)
 on 2026-10-08 passes the full quality gate, 131 Vitest tests and all 39 browser checks.
@@ -62,7 +67,7 @@ on 2026-10-08 passes the full quality gate, 131 Vitest tests and all 39 browser 
 **Next milestone selected: reader usability and validation (Phase 1 completion).**
 EPUB contents, generated assets and selected real-file corpus slices are implemented. Desktop
 mobile-sized measurements are recorded in [Reader validation](READER-VALIDATION.md). Next obtain
-physical-device measurements and a diverse real/image-heavy PDF corpus, and expand obfuscated-font
+physical-device measurements and further PDF/oversized-image variants, and expand obfuscated-font
 and layout variants. Finish PDF covers and manual metadata editing alongside validation.
 Phase 2 bookmarks/annotations will build on these navigation and locator guarantees.
 

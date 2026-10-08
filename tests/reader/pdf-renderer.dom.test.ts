@@ -27,6 +27,7 @@ vi.mock('pdfjs-dist', () => ({
       numPages: 100,
       getPage: engine.getPage,
       cleanup: engine.cleanupDocument,
+      _transport: { messageHandler: { sendWithStream: () => new ReadableStream() } },
     }),
     destroy: engine.destroy,
   }),
@@ -90,8 +91,40 @@ it('skips queued hidden pages on rapid navigation and captures/restores PDF-poin
   renderer.next();
   renderer.next();
   renderer.next();
+  // A queued turn has selected page 8, but a scroll on the old visible canvas
+  // must still describe page 5 rather than inventing progress for the target.
+  host.querySelector('.pdf-scroll')!.dispatchEvent(new Event('scroll'));
+  expect(callback.mock.calls.at(-1)![0].value).toMatch(/^4:/);
   await vi.waitFor(() => expect(engine.getPage).toHaveBeenLastCalledWith(8));
   expect(engine.getPage.mock.calls.map(([page]) => page)).toEqual([5, 8]);
+  renderer.destroy();
+  await vi.waitFor(() => expect(engine.destroy).toHaveBeenCalledOnce());
+});
+
+it('reports a rejected render, retains the last successful relocation and can recover', async () => {
+  const renderer = new PdfRenderer();
+  const host = document.createElement('div');
+  renderer.mount(host);
+  const relocated = vi.fn();
+  renderer.onRelocate(relocated);
+  const message = vi.fn();
+  host.addEventListener('reader-message', message);
+  await renderer.open(new Blob([buildPdfFixture()]));
+  engine.render.mockImplementationOnce(() => ({
+    promise: Promise.reject(new Error('Image exceeded maximum allowed size')),
+    cancel: vi.fn(),
+  }));
+  renderer.next();
+  await vi.waitFor(() => expect(message).toHaveBeenCalled());
+  expect((message.mock.calls[0]![0] as CustomEvent<string>).detail).toContain(
+    'Image exceeded maximum allowed size',
+  );
+  expect(host.querySelectorAll('canvas')).toHaveLength(0);
+  expect(relocated).toHaveBeenCalledOnce();
+  expect(relocated.mock.calls[0]![0].value).toBe('0:0');
+  renderer.prev();
+  await vi.waitFor(() => expect(relocated).toHaveBeenCalledTimes(2));
+  expect(host.querySelector('canvas')?.dataset.renderState).toBe('ready');
   renderer.destroy();
   await vi.waitFor(() => expect(engine.destroy).toHaveBeenCalledOnce());
 });

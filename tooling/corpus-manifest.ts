@@ -1,4 +1,4 @@
-export const CORPUS = [
+export const CORE_CORPUS = [
   {
     id: 'moby-dick',
     filename: 'moby-dick.epub',
@@ -39,3 +39,98 @@ export const CORPUS = [
       'Mozilla pdf.js contributors; example at pinned commit 89b500f5e1d98ed89bb90211e45b28730b2d99ac',
   },
 ] as const;
+
+const OCR_COMMIT = '58048daf960472e944caf4aefec904c6f3481245';
+const OCR_LICENSE = `https://github.com/ocrmypdf/OCRmyPDF/blob/${OCR_COMMIT}/REUSE.toml`;
+export const PDF_CORPUS = [
+  {
+    id: 'gnu-make',
+    filename: 'gnu-make.pdf',
+    format: 'pdf',
+    title: 'gnu-make',
+    kind: 'long-text',
+    pages: 229,
+    url: 'https://www.gnu.org/software/make/manual/make.pdf',
+    sha256: 'a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3',
+    maxBytes: 2_000_000,
+    licenseUrl: 'https://www.gnu.org/licenses/fdl-1.3.html',
+    license: 'GFDL-1.3-or-later; original manual license and cover-text requirements retained',
+    attribution:
+      'Free Software Foundation; Richard M. Stallman, Roland McGrath, Paul D. Smith; GNU Make 4.4.1 manual, Edition 0.77, February 2023',
+    limitedPages: [],
+    blankPages: [2, 6, 12],
+    aspectRatios: [],
+  },
+  {
+    id: 'ocr-multipage',
+    filename: 'ocr-multipage.pdf',
+    format: 'pdf',
+    title: 'ocr-multipage',
+    kind: 'scan',
+    pages: 6,
+    url: `https://raw.githubusercontent.com/ocrmypdf/OCRmyPDF/${OCR_COMMIT}/tests/resources/multipage.pdf`,
+    sha256: '07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80',
+    maxBytes: 2_000_000,
+    licenseUrl: OCR_LICENSE,
+    license: 'public-domain, as explicitly annotated by upstream REUSE.toml',
+    attribution:
+      'OCRmyPDF test-resource assembly; public-domain source scans and upstream notices retained',
+    limitedPages: [2],
+    blankPages: [],
+    aspectRatios: [369.6 / 477.6, 1, 718.5 / 300, 718.5 / 300, 612 / 792, 792 / 612],
+  },
+  {
+    id: 'ocr-mixed',
+    filename: 'ocr-mixed.pdf',
+    format: 'pdf',
+    title: 'ocr-mixed',
+    kind: 'mixed-size',
+    pages: 3,
+    url: `https://raw.githubusercontent.com/ocrmypdf/OCRmyPDF/${OCR_COMMIT}/tests/resources/3small.pdf`,
+    sha256: '7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840',
+    maxBytes: 500_000,
+    licenseUrl: OCR_LICENSE,
+    license: 'CC-BY-SA-4.0 plus CC-BY-SA-3.0 component alternative (see original REUSE terms)',
+    attribution: 'Euskaldunaa, James R. Barlow, Ellywa; unmodified OCRmyPDF three-image assembly',
+    limitedPages: [3],
+    blankPages: [],
+    aspectRatios: [200 / 213.125, 144 / 18, 200 / 143.2],
+  },
+  {
+    id: 'mozilla-rotated',
+    filename: 'mozilla-rotated.pdf',
+    format: 'pdf',
+    title: 'mozilla-rotated',
+    kind: 'rotated',
+    pages: 5,
+    url: 'https://raw.githubusercontent.com/mozilla/pdf.js/89b500f5e1d98ed89bb90211e45b28730b2d99ac/test/pdfs/hello_world_rotated.pdf',
+    sha256: 'ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b',
+    maxBytes: 100_000,
+    licenseUrl:
+      'https://github.com/mozilla/pdf.js/blob/89b500f5e1d98ed89bb90211e45b28730b2d99ac/LICENSE',
+    license: 'Apache-2.0 (Mozilla-authored PDF regression fixture)',
+    attribution: 'Mozilla pdf.js contributors; five letter pages with /Rotate 90',
+    limitedPages: [],
+    blankPages: [],
+    aspectRatios: [792 / 612, 792 / 612, 792 / 612, 792 / 612, 792 / 612],
+  },
+  {
+    id: 'ocr-invalid',
+    filename: 'ocr-invalid.pdf',
+    format: 'pdf',
+    title: 'ocr-invalid',
+    kind: 'invalid',
+    pages: 0,
+    url: `https://raw.githubusercontent.com/ocrmypdf/OCRmyPDF/${OCR_COMMIT}/tests/resources/invalid.pdf`,
+    sha256: '60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889',
+    maxBytes: 1000,
+    licenseUrl: OCR_LICENSE,
+    license: 'CC-BY-SA-4.0',
+    attribution: 'James R. Barlow; intentionally invalid 44-byte PDF fixture',
+    limitedPages: [],
+    blankPages: [],
+    aspectRatios: [],
+  },
+] as const;
+
+export const CORPUS = [...CORE_CORPUS, ...PDF_CORPUS] as const;

@@ -37,7 +37,37 @@ individual EPUB package documents, and [Mozilla license at the pinned commit](ht
 
 The authoritative machine-readable manifest is `tooling/corpus-manifest.ts`. Updates need new
 hashes, a provenance/license review and another actual-engine run. No sample may be silently
-repacked or substituted. Corpus tests live in `tests/corpus/reader.spec.ts`.
+repacked or substituted. Corpus tests live in `tests/corpus/reader.spec.ts` and `tests/corpus/pdf.spec.ts`.
+
+### Expanded PDF corpus
+
+The PDF suite adds unmodified, independently hash-verified originals. OCRmyPDF is pinned at
+`58048daf960472e944caf4aefec904c6f3481245`; its
+[REUSE declarations](https://github.com/ocrmypdf/OCRmyPDF/blob/58048daf960472e944caf4aefec904c6f3481245/REUSE.toml)
+provide per-file licensing, rather than assuming the software license covers scans.
+
+| Sample                              | Pages / checks                                                                                                               | License and original attribution                                                                                                                                                                                       |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GNU Make 4.4.1 manual, Edition 0.77 | 229 pages recognized; first 12 checked, including intentional blanks at 2/6/12; embedded Type 1 text, page 11 offline resume | GFDL-1.3-or-later with original cover-text requirements; FSF, Richard M. Stallman, Roland McGrath, Paul D. Smith. Exact February 2023 PDF at the canonical GNU URL pinned by hash; upstream updates fail verification. |
+| OCRmyPDF `multipage.pdf`            | 6-page scan/image assembly; painted pages 1/3/4/5/6, decode-limited page 2, mixed geometry and offline resume                | Public domain per upstream REUSE declaration; original credits retained.                                                                                                                                               |
+| OCRmyPDF `3small.pdf`               | 3-page image assembly; painted pages 1/2, decode-limited page 3; very different page sizes                                   | CC-BY-SA-4.0 plus CC-BY-SA-3.0 component alternative; Euskaldunaa, James R. Barlow, Ellywa; original composite licensing terms retained.                                                                               |
+| Mozilla `hello_world_rotated.pdf`   | All five letter pages with `/Rotate 90`; rotated raster aspect, painting and offline resume                                  | Apache-2.0, Mozilla pdf.js contributors; same pinned commit as Hello World.                                                                                                                                            |
+| OCRmyPDF `invalid.pdf`              | Intentional 44-byte invalid structure: explicit open error, no canvas/locator, original retained                             | CC-BY-SA-4.0, James R. Barlow.                                                                                                                                                                                         |
+
+| External cache filename | SHA-256                                                            |
+| ----------------------- | ------------------------------------------------------------------ |
+| `gnu-make.pdf`          | `a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3` |
+| `ocr-multipage.pdf`     | `07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80` |
+| `ocr-mixed.pdf`         | `7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840` |
+| `mozilla-rotated.pdf`   | `ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b` |
+| `ocr-invalid.pdf`       | `60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889` |
+
+Source images of 81,000,000 and 11,456,000 pixels exceed the intentional 4-million-pixel decode
+cap. Those pages fail visibly rather than silently becoming successful blank pages, preserve
+the last usable position and permit navigation away. They are known reading limits, not passing
+image-rendering claims. [ADR 0005](decisions/0005-pdf-render-errors.md) records the scoped pdf.js
+stream-error bridge and upgrade requirements. The GNU manual's remaining 217 pages are not
+visually certified by this slice.
 
 ## 2. Mobile-sized measurement protocol
 
@@ -93,6 +123,6 @@ Measure first usable content and repeated turns, use platform process/worker mem
 and inspect memory after close and repeated reopen. Capture at least five repetitions and report
 median/worst values, not just a favorable run. Do not upload private book data with diagnostics.
 
-Physical devices, diverse real/image-heavy PDFs, obfuscated fonts, other EPUB layout variants,
+Physical devices, additional real/image-heavy PDF variants and oversized-image handling, obfuscated fonts, other EPUB layout variants,
 accessibility and conformance-wide claims remain pending. EPUB/PDF stay experimental despite
 these selected-file results.

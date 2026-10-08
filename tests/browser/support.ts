@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 
-export async function importBook(
+export async function importStoredBook(
   page: Page,
   bytes: Uint8Array<ArrayBuffer>,
   filename: string,
@@ -22,6 +22,15 @@ export async function importBook(
   await page
     .getByRole('link', { name: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
     .click();
+}
+
+export async function importBook(
+  page: Page,
+  bytes: Uint8Array<ArrayBuffer>,
+  filename: string,
+  title: string,
+): Promise<void> {
+  await importStoredBook(page, bytes, filename, title);
   await page.getByRole('button', { name: 'Read', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
 }

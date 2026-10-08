@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
-import { CORPUS } from '../../tooling/corpus-manifest';
+import { CORE_CORPUS } from '../../tooling/corpus-manifest';
 import { readCorpusSample } from '../../tooling/corpus-files';
 import { importBook, position } from '../browser/support';
 import { buildImageHeavyPdfFixture } from '../support/fixtures';
@@ -74,7 +74,7 @@ async function offlineReady(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
 }
 
-for (const sample of CORPUS) {
+for (const sample of CORE_CORPUS) {
   test(`real-file ${sample.id}: metadata, navigation and offline resume at mobile size`, async ({
     page,
     context,
