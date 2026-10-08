@@ -2,15 +2,22 @@
 
 ## 1. Format policy
 
-| Format    | Initial status                | Engine / approach                     | Required validation                                                                 |
-| --------- | ----------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| EPUB      | MVP target                    | foliate-js adapter, pinned version    | EPUB 2/3, metadata variants, large images, fonts, RTL, navigation.                  |
-| PDF       | MVP target                    | pdf.js adapter                        | Large documents, rotation, varied page sizes, range/cache behavior.                 |
-| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering. |
-| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.             |
-| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                            |
+| Format    | Initial status                | Engine / approach                     | Required validation                                                                                                                                                               |
+| --------- | ----------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EPUB      | Implemented, experimental     | foliate-js snapshot `78914aef`        | Generated EPUB 2/3, RTL, pagination, inline-script blocking, CFI/offline resume pass in Chromium. Real-file corpus, images/fonts and other browsers pending.                      |
+| PDF       | Implemented, experimental     | direct pdf.js `5.4.624`               | Generated 30-page PDF with text, rotation and varied sizes: one canvas, pixel cap, page/offset offline resume pass in Chromium. Large real files/images/mobile profiling pending. |
+| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering.                                                                                               |
+| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.                                                                                                           |
+| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                                                                                                                          |
 
 DRM-protected inputs are unsupported. Never bypass DRM. An extension alone is not proof of format; sniff content and report mismatches.
+
+Evidence is reproducible in `tests/reader/*.dom.test.ts` and `tests/browser/reader.spec.ts`,
+using in-memory generators in `tests/support/fixtures.ts`. No real-file corpus has been verified
+for this milestone. EPUB/PDF Read actions are enabled because their adapters are implemented and
+basic generated reading is verified; the UI explicitly labels their wider support experimental.
+MOBI/AZW3 have no registered adapters; FB2/CBZ reading remains unimplemented.
+See [ADR 0003](decisions/0003-reader-engines.md) for the full upstream SHA and npm provenance decision.
 
 ## 2. Import pipeline
 
@@ -37,7 +44,10 @@ The application reader shell depends on a renderer interface rather than format-
 
 ```ts
 interface Renderer {
+  mount(host: HTMLElement): void;
   open(file: Blob, startAt?: Locator): Promise<void>;
+  prev(): void;
+  next(): void;
   goTo(locator: Locator): void;
   getToc(): Promise<TocItem[]>;
   onRelocate(callback: (locator: Locator, fraction: number) => void): () => void;
@@ -48,6 +58,24 @@ interface Renderer {
 ```
 
 Adapters own engine lifecycle, event translation, settings mapping, search cancellation, and locator serialization. `destroy()` must release listeners, workers, object URLs, and page resources. Opening a different format selects one adapter based on validated content, not repeated UI checks.
+
+Each session owns a fresh adapter: mount once, open once, destroy on close. `prev()`/`next()`
+are explicit contract additions for the reader toolbar. Adapters dispatch `reader-message` on
+the mount host to report asynchronous navigation errors or approximate restoration; the shell
+displays these messages. EPUB exposes engine TOC as CFI locators; no TOC UI is advertised yet.
+PDF returns an empty TOC. Both `search()` implementations explicitly reject iteration because
+in-book search is deferred.
+
+### Untrusted book content
+
+`index.html` installs CSP before app scripts: `script-src 'self'`, `object-src 'none'`,
+`base-uri 'none'`, bounded resource origins and no form submissions. Blob frames inherit it.
+The EPUB adapter additionally inserts `script-src 'none'` and `connect-src 'none'` before
+foliate creates content URLs, strips active embedding/base/refresh elements, and removes SVG
+scripts/foreignObject. Inline styles are allowed for book layout and user settings; inline scripts
+are never allowed. Upstream iframe sandbox flags are not relied on for security.
+EPUB input/expanded content is capped at 256 MiB and each archive entry at 64 MiB.
+Chromium verifies the hostile script stays unexecuted while actual book text renders.
 
 ## 4. Locator model and progress
 
@@ -64,6 +92,8 @@ type Locator = {
 - EPUB positions use CFI or the engine's stable equivalent plus fraction.
 - MOBI/AZW3 locator behavior is engine-specific and must be validated.
 - PDF stores page and vertical offset plus fraction; page alone is inadequate for different layouts/zoom.
+- PDF page is zero-based; vertical offset is rounded PDF viewport points at scale 1 (after rotation),
+  independent of display zoom. Fraction is `(page + offset/pageHeight) / pageCount`.
 - Persist fractions with every native locator and validate finite `[0, 1]` values.
 - If a locator cannot resolve after a file mismatch or renderer upgrade, fall back to fraction and tell the user when restoration is approximate.
 - A content hash change creates a different original; annotations/progress are not silently attached to it.
@@ -83,11 +113,26 @@ type Locator = {
 - In-book search must be cancellable, asynchronous, and bounded in memory.
 - Settings should be per-user defaults with a future option for per-book overrides; do not persist screen-specific pagination as a stable locator.
 
+Current saves debounce 400 ms, serialize repository writes and flush pending positions on reader
+close, pagehide and visibility hide. Close starts a durable write; abrupt process termination can
+still interrupt a browser transaction. Save errors are displayed rather than treated as success.
+Settings are localStorage device defaults (font size, line height, margin, theme); font size maps to
+PDF zoom, and PDF page typography remains fixed.
+
 ## 6. PDF performance and safety
 
 Render visible pages first, cap canvas and decoded image memory, release pages outside the viewport, and avoid loading a whole large document into UI state. Use range reads only if the local storage/engine path supports them correctly; a Blob-backed file may not provide network-style ranges. Measure on representative mobile hardware.
 
 PDFs and archives are untrusted. Keep parser dependencies current, isolate workers as supported, apply size and resource limits, and handle parser errors without corrupting the library.
+
+The implemented PDF UI paginates one page at a time. It requests only that visible page, keeps one
+page/canvas in the adapter, cancels superseded renders, zeroes old canvases and calls page/document
+cleanup on navigation. Rasterization is capped at 4,000,000 pixels, device pixel ratio at 2 and
+decoded-image size at 4,000,000 pixels. Worker and font/CMap/decoder assets are bundled locally.
+pdf.js still holds original document bytes and parser structures; this is not a hard cap on total
+process memory. Blob-backed loading uses a whole-file byte buffer, not range reads. Large-image
+PDFs, WASM-based decoders under the strict CSP, text selection, forms and mobile performance are
+not yet validated or claimed. `isEvalSupported` is disabled.
 
 ## 7. Regression corpus
 

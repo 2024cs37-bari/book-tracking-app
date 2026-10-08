@@ -28,6 +28,11 @@ export interface EpubFixtureOptions {
   readonly omitMimetype?: boolean;
   /** Omits META-INF/container.xml entirely. */
   readonly omitContainer?: boolean;
+  readonly hostileScript?: boolean;
+  readonly chapters?: number;
+  readonly paragraphs?: number;
+  readonly epubVersion?: '2.0' | '3.0';
+  readonly rtl?: boolean;
 }
 
 function containerXml(opfPath: string): string {
@@ -55,7 +60,7 @@ function packageXml(options: EpubFixtureOptions): string {
     : '';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+<package xmlns="http://www.idpf.org/2007/opf" version="${options.epubVersion ?? '3.0'}" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:title>${title}</dc:title>
     <dc:creator>${creator}</dc:creator>
@@ -64,10 +69,12 @@ function packageXml(options: EpubFixtureOptions): string {
     <dc:publisher>${publisher}</dc:publisher>${coverDeclarations}
   </metadata>
   <manifest>
-    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>${coverManifest}
+    ${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<item id="chapter${index + 1}" href="chapter${index + 1}.xhtml" media-type="application/xhtml+xml"/>`).join('\n')}${coverManifest}
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
   </manifest>
-  <spine>
-    <itemref idref="chapter1"/>
+  <spine toc="ncx"${options.rtl ? ' page-progression-direction="rtl"' : ''}>
+    ${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<itemref idref="chapter${index + 1}"/>`).join('\n')}
   </spine>
 </package>`;
 }
@@ -90,7 +97,31 @@ export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<A
     files['META-INF/container.xml'] = strToU8(containerXml(opfPath));
   }
   files[opfPath] = strToU8(packageXml(options));
-  files[`${opfDirectory}/chapter1.xhtml`] = strToU8(CHAPTER_XHTML);
+  for (let index = 1; index <= (options.chapters ?? 1); index++) {
+    let chapter = CHAPTER_XHTML.replace('Chapter 1', `Chapter ${index}`);
+    if (options.paragraphs)
+      chapter = chapter.replace(
+        '<p>Content.</p>',
+        `<h1>Chapter ${index}</h1>${Array.from({ length: options.paragraphs }, (_, paragraph) => `<p>Chapter ${index} paragraph ${paragraph + 1}. Generated reader content with enough words to exercise pagination, settings and stable CFI positions.</p>`).join('')}`,
+      );
+    if (options.rtl) chapter = chapter.replace('<body>', '<body dir="rtl">');
+    if (options.hostileScript)
+      chapter = chapter.replace(
+        '</head>',
+        '<script>globalThis.bookScriptExecuted = true; parent.bookScriptExecuted = true;</script></head>',
+      );
+    files[`${opfDirectory}/chapter${index}.xhtml`] = strToU8(chapter);
+  }
+  const navigation = Array.from(
+    { length: options.chapters ?? 1 },
+    (_, index) => `<li><a href="chapter${index + 1}.xhtml">Chapter ${index + 1}</a></li>`,
+  ).join('');
+  files[`${opfDirectory}/nav.xhtml`] = strToU8(
+    `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>${navigation}</ol></nav></body></html>`,
+  );
+  files[`${opfDirectory}/toc.ncx`] = strToU8(
+    `<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head/><docTitle><text>Contents</text></docTitle><navMap>${Array.from({ length: options.chapters ?? 1 }, (_, index) => `<navPoint id="chapter${index + 1}" playOrder="${index + 1}"><navLabel><text>Chapter ${index + 1}</text></navLabel><content src="chapter${index + 1}.xhtml"/></navPoint>`).join('')}</navMap></ncx>`,
+  );
 
   if (options.withCover === true && options.coverFileMissing !== true) {
     files[`${opfDirectory}/images/cover.jpg`] = JPEG_BYTES;
@@ -104,6 +135,7 @@ export interface PdfFixtureOptions {
   readonly author?: string;
   readonly pageCount?: number;
   readonly withInfoDictionary?: boolean;
+  readonly variedPages?: boolean;
 }
 
 /**
@@ -126,8 +158,20 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
   objects.push(
     `2 0 obj\n<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageCount} >>\nendobj\n`,
   );
-  for (const id of pageIds) {
-    objects.push(`${id} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n`);
+  const fontId = pageCount + 3;
+  for (const [index, id] of pageIds.entries()) {
+    const size = options.variedPages && index % 2 ? '420 600' : '612 792';
+    const rotation = options.variedPages && index % 2 ? ' /Rotate 90' : '';
+    objects.push(
+      `${id} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${size}]${rotation} /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${fontId + index + 1} 0 R >>\nendobj\n`,
+    );
+  }
+  objects.push(`${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`);
+  for (let index = 0; index < pageCount; index++) {
+    const content = `BT /F1 24 Tf 50 500 Td (Generated page ${index + 1}) Tj ET\n`;
+    objects.push(
+      `${fontId + index + 1} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`,
+    );
   }
 
   const infoParts: string[] = [];
@@ -135,10 +179,21 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
     if (options.title !== undefined) infoParts.push(`/Title (${options.title})`);
     if (options.author !== undefined) infoParts.push(`/Author (${options.author})`);
   }
-  const infoDictionary = infoParts.length > 0 ? `\n<< /Info << ${infoParts.join(' ')} >> >>` : '';
-
-  const body = objects.join('');
-  const text = `%PDF-1.4\n${body}trailer${infoDictionary}\n%%EOF\n`;
+  const infoId = objects.length + 1;
+  if (infoParts.length) objects.push(`${infoId} 0 obj\n<< ${infoParts.join(' ')} >>\nendobj\n`);
+  let text = '%PDF-1.4\n';
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(text.length);
+    text += object;
+  }
+  const xref = text.length;
+  text += `xref\n0 ${offsets.length}\n0000000000 65535 f \n${offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
+    .join(
+      '',
+    )}trailer\n<< /Size ${offsets.length} /Root 1 0 R${infoParts.length ? ` /Info ${infoId} 0 R` : ''} >>\nstartxref\n${xref}\n%%EOF\n`;
   return strToU8(text);
 }
 

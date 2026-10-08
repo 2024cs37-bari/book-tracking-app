@@ -201,10 +201,10 @@ export default function BookDetailsView() {
                     <button
                       type="button"
                       class="button button-primary"
-                      disabled
-                      title="EPUB and PDF rendering is the next milestone"
+                      disabled={!app.renderers.has(book().format) || book().lifecycle === 'deleted'}
+                      onClick={() => navigate(`/read/${book().id}`)}
                     >
-                      Read (not implemented yet)
+                      {app.renderers.has(book().format) ? 'Read' : 'Reading not implemented'}
                     </button>
 
                     <Show when={book().lifecycle === 'active'}>

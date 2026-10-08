@@ -3,8 +3,8 @@
 Offline-first, cross-device reading and library management for one person.
 
 > **Project status:** Phase 1 (local reader MVP) in progress. Import, storage, metadata and the
-> library UI work end to end. EPUB/PDF rendering is the next milestone, so books can be imported and
-> tracked but not yet read in the app.
+> library UI work end to end. The reader milestone adds local EPUB/PDF reading and offline resume.
+> Both formats remain experimental pending real-file corpus validation.
 
 Personal Book Reader keeps a private book collection readable and recoverable across web, mobile PWA
 and desktop without making the network a dependency. Local storage is the source of truth for the
@@ -30,13 +30,21 @@ interface; Cloudflare provides synchronization and durable file storage in later
 - **Storage reconciliation** that reports unreferenced files and books missing their local file, with
   an explicit cleanup action.
 - **JSON export** of library metadata, generated entirely on the client.
+- **Reader** at `/read/:id`: EPUB via pinned upstream foliate-js, PDF via pdf.js directly,
+  previous/next navigation, font size/PDF zoom, line height, margins and themes.
+- **Progress**: EPUB CFI or zero-based PDF page/vertical offset plus normalized fraction,
+  debounced local saves with an atomic outbox row, and restoration on reopen.
+- **Offline app shell** in production builds: service-worker precache includes renderer modules,
+  PDF worker, fonts and decoding assets. Book bytes remain in the file store.
+- **Content security policy**: app scripts restricted to self; EPUB content gets a stricter
+  no-script/no-network policy before rendering. A hostile generated EPUB is browser-tested.
 
 ## What is deliberately not implemented yet
 
-- No reader. The `Renderer` interface and registry exist, but no format adapter is registered, so the
-  read action is disabled rather than pretending.
 - No sync, no server, no accounts. The outbox grows locally and is reported in Settings.
 - No annotations, shelves, tags, statistics, or selective offline pinning.
+- No reader TOC UI or in-book search. Real-file EPUB/PDF corpus, mobile memory profiling and
+  Firefox/WebKit validation remain pending. Generated-fixture checks run in Chromium.
 - MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
   explicitly marked as unimplemented.
 - DRM-protected books are unsupported and always will be.
@@ -66,9 +74,13 @@ Open the printed URL and import a book. Everything stays in the browser.
 | `npm run format:check` | Verify formatting without writing                         |
 | `npm test`             | Run the unit test suite once                              |
 | `npm run test:watch`   | Run tests in watch mode                                   |
+| `npm run test:browser` | Chromium checks against a production build (Playwright)   |
 | `npm run check`        | Full gate: typecheck, lint, format check, tests and build |
 
-`npm run check` is what CI runs; run it before opening a pull request.
+CI runs `npm run check` and `npm run test:browser`. Install the test browser once with
+`npx playwright install chromium`. Run both gates before pushing reader changes.
+Offline navigation/reload needs a production build (`npm run build && npm run preview`)
+and a completed first-online service-worker installation; development mode has no precache.
 
 ## Project structure
 
@@ -78,12 +90,14 @@ src/
   domain/      Pure types and rules (HLC, locators, books, progress, enums, hashing identity)
   data/        Dexie schema, row types, and repositories including the outbox
   storage/     File stores (OPFS, memory), streaming SHA-256, mime mapping, reconciliation
-  reader/      Renderer contract, registry, and content-based format detection
-  services/    Use cases: import pipeline, metadata extraction, export
+  reader/      Renderer contract, EPUB/PDF adapters, content-based format detection
+  services/    Use cases: import, metadata, export, reader sessions and progress
   ui/          Solid components
   styles/      Global stylesheet
 tests/         Vitest suites mirroring src/, plus fixtures and a harness
 docs/          Product, architecture and operational documentation
+vendor/        Pinned foliate-js source snapshot and third-party license notices
+tooling/       Renderer assets and offline app-shell build integration
 ```
 
 Layer rules: `domain` depends on nothing, `data`/`storage`/`reader` depend on `domain`, `services`
@@ -95,7 +109,7 @@ importing storage or database code directly.
 ```text
 SolidJS UI / PWA  →  repositories (Dexie + IndexedDB)  →  outbox
                   →  file store (OPFS, memory fallback)
-                  →  renderer registry (adapters pending)
+                  →  renderer registry (EPUB / PDF adapters)
                         ↓ later phase
                   Cloudflare Access → Worker/Hono → D1 + private R2
 ```
@@ -118,6 +132,7 @@ schema, and [Import and reader](docs/IMPORT-AND-READER.md) for the import pipeli
 | [Roadmap](docs/ROADMAP.md)                                            | Phases, dependencies, acceptance criteria           |
 | [Technology baseline](docs/decisions/0001-technology-baseline.md)     | Initial architecture decisions                      |
 | [Data lifecycle](docs/decisions/0002-data-lifecycle.md)               | Archive, deletion, tombstones, recoverability       |
+| [Reader engines](docs/decisions/0003-reader-engines.md)               | Pinned provenance, CSP and format evidence          |
 | [Archived initial requirements](docs/archive/initial-requirements.md) | Original planning document, kept for history        |
 
 ## Contributing

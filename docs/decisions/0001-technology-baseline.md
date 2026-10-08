@@ -1,6 +1,7 @@
 # ADR 0001: Technology baseline
 
 - **Status:** Accepted as initial implementation baseline; all third-party capabilities remain subject to validation.
+- **Reader refinement:** [ADR 0003](0003-reader-engines.md) pins engine provenance and the CSP boundary.
 - **Date:** 2026-10-07
 - **Decision owners:** Project maintainer
 

@@ -186,6 +186,10 @@ constrains a few details. These are deliberate and must be preserved by migratio
   `fraction` column, and all three are absent until the reader reports a position. A book therefore
   has a reading status from the moment it is imported, without inventing a placeholder position.
 - Table names: `books`, `progress`, `changes`, `syncMeta`, `deviceState`, `fileTransfers`.
+- Reader milestone uses these existing fields without a schema change (v1 remains released and
+  unchanged). EPUB locator values are CFI; PDF values are zero-based `page:yOffset`, where offset
+  is rounded scale-1 PDF viewport points after rotation. Both save normalized fraction. Reader
+  settings live in localStorage as device defaults and are not replicated mutations.
 - Timestamps are milliseconds since the Unix epoch. HLC strings are ordered as text only after
   parsing into components; never compare them lexically as raw strings across differing wall-clock
   digit counts.

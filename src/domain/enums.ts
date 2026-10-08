@@ -23,8 +23,8 @@ export type LocatorKind = (typeof LOCATOR_KINDS)[number];
 export type RenderSupport = 'supported' | 'experimental' | 'deferred';
 
 const RENDER_SUPPORT: Record<BookFormat, RenderSupport> = {
-  epub: 'supported',
-  pdf: 'supported',
+  epub: 'experimental',
+  pdf: 'experimental',
   mobi: 'experimental',
   azw3: 'experimental',
   fb2: 'deferred',

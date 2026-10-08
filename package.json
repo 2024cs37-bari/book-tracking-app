@@ -18,21 +18,25 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser": "playwright test",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build"
   },
   "dependencies": {
     "@solidjs/router": "^1.0.0",
     "dexie": "^4.4.6",
     "fflate": "^0.8.3",
+    "pdfjs-dist": "5.4.624",
     "solid-js": "^1.9.17"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.4",
     "eslint": "^10.12.0",
     "eslint-plugin-solid": "^0.18.1",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.13.0",
+    "jsdom": "27.4.0",
     "prettier": "^3.9.9",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",

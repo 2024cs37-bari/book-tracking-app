@@ -3,22 +3,24 @@
 ## 1. Current repository state
 
 The application scaffold exists and runs locally. Import, local persistence, metadata extraction, the
-library UI, storage reconciliation and JSON export are implemented. EPUB/PDF rendering, sync, and the
-server are not.
+library UI, storage reconciliation and JSON export are implemented. EPUB/PDF reading, local settings,
+progress/restore and production offline app caching are implemented with generated-fixture evidence.
+Real-file corpus validation is pending; sync and the server are not implemented.
 
 Implemented commands:
 
-| Command             | Purpose                                                  |
-| ------------------- | -------------------------------------------------------- |
-| `npm install`       | Install dependencies (Node.js 20.19+).                   |
-| `npm run dev`       | Development server.                                      |
-| `npm run build`     | Production build into `dist/`.                           |
-| `npm run preview`   | Serve the production build.                              |
-| `npm run typecheck` | Type-check the app, tooling and test projects.           |
-| `npm run lint`      | ESLint including Solid reactivity rules.                 |
-| `npm run format`    | Prettier write; `format:check` verifies without writing. |
-| `npm test`          | Vitest suite (unit tests, Node environment).             |
-| `npm run check`     | Full gate; this is what CI runs.                         |
+| Command                | Purpose                                                  |
+| ---------------------- | -------------------------------------------------------- |
+| `npm install`          | Install dependencies (Node.js 20.19+).                   |
+| `npm run dev`          | Development server.                                      |
+| `npm run build`        | Production build into `dist/`.                           |
+| `npm run preview`      | Serve the production build.                              |
+| `npm run typecheck`    | Type-check the app, tooling and test projects.           |
+| `npm run lint`         | ESLint including Solid reactivity rules.                 |
+| `npm run format`       | Prettier write; `format:check` verifies without writing. |
+| `npm test`             | Vitest suite (Node plus adapter jsdom tests).            |
+| `npm run test:browser` | Playwright Chromium production/offline/CSP checks.       |
+| `npm run check`        | Full gate; this is what CI runs.                         |
 
 Configuration and deployment for Cloudflare, and any runtime observability beyond the in-app Settings
 view, do not exist yet. This document defines requirements for adding them.
@@ -48,6 +50,22 @@ and `tests/support/fixtures.ts` generates EPUB/PDF/MOBI/FB2/CBZ files in memory.
 rather than committed: book files cannot be checked in, and generated fixtures state exactly which
 structural detail each test depends on. They verify this codebase's parsing, not conformance of
 real-world files, so the regression corpus in Phase 1 remains a separate requirement.
+
+Adapter tests opt into jsdom with `@vitest-environment jsdom`; the original suites still run in
+Node. EPUB DOM tests use the real pinned parser with a custom-element pagination stand-in because
+jsdom has no browser layout. PDF DOM tests replace pdf.js rasterization to inspect cache/cleanup
+and page-request ordering. Neither is evidence that jsdom enforces CSP.
+
+`npm run test:browser` builds and serves production assets, runs both actual engines in Chromium,
+injects generated files through `DataTransfer`, and verifies script blocking, EPUB 2/3/RTL, offline
+CFI resume, PDF painting/rotation/page-size variations, one-canvas/pixel bounds and offline PDF
+page/offset resume. Install Chromium with `npx playwright install chromium` (CI uses `--with-deps`).
+CI runs both gates. `PLAYWRIGHT_PORT=4175` can select a different test server port.
+
+The production service worker precaches application and renderer assets only; no book bytes or
+dynamic library metadata enter CacheStorage. Offline cold navigation/reload requires one completed
+online installation. Dev mode has no service worker. Browser CacheStorage/OPFS eviction can still
+remove offline availability. IndexedDB schema version 1 is unchanged by this milestone.
 
 ## 3. Configuration and secrets
 

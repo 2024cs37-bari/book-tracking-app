@@ -39,7 +39,10 @@ export type Unsubscribe = () => void;
  * quirks stay inside adapters. See docs/ARCHITECTURE.md §4.
  */
 export interface Renderer {
+  mount(host: HTMLElement): void;
   open(file: Blob, startAt?: Locator): Promise<void>;
+  prev(): void;
+  next(): void;
   goTo(locator: Locator): void;
   getToc(): Promise<TocItem[]>;
   onRelocate(callback: (locator: Locator, fraction: number) => void): Unsubscribe;
@@ -59,10 +62,7 @@ export interface RendererFactory {
 /**
  * Maps formats to renderer adapters.
  *
- * No adapter is registered yet: EPUB and PDF rendering is the next milestone,
- * and the registry exists so the reader shell can be written against a stable
- * contract before any engine is chosen. `resolve` returning null is an
- * expected state that the UI renders as "reading not available yet".
+ * Only verified adapters are registered. Missing formats remain unavailable.
  */
 export class RendererRegistry {
   private readonly factories = new Map<BookFormat, RendererFactory>();

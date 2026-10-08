@@ -27,3 +27,9 @@ jobs:
 
       - name: Verify
         run: npm run check
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser reader checks
+        run: npm run test:browser

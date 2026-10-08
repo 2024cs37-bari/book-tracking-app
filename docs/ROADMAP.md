@@ -18,7 +18,8 @@ Exit criteria: documentation is internally consistent, assumptions are marked, a
 
 ## Phase 1 — Local EPUB/PDF reader MVP
 
-**Status:** In progress. Foundation and import pipeline are implemented; rendering is not.
+**Status:** In progress. Reader milestone implemented and verified with generated fixtures in
+Chromium; full Phase 1 corpus and remaining features are not complete.
 
 Done:
 
@@ -33,17 +34,22 @@ Done:
   extraction, cover storage, incomplete-metadata fallback to filename.
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
-- 117 unit tests covering domain rules, persistence atomicity, format detection, metadata extraction,
-  import outcomes and storage reconciliation.
+- 126 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
+  progress/debounce/outbox integration; 5 Chromium browser checks.
+- CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
+- Vendored upstream foliate-js at `78914aef4466eb960965702401634c2cb348e9b1` (ADR 0003).
+- EPUB/PDF adapters, `/read/:id`, reader settings, native locators plus fractions, debounced progress
+  and offline close/reopen/reload resume. PDF keeps one visible canvas with a 4-million-pixel cap.
+- Production app-shell precache, including local renderer assets and the PDF worker.
 
 Remaining:
 
-- EPUB renderer adapter (foliate-js) behind the `Renderer` interface.
-- PDF renderer adapter (pdf.js) with visible-page rendering and bounded cache.
-- Reader shell: progress capture and restore, TOC.
+- TOC UI and in-book search (engine TOC translation exists for EPUB).
 - Cover generation for PDFs.
 - Manual metadata editing.
-- OPFS behaviour verified in real browsers, and the format regression corpus established.
+- Real-file format corpus, images/fonts/fixed-layout coverage, other browsers and mobile memory
+  profiling. Chromium generated-file OPFS persistence/offline reload is verified; broader platform
+  storage behavior and browser restart remain pending.
 
 Acceptance criteria (unchanged):
 

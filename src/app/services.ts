@@ -11,6 +11,9 @@ import { requestPersistentStorage, selectBookFileStore } from '~/storage/create-
 import type { BookFileStore } from '~/storage/file-store';
 import { ImportService } from '~/services/import-service';
 import { ExportService } from '~/services/export-service';
+import { ReaderService } from '~/services/reader-service';
+import { EpubRenderer } from '~/reader/epub-renderer';
+import { PdfRenderer } from '~/reader/pdf-renderer';
 
 /**
  * Everything the UI needs, assembled once at startup.
@@ -29,6 +32,7 @@ export interface AppServices {
   readonly imports: ImportService;
   readonly exports: ExportService;
   readonly renderers: RendererRegistry;
+  readonly reader: ReaderService;
   readonly clock: Clock;
   readonly deviceId: string;
   /** Set when a non-durable or degraded storage adapter is in use. */
@@ -74,6 +78,24 @@ export async function createAppServices(
   const progress = new ProgressRepository(db, context);
   const changes = new ChangeRepository(db);
   const deviceState = new DeviceStateRepository(db);
+  const renderers = createRendererRegistry([
+    {
+      format: 'epub',
+      support: 'experimental',
+      engine: 'foliate-js 78914aef',
+      create: () => new EpubRenderer(),
+    },
+    {
+      format: 'pdf',
+      support: 'experimental',
+      engine: 'pdf.js 5.4.624',
+      create: () => new PdfRenderer(),
+    },
+  ]);
+  const persistClockState = async () => {
+    const last = clock.last();
+    if (last !== null) await syncMeta.setClockState(last);
+  };
 
   return {
     db,
@@ -85,17 +107,19 @@ export async function createAppServices(
     files: selection.store,
     imports: new ImportService({ db, books, progress, files: selection.store }),
     exports: new ExportService(db),
-    // No adapters are registered yet; EPUB/PDF rendering is the next milestone.
-    renderers: createRendererRegistry(),
+    renderers,
+    reader: new ReaderService({
+      books,
+      progress,
+      deviceState,
+      files: selection.store,
+      renderers,
+      persistClock: persistClockState,
+    }),
     clock,
     deviceId,
     storageWarning: selection.fallbackReason,
     persistentStorage,
-    persistClockState: async () => {
-      const last = clock.last();
-      if (last !== null) {
-        await syncMeta.setClockState(last);
-      }
-    },
+    persistClockState,
   };
 }

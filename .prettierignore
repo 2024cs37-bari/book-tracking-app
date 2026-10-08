@@ -8,3 +8,6 @@ coverage/
 
 # Lockfiles are generated
 package-lock.json
+vendor/
+test-results/
+playwright-report/

@@ -66,3 +66,14 @@ async function boot(): Promise<void> {
 }
 
 void boot();
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  void navigator.serviceWorker
+    .register(`${import.meta.env.BASE_URL}sw.js`)
+    .catch((error: unknown) => {
+      const note = document.createElement('p');
+      note.className = 'note note-warning';
+      note.textContent = `Offline app caching failed: ${String(error)}. Local books are still stored.`;
+      document.body.append(note);
+    });
+}

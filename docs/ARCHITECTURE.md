@@ -4,7 +4,7 @@
 
 This is the initial architecture baseline for a single-user application. Decisions favor understandable local behavior, small operational footprint, replaceable adapters, and recoverability. Details that depend on browser or library behavior remain validation tasks rather than assumed guarantees.
 
-**Implementation status.** The client layers, local persistence, file storage, format detection and import pipeline described below are implemented as `src/domain`, `src/data`, `src/storage`, `src/reader` and `src/services`. The renderer registry exists but no format adapter is registered yet, and nothing in the Cloudflare section exists. Where this document and the code disagree, the code is the fact and this document is the bug.
+**Implementation status.** The client layers, local persistence, file storage, format detection and import pipeline are implemented as `src/domain`, `src/data`, `src/storage`, `src/reader` and `src/services`. EPUB/PDF adapters, `/read/:id`, settings, debounced progress/restore and a production app-shell precache are implemented. Generated-fixture Chromium checks verify basic reading, script blocking and offline reload/resume; real-file corpus and other browser validation remain pending, so both formats are experimental. Nothing in the Cloudflare section exists. Where this document and the code disagree, the code is the fact and this document is the bug.
 
 See [ADR 0001](decisions/0001-technology-baseline.md) for technology choices and [ADR 0002](decisions/0002-data-lifecycle.md) for data lifecycle rules.
 
@@ -72,7 +72,10 @@ Conceptual interface:
 
 ```ts
 interface Renderer {
+  mount(host: HTMLElement): void;
   open(file: Blob, startAt?: Locator): Promise<void>;
+  prev(): void;
+  next(): void;
   goTo(locator: Locator): void;
   getToc(): Promise<TocItem[]>;
   onRelocate(callback: (locator: Locator, fraction: number) => void): () => void;
@@ -83,6 +86,11 @@ interface Renderer {
 ```
 
 Adapter-specific APIs and locator conversion stay inside implementations. All locators include a normalized fraction for fallback and progress comparison. See [Import and reader](IMPORT-AND-READER.md).
+
+`ReaderService` retrieves originals and saved progress; `ReaderSession` serializes debounced
+repository writes and flushes on close/hide. UI only mounts the contract and calls session methods.
+Vendored engines are loaded exclusively inside `reader`; see [ADR 0003](decisions/0003-reader-engines.md).
+The schema remains v1. Settings are local device defaults in localStorage, not replicated rows.
 
 ## 5. Data flow and invariants
 

@@ -26,6 +26,9 @@ There is no guaranteed response or reward policy yet. The maintainer will acknow
 - Secrets, tokens, signed URLs, and user content are excluded from logs and commits.
 - No DRM circumvention is implemented or supported.
 - Dependencies and deployment service configuration are reviewed before production.
+- App CSP precedes scripts; book frames inherit it and EPUB resources receive a stricter no-script,
+  no-network policy before URL creation. Generated hostile EPUB browser tests must pass on engine
+  updates; upstream sandbox flags alone are not a security boundary.
 - Client-side encryption is not part of the initial baseline; private storage must not be described as end-to-end encrypted.
 
 ## Privacy

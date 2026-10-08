@@ -30,7 +30,9 @@ export function SupportNote(props: { format: BookFormat }) {
     <Show when={renderSupport(props.format) !== 'supported'}>
       <p class="note note-warning">
         {renderSupport(props.format) === 'experimental'
-          ? `${BOOK_FORMAT_LABELS[props.format]} reading is experimental and has not been verified against a test corpus yet.`
+          ? props.format === 'epub' || props.format === 'pdf'
+            ? `${BOOK_FORMAT_LABELS[props.format]} basic reading is verified with generated fixtures. Real-file corpus validation is pending; support remains experimental.`
+            : `${BOOK_FORMAT_LABELS[props.format]} reading is experimental and has no registered adapter yet.`
           : `Reading ${BOOK_FORMAT_LABELS[props.format]} files is not implemented yet. The book is imported and tracked correctly, and will become readable in a later milestone.`}
       </p>
     </Show>
