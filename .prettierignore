@@ -1,0 +1,10 @@
+# Historical snapshot: preserved verbatim, not reformatted
+docs/archive/
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Lockfiles are generated
+package-lock.json

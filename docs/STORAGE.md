@@ -4,14 +4,14 @@
 
 The storage layer preserves metadata, original file bytes, and queued work independently. It must distinguish library metadata presence from local file availability and cloud file availability.
 
-| Data | Initial local storage | Remote storage |
-| --- | --- | --- |
-| Book metadata, progress, collections, annotations, sessions | Dexie/IndexedDB | D1 after sync |
-| Browser book bytes | OPFS when supported; tested fallback required | Private R2 after upload |
-| Desktop book bytes | Tauri app data directory | Private R2 after upload |
-| Pinned/last-opened state | Per-device local database | None |
-| Outbox, cursor, transfer queue | Local database | Server idempotency/change-log state as needed |
-| Cover thumbnail | Local cache/object store | Private R2 derivative or regenerated copy |
+| Data                                                        | Initial local storage                         | Remote storage                                |
+| ----------------------------------------------------------- | --------------------------------------------- | --------------------------------------------- |
+| Book metadata, progress, collections, annotations, sessions | Dexie/IndexedDB                               | D1 after sync                                 |
+| Browser book bytes                                          | OPFS when supported; tested fallback required | Private R2 after upload                       |
+| Desktop book bytes                                          | Tauri app data directory                      | Private R2 after upload                       |
+| Pinned/last-opened state                                    | Per-device local database                     | None                                          |
+| Outbox, cursor, transfer queue                              | Local database                                | Server idempotency/change-log state as needed |
+| Cover thumbnail                                             | Local cache/object store                      | Private R2 derivative or regenerated copy     |
 
 ## 2. Local metadata database
 

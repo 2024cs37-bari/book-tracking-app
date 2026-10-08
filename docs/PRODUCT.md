@@ -47,40 +47,40 @@ DRM-protected books are unsupported. The application will not bypass DRM or clai
 
 Priority labels: **MVP** is required for the first local-reader milestone; **Later** follows after its dependencies are stable; **Deferred** is not committed to the initial product.
 
-| ID | Priority | Requirement | Acceptance intent |
-| --- | --- | --- | --- |
-| F-01 | MVP | Import one or more files using a picker; desktop drag-and-drop can follow with the desktop shell. | Unsupported or malformed input produces a clear result and does not corrupt existing library data. |
-| F-02 | MVP | Compute a SHA-256 content hash and preserve original bytes. | Re-importing identical bytes does not create a duplicate file entry. |
-| F-03 | MVP | Extract title, author, language, and cover when available. | Missing metadata is allowed; filename-derived title and an incomplete-metadata indicator are provided. |
-| F-04 | MVP | Browse a library with search, sort, and reading-status filters. | Core browsing works offline against local data. |
-| F-05 | MVP | Read EPUB and PDF files through isolated renderer adapters. | Opening and progress restoration work without a network connection when the file is local. |
-| F-06 | MVP | Persist and restore reading progress automatically. | Reflowable content uses a durable locator plus fraction; PDF uses page and offset plus fraction. |
-| F-07 | MVP | Export library metadata as JSON and annotations as Markdown. | Export is usable without a server request and identifies files by hash. |
-| F-08 | Later | Synchronize library metadata, progress, annotations, shelves, tags, sessions, and files. | Retries are idempotent; local writes are never blocked by network failure. |
-| F-09 | Later | Pin a book for offline access; show remote-only, queued, downloading, available, and failed states. | Pinned files are not evicted automatically. |
-| F-10 | Later | Add highlights, notes, and bookmarks. | Annotation locators can be resolved or reported as orphaned after a file/version mismatch. |
-| F-11 | Later | Add shelves and tags. | Membership and renames have defined cross-device conflict behavior. |
-| F-12 | Later | Add table of contents and in-book search. | Search is cancellable and does not freeze library navigation. |
-| F-13 | Later | Show reading time, reading days/streaks, progress per day, and finished-book counts. | Statistics are derived from mergeable reading sessions. |
-| F-14 | Later | Prompt on substantial cross-device progress divergence. | The user can choose a position; neither candidate is silently discarded before resolution. |
-| F-15 | Deferred | Support nested folders. | Requires an explicit data-model and UX decision first. |
-| F-16 | Deferred | Automated third-party cloud backup. | Manual export and restore must exist first. |
-| F-17 | Deferred | Client-side encryption of files. | Requires a key recovery design and a documented trade-off with server-side processing. |
+| ID   | Priority | Requirement                                                                                         | Acceptance intent                                                                                      |
+| ---- | -------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| F-01 | MVP      | Import one or more files using a picker; desktop drag-and-drop can follow with the desktop shell.   | Unsupported or malformed input produces a clear result and does not corrupt existing library data.     |
+| F-02 | MVP      | Compute a SHA-256 content hash and preserve original bytes.                                         | Re-importing identical bytes does not create a duplicate file entry.                                   |
+| F-03 | MVP      | Extract title, author, language, and cover when available.                                          | Missing metadata is allowed; filename-derived title and an incomplete-metadata indicator are provided. |
+| F-04 | MVP      | Browse a library with search, sort, and reading-status filters.                                     | Core browsing works offline against local data.                                                        |
+| F-05 | MVP      | Read EPUB and PDF files through isolated renderer adapters.                                         | Opening and progress restoration work without a network connection when the file is local.             |
+| F-06 | MVP      | Persist and restore reading progress automatically.                                                 | Reflowable content uses a durable locator plus fraction; PDF uses page and offset plus fraction.       |
+| F-07 | MVP      | Export library metadata as JSON and annotations as Markdown.                                        | Export is usable without a server request and identifies files by hash.                                |
+| F-08 | Later    | Synchronize library metadata, progress, annotations, shelves, tags, sessions, and files.            | Retries are idempotent; local writes are never blocked by network failure.                             |
+| F-09 | Later    | Pin a book for offline access; show remote-only, queued, downloading, available, and failed states. | Pinned files are not evicted automatically.                                                            |
+| F-10 | Later    | Add highlights, notes, and bookmarks.                                                               | Annotation locators can be resolved or reported as orphaned after a file/version mismatch.             |
+| F-11 | Later    | Add shelves and tags.                                                                               | Membership and renames have defined cross-device conflict behavior.                                    |
+| F-12 | Later    | Add table of contents and in-book search.                                                           | Search is cancellable and does not freeze library navigation.                                          |
+| F-13 | Later    | Show reading time, reading days/streaks, progress per day, and finished-book counts.                | Statistics are derived from mergeable reading sessions.                                                |
+| F-14 | Later    | Prompt on substantial cross-device progress divergence.                                             | The user can choose a position; neither candidate is silently discarded before resolution.             |
+| F-15 | Deferred | Support nested folders.                                                                             | Requires an explicit data-model and UX decision first.                                                 |
+| F-16 | Deferred | Automated third-party cloud backup.                                                                 | Manual export and restore must exist first.                                                            |
+| F-17 | Deferred | Client-side encryption of files.                                                                    | Requires a key recovery design and a documented trade-off with server-side processing.                 |
 
 ## 6. Non-functional requirements
 
-| ID | Requirement | Initial measurable intent |
-| --- | --- | --- |
-| NF-01 | Offline-first | Every core read and mutation uses local repositories; sync is asynchronous. |
-| NF-02 | Performance | Cached-book open target under 1 second and page-turn target under 100 ms on a documented reference device; measure before claiming. |
-| NF-03 | Durability | Server storage becomes a recoverable copy after sync; local storage may be evicted and must be rebuildable. |
-| NF-04 | Integrity | Verify file content hashes after import and after download. |
-| NF-05 | Security | HTTPS, authenticated API routes, private object storage, and no public book URLs. |
-| NF-06 | Portability | Original files remain byte-for-byte unchanged; metadata and annotations are exportable. |
-| NF-07 | Resilience | Sync operations are idempotent, cursor-based, retryable, and survive application restarts. |
-| NF-08 | Cost | Design for one user and current free tiers, but verify service quotas and pricing at deployment time. |
-| NF-09 | Accessibility | Keyboard operation, visible focus, semantic controls, contrast, and scalable text are required for app UI. |
-| NF-10 | Privacy | No analytics or telemetry by default; any future diagnostics must be opt-in and documented. |
+| ID    | Requirement   | Initial measurable intent                                                                                                           |
+| ----- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| NF-01 | Offline-first | Every core read and mutation uses local repositories; sync is asynchronous.                                                         |
+| NF-02 | Performance   | Cached-book open target under 1 second and page-turn target under 100 ms on a documented reference device; measure before claiming. |
+| NF-03 | Durability    | Server storage becomes a recoverable copy after sync; local storage may be evicted and must be rebuildable.                         |
+| NF-04 | Integrity     | Verify file content hashes after import and after download.                                                                         |
+| NF-05 | Security      | HTTPS, authenticated API routes, private object storage, and no public book URLs.                                                   |
+| NF-06 | Portability   | Original files remain byte-for-byte unchanged; metadata and annotations are exportable.                                             |
+| NF-07 | Resilience    | Sync operations are idempotent, cursor-based, retryable, and survive application restarts.                                          |
+| NF-08 | Cost          | Design for one user and current free tiers, but verify service quotas and pricing at deployment time.                               |
+| NF-09 | Accessibility | Keyboard operation, visible focus, semantic controls, contrast, and scalable text are required for app UI.                          |
+| NF-10 | Privacy       | No analytics or telemetry by default; any future diagnostics must be opt-in and documented.                                         |
 
 Performance targets apply only after profiling on declared hardware and representative files. They are goals, not guarantees across every platform.
 

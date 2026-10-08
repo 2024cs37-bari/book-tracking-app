@@ -4,7 +4,7 @@ The roadmap is dependency-driven. A later phase must not hide unresolved storage
 
 ## Phase 0 — Documentation and contracts
 
-**Status:** Current
+**Status:** Complete
 
 Deliverables:
 
@@ -18,19 +18,34 @@ Exit criteria: documentation is internally consistent, assumptions are marked, a
 
 ## Phase 1 — Local EPUB/PDF reader MVP
 
-**Goal:** dependable offline local reading without a server.
+**Status:** In progress. Foundation and import pipeline are implemented; rendering is not.
 
-Deliverables:
+Done:
 
-- SolidJS/Vite/TypeScript scaffold and quality gates.
-- Dexie schema/repositories and migrations.
-- OPFS/file-store adapter with a tested fallback; import journal and SHA-256 verification.
-- EPUB and PDF renderer adapters behind `Renderer`.
-- Import metadata/cover extraction, incomplete metadata handling, duplicate detection.
-- Offline library view, search/sort/status basics, open/resume progress, and local export.
-- Accessibility baseline and representative regression fixtures outside the repository where licensing requires.
+- SolidJS/Vite/TypeScript scaffold with a full quality gate (typecheck, lint, format, tests, build)
+  and CI.
+- Dexie schema (v1), repositories, and an outbox written in the same transaction as every replicated
+  mutation.
+- Streaming SHA-256 and content-addressed file storage with OPFS, plus a probed memory fallback that
+  is surfaced in the UI rather than hidden.
+- Format detection by content, including MOBI vs KF8 (AZW3) discrimination.
+- Import pipeline: hashing, dedup by content hash, EPUB (OPF) and PDF (Info dictionary) metadata
+  extraction, cover storage, incomplete-metadata fallback to filename.
+- Library view with search, sort, status editing, archive/restore, soft delete.
+- Storage reconciliation report and JSON metadata export.
+- 117 unit tests covering domain rules, persistence atomicity, format detection, metadata extraction,
+  import outcomes and storage reconciliation.
 
-Acceptance criteria:
+Remaining:
+
+- EPUB renderer adapter (foliate-js) behind the `Renderer` interface.
+- PDF renderer adapter (pdf.js) with visible-page rendering and bounded cache.
+- Reader shell: progress capture and restore, TOC.
+- Cover generation for PDFs.
+- Manual metadata editing.
+- OPFS behaviour verified in real browsers, and the format regression corpus established.
+
+Acceptance criteria (unchanged):
 
 - Import, close, restart, and reopen supported EPUB/PDF without a network.
 - A crashed/failed import can be reconciled without corrupting metadata or bytes.

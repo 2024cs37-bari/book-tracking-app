@@ -2,73 +2,135 @@
 
 Offline-first, cross-device reading and library management for one person.
 
-> **Project status:** Documentation baseline. The runtime has not been scaffolded yet.
+> **Project status:** Phase 1 (local reader MVP) in progress. Import, storage, metadata and the
+> library UI work end to end. EPUB/PDF rendering is the next milestone, so books can be imported and
+> tracked but not yet read in the app.
 
-Personal Book Reader is designed to make a private book collection readable and recoverable across web, mobile PWA, and desktop platforms without making the network a dependency for everyday reading. Local storage is the source of truth for the user interface; Cloudflare provides synchronization, durable file storage, and authenticated access.
+Personal Book Reader keeps a private book collection readable and recoverable across web, mobile PWA
+and desktop without making the network a dependency. Local storage is the source of truth for the
+interface; Cloudflare provides synchronization and durable file storage in later phases.
 
-## Product direction
+## What works today
 
-- Import and read DRM-free EPUB and PDF books first.
-- Validate MOBI and AZW3 support against real files before promising it as a stable feature.
-- Keep reading, progress updates, and library management usable offline.
-- Preserve original files and make data exportable at any time.
-- Use one shared SolidJS codebase, with a PWA as the first delivery target and thin Tauri wrappers later.
-- Keep recurring operating costs near zero for a single user while avoiding assumptions about permanently fixed free-tier limits.
+- **Import** EPUB, PDF, MOBI, AZW3, FB2 and CBZ files through the file picker.
+- **Content-addressed storage**: files are hashed with a streaming SHA-256 and stored under that
+  hash, so re-importing identical bytes links to the existing book instead of duplicating it.
+- **Metadata extraction** from the EPUB package document (title, author, language, publisher, ISBN,
+  cover) and, best-effort, from the PDF information dictionary (title, author, page count). Files
+  with unreadable metadata are still imported, with the title derived from the filename and flagged
+  as incomplete.
+- **Format detection by content** rather than extension, including distinguishing KF8 (AZW3) from
+  older MOBI.
+- **Library view** with search across title/author/publisher/ISBN, sorting, reading status, and
+  status editing.
+- **Local persistence** in IndexedDB with an outbox: every mutation is written together with a change
+  record, ready for the sync engine.
+- **Lifecycle management**: archive and restore, plus soft delete with tombstones. Nothing removes
+  original bytes implicitly.
+- **Storage reconciliation** that reports unreferenced files and books missing their local file, with
+  an explicit cleanup action.
+- **JSON export** of library metadata, generated entirely on the client.
 
-The product deliberately does **not** include social sharing, multi-user collaboration, analytics tracking, or a custom document-rendering engine.
+## What is deliberately not implemented yet
 
-## Current phase
+- No reader. The `Renderer` interface and registry exist, but no format adapter is registered, so the
+  read action is disabled rather than pretending.
+- No sync, no server, no accounts. The outbox grows locally and is reported in Settings.
+- No annotations, shelves, tags, statistics, or selective offline pinning.
+- MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
+  explicitly marked as unimplemented.
+- DRM-protected books are unsupported and always will be.
 
-The project is in the documentation and architecture phase. The first implementation milestone is a local EPUB/PDF reader with import, metadata, library browsing, progress, and export. Sync and selective offline storage follow only after the local data and file boundaries are stable.
+## Getting started
 
-There is no application command to run yet. See the [roadmap](docs/ROADMAP.md) and [operations guide](docs/OPERATIONS.md) for the planned development workflow.
+Requires Node.js 20.19 or newer.
+
+```bash
+npm install
+npm run dev        # start the development server
+```
+
+Open the printed URL and import a book. Everything stays in the browser.
+
+## Commands
+
+| Command                | Purpose                                                   |
+| ---------------------- | --------------------------------------------------------- |
+| `npm run dev`          | Development server with hot reload                        |
+| `npm run build`        | Production build into `dist/`                             |
+| `npm run preview`      | Serve the production build locally                        |
+| `npm run typecheck`    | Type-check app, tooling and test projects                 |
+| `npm run lint`         | ESLint, including Solid-specific reactivity rules         |
+| `npm run lint:fix`     | ESLint with automatic fixes                               |
+| `npm run format`       | Format with Prettier                                      |
+| `npm run format:check` | Verify formatting without writing                         |
+| `npm test`             | Run the unit test suite once                              |
+| `npm run test:watch`   | Run tests in watch mode                                   |
+| `npm run check`        | Full gate: typecheck, lint, format check, tests and build |
+
+`npm run check` is what CI runs; run it before opening a pull request.
+
+## Project structure
+
+```text
+src/
+  app/         Application shell: bootstrap, service wiring, routes
+  domain/      Pure types and rules (HLC, locators, books, progress, enums, hashing identity)
+  data/        Dexie schema, row types, and repositories including the outbox
+  storage/     File stores (OPFS, memory), streaming SHA-256, mime mapping, reconciliation
+  reader/      Renderer contract, registry, and content-based format detection
+  services/    Use cases: import pipeline, metadata extraction, export
+  ui/          Solid components
+  styles/      Global stylesheet
+tests/         Vitest suites mirroring src/, plus fixtures and a harness
+docs/          Product, architecture and operational documentation
+```
+
+Layer rules: `domain` depends on nothing, `data`/`storage`/`reader` depend on `domain`, `services`
+orchestrates the layers, and `ui` talks to services and repositories through context rather than
+importing storage or database code directly.
 
 ## Architecture at a glance
 
 ```text
-SolidJS UI / PWA / Tauri shell
-            |
-     local repositories
-   Dexie + IndexedDB   OPFS/filesystem
-            |
-       sync engine
-            |
-  Cloudflare Access -> Worker/Hono -> D1 + private R2
+SolidJS UI / PWA  →  repositories (Dexie + IndexedDB)  →  outbox
+                  →  file store (OPFS, memory fallback)
+                  →  renderer registry (adapters pending)
+                        ↓ later phase
+                  Cloudflare Access → Worker/Hono → D1 + private R2
 ```
 
-The application talks to a renderer abstraction rather than directly to a format engine. EPUB/PDF support is the initial baseline; MOBI/AZW3 compatibility is a validation spike. See [Architecture](docs/ARCHITECTURE.md), [Storage](docs/STORAGE.md), and [Import and Reader](docs/IMPORT-AND-READER.md).
+See [Architecture](docs/ARCHITECTURE.md) for the boundaries, [Data model](docs/DATA-MODEL.md) for the
+schema, and [Import and reader](docs/IMPORT-AND-READER.md) for the import pipeline and format policy.
 
 ## Documentation map
 
-| Document | Purpose |
-| --- | --- |
-| [Product](docs/PRODUCT.md) | Scope, user experience, requirements, and terminology |
-| [Architecture](docs/ARCHITECTURE.md) | System boundaries and technology choices |
-| [Data model](docs/DATA-MODEL.md) | Entities, schema, lifecycle, and migrations |
-| [Sync](docs/SYNC.md) | Offline synchronization protocol and conflict behavior |
-| [Storage](docs/STORAGE.md) | Local database, files, quotas, and selective offline |
-| [Backend](docs/BACKEND.md) | Cloudflare services, API, authentication, and security boundaries |
-| [Import and reader](docs/IMPORT-AND-READER.md) | File ingestion, rendering, locators, and format validation |
-| [Operations](docs/OPERATIONS.md) | Development, release, backup, diagnostics, and recovery |
-| [Roadmap](docs/ROADMAP.md) | Phases, dependencies, and acceptance criteria |
-| [Technology baseline](docs/decisions/0001-technology-baseline.md) | Initial architecture decisions |
-| [Data lifecycle](docs/decisions/0002-data-lifecycle.md) | Archive, deletion, tombstones, and recoverability |
-| [Archived initial requirements](docs/archive/initial-requirements.md) | Original planning document retained for history |
-
-## Repository status
-
-This repository intentionally starts with documentation rather than generated framework code. That keeps the storage, sync, and recovery contracts reviewable before implementation creates compatibility commitments.
-
-When the application is scaffolded, setup instructions will be added here and to [CONTRIBUTING.md](CONTRIBUTING.md). Until then, documentation changes can be reviewed with any Markdown viewer and standard Git tooling.
+| Document                                                              | Purpose                                             |
+| --------------------------------------------------------------------- | --------------------------------------------------- |
+| [Product](docs/PRODUCT.md)                                            | Scope, user experience, requirements, terminology   |
+| [Architecture](docs/ARCHITECTURE.md)                                  | System boundaries and technology choices            |
+| [Data model](docs/DATA-MODEL.md)                                      | Entities, schema, lifecycle, migrations             |
+| [Sync](docs/SYNC.md)                                                  | Synchronization protocol and conflict behaviour     |
+| [Storage](docs/STORAGE.md)                                            | Local database, files, quotas, selective offline    |
+| [Backend](docs/BACKEND.md)                                            | Cloudflare services, API, authentication            |
+| [Import and reader](docs/IMPORT-AND-READER.md)                        | Ingestion, rendering, locators, format validation   |
+| [Operations](docs/OPERATIONS.md)                                      | Development, release, backup, diagnostics, recovery |
+| [Roadmap](docs/ROADMAP.md)                                            | Phases, dependencies, acceptance criteria           |
+| [Technology baseline](docs/decisions/0001-technology-baseline.md)     | Initial architecture decisions                      |
+| [Data lifecycle](docs/decisions/0002-data-lifecycle.md)               | Archive, deletion, tombstones, recoverability       |
+| [Archived initial requirements](docs/archive/initial-requirements.md) | Original planning document, kept for history        |
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. At this stage, changes should improve clarity, identify assumptions, or make an implementation contract testable. New features should update the relevant product, architecture, data-model, sync, and roadmap documents together.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Changes should keep the documentation, tests and code
+consistent; behaviour changes need tests, and any change to persisted data needs a migration.
 
 ## Security and privacy
 
-This is a private library, not a public catalog. The project has no analytics or third-party tracking requirement. Security expectations and vulnerability reporting are documented in [SECURITY.md](SECURITY.md).
+This is a private library, not a public catalogue. There is no analytics or third-party tracking, no
+public object storage, and no upload until sync is configured. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-No license has been selected yet. Until a license is added, all rights are reserved by the repository owner. A license decision should be made before accepting external code contributions.
+No license has been selected yet. Until one is added, all rights are reserved by the repository owner,
+and a license decision should be made before accepting external code contributions.

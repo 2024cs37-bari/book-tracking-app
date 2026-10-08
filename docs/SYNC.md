@@ -53,7 +53,7 @@ All requests require Cloudflare Access identity. Payloads are schema-validated a
       "entity_id": "book-uuid",
       "op": "upsert",
       "hlc": "<wall_ms>:<counter>:<device_id>",
-      "payload": {"book_id": "book-uuid", "fraction": 0.42}
+      "payload": { "book_id": "book-uuid", "fraction": 0.42 }
     }
   ]
 }
@@ -67,7 +67,16 @@ Response includes per-change outcome (`accepted`, `duplicate`, `retryable`, `rej
 
 ```json
 {
-  "changes": [{"seq": 123, "change_id": "uuid", "entity": "progress", "entity_id": "book-uuid", "hlc": "...", "payload": {}}],
+  "changes": [
+    {
+      "seq": 123,
+      "change_id": "uuid",
+      "entity": "progress",
+      "entity_id": "book-uuid",
+      "hlc": "...",
+      "payload": {}
+    }
+  ],
   "next_cursor": 123,
   "has_more": false,
   "schema_version": 1
@@ -94,15 +103,15 @@ A client may push and pull in another order only if tests preserve all invariant
 
 ## 6. Conflict rules
 
-| Entity | Rule |
-| --- | --- |
-| Book metadata | Per-field policy must preserve non-empty extracted/user-edited values; lifecycle fields use HLC and explicit archive/tombstone semantics. |
-| Progress | LWW by HLC for ordinary updates. If two device positions diverge by a configured fraction threshold, retain both candidates and prompt before resolving. |
-| Annotation | Create by ID; edits LWW per annotation by HLC; deletion is a tombstone. |
-| Shelf/tag name | LWW by HLC; conflicting names may be presented in history if useful. |
-| Membership | Add/remove events are ordered by HLC; a newer re-add wins over an older removal. |
-| Session | Append-only, deduplicated by session ID. |
-| Device state | Never synchronized. |
+| Entity         | Rule                                                                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Book metadata  | Per-field policy must preserve non-empty extracted/user-edited values; lifecycle fields use HLC and explicit archive/tombstone semantics.                |
+| Progress       | LWW by HLC for ordinary updates. If two device positions diverge by a configured fraction threshold, retain both candidates and prompt before resolving. |
+| Annotation     | Create by ID; edits LWW per annotation by HLC; deletion is a tombstone.                                                                                  |
+| Shelf/tag name | LWW by HLC; conflicting names may be presented in history if useful.                                                                                     |
+| Membership     | Add/remove events are ordered by HLC; a newer re-add wins over an older removal.                                                                         |
+| Session        | Append-only, deduplicated by session ID.                                                                                                                 |
+| Device state   | Never synchronized.                                                                                                                                      |
 
 For progress divergence, do not overwrite the local position with the remote candidate before recording the pending choice. The prompt should show device, last-updated time, and approximate reading position. A policy for dismissing/merging pending candidates must be explicit.
 

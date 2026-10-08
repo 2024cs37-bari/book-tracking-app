@@ -4,6 +4,8 @@
 
 This is the initial architecture baseline for a single-user application. Decisions favor understandable local behavior, small operational footprint, replaceable adapters, and recoverability. Details that depend on browser or library behavior remain validation tasks rather than assumed guarantees.
 
+**Implementation status.** The client layers, local persistence, file storage, format detection and import pipeline described below are implemented as `src/domain`, `src/data`, `src/storage`, `src/reader` and `src/services`. The renderer registry exists but no format adapter is registered yet, and nothing in the Cloudflare section exists. Where this document and the code disagree, the code is the fact and this document is the bug.
+
 See [ADR 0001](decisions/0001-technology-baseline.md) for technology choices and [ADR 0002](decisions/0002-data-lifecycle.md) for data lifecycle rules.
 
 ## 2. System context
@@ -28,20 +30,20 @@ The local application can import, browse, read locally present books, change met
 
 ## 3. Technology baseline
 
-| Concern | Baseline | Boundary / caveat |
-| --- | --- | --- |
-| UI and app | SolidJS + Vite + TypeScript | UI depends on domain/repository interfaces, not storage implementation. |
-| Local metadata | Dexie over IndexedDB | Start with transactions and explicit schema versions; hide behind repositories. |
-| Web files | OPFS where supported | Capability-detect and provide a tested fallback; browser quotas and eviction vary. |
-| Desktop files | Tauri app data directory | Native file access is isolated behind a file-store interface. |
-| Web delivery | PWA | Service worker caches app shell, not the entire library by default. |
-| Desktop | Tauri | Add after core UI and storage contracts stabilize. |
-| EPUB | foliate-js adapter, subject to validation | Pin a version and keep it behind `Renderer`. |
-| PDF | pdf.js adapter | Render visible pages and cap memory/cache. |
-| API | Cloudflare Worker + Hono | Validate identity at the trust boundary and validate request schemas. |
-| Metadata DB | Cloudflare D1 | Migrations are checked in and applied deliberately. |
-| Files | Private Cloudflare R2 | Never expose public object URLs. |
-| Authentication | Cloudflare Access | Worker verifies Access identity; deployment must ensure no bypass route exists. |
+| Concern        | Baseline                                  | Boundary / caveat                                                                  |
+| -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
+| UI and app     | SolidJS + Vite + TypeScript               | UI depends on domain/repository interfaces, not storage implementation.            |
+| Local metadata | Dexie over IndexedDB                      | Start with transactions and explicit schema versions; hide behind repositories.    |
+| Web files      | OPFS where supported                      | Capability-detect and provide a tested fallback; browser quotas and eviction vary. |
+| Desktop files  | Tauri app data directory                  | Native file access is isolated behind a file-store interface.                      |
+| Web delivery   | PWA                                       | Service worker caches app shell, not the entire library by default.                |
+| Desktop        | Tauri                                     | Add after core UI and storage contracts stabilize.                                 |
+| EPUB           | foliate-js adapter, subject to validation | Pin a version and keep it behind `Renderer`.                                       |
+| PDF            | pdf.js adapter                            | Render visible pages and cap memory/cache.                                         |
+| API            | Cloudflare Worker + Hono                  | Validate identity at the trust boundary and validate request schemas.              |
+| Metadata DB    | Cloudflare D1                             | Migrations are checked in and applied deliberately.                                |
+| Files          | Private Cloudflare R2                     | Never expose public object URLs.                                                   |
+| Authentication | Cloudflare Access                         | Worker verifies Access identity; deployment must ensure no bypass route exists.    |
 
 Cloudflare and library limits change. Recheck pricing, quotas, browser compatibility, and package licenses before production deployment.
 

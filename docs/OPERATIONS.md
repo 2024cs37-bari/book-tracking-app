@@ -2,16 +2,52 @@
 
 ## 1. Current repository state
 
-The repository currently contains documentation only. Application commands, environment variables, deployment procedures, and runtime observability are not yet implemented. This document defines requirements for adding them; it does not imply those capabilities already exist.
+The application scaffold exists and runs locally. Import, local persistence, metadata extraction, the
+library UI, storage reconciliation and JSON export are implemented. EPUB/PDF rendering, sync, and the
+server are not.
 
-## 2. Development workflow when code is introduced
+Implemented commands:
 
-- Use a supported Node.js LTS version and pin the package manager/version in repository configuration.
-- Keep local setup reproducible from a clean checkout; document exact install, test, lint, type-check, and build commands.
-- Commit lockfiles. Do not commit `.env` files, credentials, local databases, book files, or build output.
-- Provide a local development mode that does not require production Cloudflare credentials.
-- Make type-checking, formatting, lint, unit tests, and build validation part of CI before merging.
-- Keep UI components thin and test domain services, repositories, renderer adapters, and sync invariants independently.
+| Command             | Purpose                                                  |
+| ------------------- | -------------------------------------------------------- |
+| `npm install`       | Install dependencies (Node.js 20.19+).                   |
+| `npm run dev`       | Development server.                                      |
+| `npm run build`     | Production build into `dist/`.                           |
+| `npm run preview`   | Serve the production build.                              |
+| `npm run typecheck` | Type-check the app, tooling and test projects.           |
+| `npm run lint`      | ESLint including Solid reactivity rules.                 |
+| `npm run format`    | Prettier write; `format:check` verifies without writing. |
+| `npm test`          | Vitest suite (unit tests, Node environment).             |
+| `npm run check`     | Full gate; this is what CI runs.                         |
+
+Configuration and deployment for Cloudflare, and any runtime observability beyond the in-app Settings
+view, do not exist yet. This document defines requirements for adding them.
+
+## 2. Development workflow
+
+- Use a supported Node.js LTS version (CI pins Node 22) and commit lockfiles.
+- Keep local setup reproducible from a clean checkout; `npm ci && npm run check` must pass.
+- Do not commit `.env` files, credentials, local databases, book files, or build output.
+- Local development requires no Cloudflare credentials yet. When the Worker is added, provide a local
+  mode that does not depend on production bindings.
+- UI components talk to services and repositories through context; do not import Dexie, OPFS or fetch
+  directly from a component.
+- Add tests for domain rules, persistence atomicity and import/format behaviour alongside the change.
+
+### Layer rules
+
+`domain` has no dependencies. `data`, `storage` and `reader` depend on `domain`. `services` orchestrates
+those layers. `app` wires everything and `ui` renders it. A dependency that points the other way is a
+design error, not a style preference.
+
+### Test environment
+
+Tests run in Node with `fake-indexeddb` providing IndexedDB, so real Dexie transactions are exercised
+rather than mocked. `tests/support/harness.ts` builds a fully wired stack against a throwaway database,
+and `tests/support/fixtures.ts` generates EPUB/PDF/MOBI/FB2/CBZ files in memory. Fixtures are generated
+rather than committed: book files cannot be checked in, and generated fixtures state exactly which
+structural detail each test depends on. They verify this codebase's parsing, not conformance of
+real-world files, so the regression corpus in Phase 1 remains a separate requirement.
 
 ## 3. Configuration and secrets
 

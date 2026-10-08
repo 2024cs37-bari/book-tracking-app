@@ -10,21 +10,21 @@ The schema below is a logical baseline, not a migration file. Implementation mus
 
 ## 2. Entity responsibilities
 
-| Entity | Replicated? | Purpose |
-| --- | --- | --- |
-| `book` | Yes | Metadata and lifecycle state for one content hash. |
-| `progress` | Yes | Current position and reading status for a book. |
-| `annotation` | Yes | Highlight, note, or bookmark with locator and tombstone. |
-| `shelf` | Yes | Named user collection. |
-| `shelf_book` | Yes | Shelf membership with add/remove ordering. |
-| `tag` | Yes | Reusable label. |
-| `book_tag` | Yes | Tag membership with add/remove ordering. |
-| `reading_session` | Yes | Append-only reading activity facts. |
-| `device_state` | No | Per-device pin, local file presence, and recency. |
-| `changes` | Local outbox | Mutations waiting for server acknowledgement. |
-| `sync_meta` | Local | Device ID, pull cursor, HLC state, schema state. |
-| `file_transfer` | Local | Durable upload/download/multipart queue state. |
-| Server change log | Server only | Monotonic sequence for pull pagination and replay. |
+| Entity            | Replicated?  | Purpose                                                  |
+| ----------------- | ------------ | -------------------------------------------------------- |
+| `book`            | Yes          | Metadata and lifecycle state for one content hash.       |
+| `progress`        | Yes          | Current position and reading status for a book.          |
+| `annotation`      | Yes          | Highlight, note, or bookmark with locator and tombstone. |
+| `shelf`           | Yes          | Named user collection.                                   |
+| `shelf_book`      | Yes          | Shelf membership with add/remove ordering.               |
+| `tag`             | Yes          | Reusable label.                                          |
+| `book_tag`        | Yes          | Tag membership with add/remove ordering.                 |
+| `reading_session` | Yes          | Append-only reading activity facts.                      |
+| `device_state`    | No           | Per-device pin, local file presence, and recency.        |
+| `changes`         | Local outbox | Mutations waiting for server acknowledgement.            |
+| `sync_meta`       | Local        | Device ID, pull cursor, HLC state, schema state.         |
+| `file_transfer`   | Local        | Durable upload/download/multipart queue state.           |
+| Server change log | Server only  | Monotonic sequence for pull pagination and replay.       |
 
 Folders are intentionally absent until separately designed. Archive and deletion are book lifecycle fields; remote original-file deletion is tracked as a separate explicit operation.
 
@@ -167,7 +167,30 @@ CREATE TABLE server_change (
 );
 ```
 
-## 4. Constraints and indexing
+## 4. Local implementation notes (Dexie)
+
+The SQL above is the logical schema. The client implements it with Dexie over IndexedDB, which
+constrains a few details. These are deliberate and must be preserved by migrations:
+
+- Row fields use camelCase (`sizeBytes`, `updatedHlc`, `pushedAt`); the logical names remain the
+  contract for exports and sync payloads.
+- Booleans are stored as real booleans (`metadataIncomplete`, `filePresent`, `pinnedOffline`).
+  IndexedDB cannot index booleans, so no indexed field is a boolean.
+- IndexedDB cannot index `null` or `undefined`, so indexed fields never use them as meaningful
+  values. Two consequences:
+  - `book.lifecycle` is an indexed string (`active` | `archived` | `deleted`) that mirrors
+    `archivedAt`/`deletedAt`. Library queries filter on it; the timestamps carry the history.
+  - `changes.pushedAt` uses `0` as the "not yet acknowledged" sentinel and a millisecond timestamp
+    once pushed, so the outbox can be queried by index.
+- `progress` stores the locator as flat optional columns (`locatorKind`, `locatorValue`) plus a
+  `fraction` column, and all three are absent until the reader reports a position. A book therefore
+  has a reading status from the moment it is imported, without inventing a placeholder position.
+- Table names: `books`, `progress`, `changes`, `syncMeta`, `deviceState`, `fileTransfers`.
+- Timestamps are milliseconds since the Unix epoch. HLC strings are ordered as text only after
+  parsing into components; never compare them lexically as raw strings across differing wall-clock
+  digit counts.
+
+## 5. Constraints and indexing
 
 - `sha256` is lowercase hexadecimal SHA-256; validate exact length and format.
 - `size_bytes >= 0`; `fraction` is finite and clamped/validated to `[0, 1]` at the boundary.
@@ -177,7 +200,7 @@ CREATE TABLE server_change (
 - Foreign-key behavior must not cascade into silent remote file deletion. Tombstone/archive handling is explicit.
 - `removed_hlc` is nullable: membership is active when there is no removal newer than the add. Re-add writes a newer add HLC.
 
-## 5. Lifecycle semantics
+## 6. Lifecycle semantics
 
 - **Add/import:** store original by hash; create/update book metadata locally; enqueue replicated mutation and upload independently.
 - **Archive:** set `archived_at`; sync as a reversible metadata state. The file remains available.
@@ -186,13 +209,13 @@ CREATE TABLE server_change (
 - **Delete remote bytes:** separate explicit action, authorized and confirmed; must not occur because of archive or a metadata tombstone alone.
 - **Deduplicate:** identical content hash links to the existing record; metadata merge behavior must avoid overwriting richer data with empty extraction values.
 
-## 6. Clock and timestamp semantics
+## 7. Clock and timestamp semantics
 
 HLC ordering is `(wall_ms, counter, device_id)` with lexicographic comparison after parsing components. `device_id` deterministically breaks ties. HLC is for conflict order; `started_at`, `added_at`, and `last_opened_at` describe user-visible instants and are not interchangeable with HLC.
 
 Reading sessions are append-only; validate duration and cap or flag implausible sessions. Statistics are derived from sessions and are not separately synchronized aggregates.
 
-## 7. Migrations and compatibility
+## 8. Migrations and compatibility
 
 - Version every local schema and every D1 migration.
 - Migrations are forward-only, deterministic, and tested on empty and populated fixtures.
@@ -201,7 +224,7 @@ Reading sessions are append-only; validate duration and cap or flag implausible 
 - Unknown optional fields should be tolerated; unknown entity types or unsupported schema versions must fail visibly without advancing the pull cursor.
 - Do not change HLC format, locator semantics, or hash identity without migration and compatibility notes.
 
-## 8. Questions to settle during implementation
+## 9. Questions to settle during implementation
 
 - Whether tag names are case-folded using Unicode normalization and how duplicate tags merge.
 - Exact deleted-book retention interval and when remote file bytes become eligible for explicit cleanup.

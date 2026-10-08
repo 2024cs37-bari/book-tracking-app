@@ -2,13 +2,13 @@
 
 ## 1. Format policy
 
-| Format | Initial status | Engine / approach | Required validation |
-| --- | --- | --- | --- |
-| EPUB | MVP target | foliate-js adapter, pinned version | EPUB 2/3, metadata variants, large images, fonts, RTL, navigation. |
-| PDF | MVP target | pdf.js adapter | Large documents, rotation, varied page sizes, range/cache behavior. |
-| MOBI | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering. |
-| AZW3/KF8 | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass. |
-| FB2 / CBZ | Deferred | Candidate foliate-js support | Explicit feature decision and fixture coverage required. |
+| Format    | Initial status                | Engine / approach                     | Required validation                                                                 |
+| --------- | ----------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
+| EPUB      | MVP target                    | foliate-js adapter, pinned version    | EPUB 2/3, metadata variants, large images, fonts, RTL, navigation.                  |
+| PDF       | MVP target                    | pdf.js adapter                        | Large documents, rotation, varied page sizes, range/cache behavior.                 |
+| MOBI      | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus across legacy variants; import behavior independent from rendering. |
+| AZW3/KF8  | Experimental validation spike | foliate-js capability to be confirmed | DRM-free corpus and webview compatibility; do not advertise until pass.             |
+| FB2 / CBZ | Deferred                      | Candidate foliate-js support          | Explicit feature decision and fixture coverage required.                            |
 
 DRM-protected inputs are unsupported. Never bypass DRM. An extension alone is not proof of format; sniff content and report mismatches.
 

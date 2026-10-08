@@ -6,13 +6,13 @@ The backend provides authenticated synchronization and durable file storage. It 
 
 ## 2. Services and responsibilities
 
-| Component | Responsibility | Security boundary |
-| --- | --- | --- |
-| Cloudflare Pages | Serve the static PWA assets | Access policy protects the private application if desired; cache only public application assets. |
-| Cloudflare Access | Authenticate the user | Worker must verify signed identity headers/assertion; do not trust arbitrary client-supplied email. |
-| Worker + Hono | API validation, authorization, sync orchestration, signed transfer authorization | Every route checks identity, method, body size, schema, and allowed operation. |
-| D1 | Replicated metadata, idempotency records, sequenced change log | Bind queries, use transactions where required, and minimize personal text in logs. |
-| R2 | Original books and cover derivatives | Private bucket; no public object access. |
+| Component         | Responsibility                                                                   | Security boundary                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Cloudflare Pages  | Serve the static PWA assets                                                      | Access policy protects the private application if desired; cache only public application assets.    |
+| Cloudflare Access | Authenticate the user                                                            | Worker must verify signed identity headers/assertion; do not trust arbitrary client-supplied email. |
+| Worker + Hono     | API validation, authorization, sync orchestration, signed transfer authorization | Every route checks identity, method, body size, schema, and allowed operation.                      |
+| D1                | Replicated metadata, idempotency records, sequenced change log                   | Bind queries, use transactions where required, and minimize personal text in logs.                  |
+| R2                | Original books and cover derivatives                                             | Private bucket; no public object access.                                                            |
 
 Exact service bindings, free-tier limits, upload mechanisms, and Access integration must be verified at implementation/deployment time. Do not assume an S3-style presigned operation exists in a specific form without validating the selected Cloudflare APIs and plan.
 
@@ -20,15 +20,15 @@ Exact service bindings, free-tier limits, upload mechanisms, and Access integrat
 
 All endpoints are under `/api/v1`, authenticated, HTTPS-only, and versioned. Request and response schemas must have shared TypeScript types plus runtime validation.
 
-| Method and path | Purpose |
-| --- | --- |
-| `POST /api/v1/sync/push` | Idempotently submit a bounded batch of local changes. |
-| `GET /api/v1/sync/pull?since=&limit=` | Fetch sequenced changes after an exclusive cursor. |
-| `POST /api/v1/files/upload-authorize` | Authorize upload for a declared hash and size; return short-lived transfer instructions. |
-| `POST /api/v1/files/upload-complete` | Verify and register a completed object upload. |
-| `POST /api/v1/files/download-authorize` | Authorize access to a known remote object. |
-| `GET /api/v1/files/:sha256/status` | Query remote presence/size without exposing object content. |
-| `GET /api/v1/export` | Optional later server-side metadata export; client-side export is initial requirement. |
+| Method and path                         | Purpose                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `POST /api/v1/sync/push`                | Idempotently submit a bounded batch of local changes.                                    |
+| `GET /api/v1/sync/pull?since=&limit=`   | Fetch sequenced changes after an exclusive cursor.                                       |
+| `POST /api/v1/files/upload-authorize`   | Authorize upload for a declared hash and size; return short-lived transfer instructions. |
+| `POST /api/v1/files/upload-complete`    | Verify and register a completed object upload.                                           |
+| `POST /api/v1/files/download-authorize` | Authorize access to a known remote object.                                               |
+| `GET /api/v1/files/:sha256/status`      | Query remote presence/size without exposing object content.                              |
+| `GET /api/v1/export`                    | Optional later server-side metadata export; client-side export is initial requirement.   |
 
 The exact file-transfer protocol (single PUT versus multipart) depends on file size limits and R2 capabilities. Endpoint naming does not imply that a Worker proxies file bodies.
 
