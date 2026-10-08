@@ -15,6 +15,8 @@ interface; Cloudflare provides synchronization and durable file storage in later
 - **Import** EPUB, PDF, MOBI, AZW3, FB2 and CBZ files through the file picker.
 - **Content-addressed storage**: files are hashed with a streaming SHA-256 and stored under that
   hash, so re-importing identical bytes links to the existing book instead of duplicating it.
+- **Durable file fallback**: OPFS is preferred; browsers which fail its write probe use a separate
+  IndexedDB byte-buffer store. Memory is an explicitly reported last resort.
 - **Metadata extraction** from the EPUB package document (title, author, language, publisher, ISBN,
   cover) and, best-effort, from the PDF information dictionary (title, author, page count). Files
   with unreadable metadata are still imported, with the title derived from the filename and flagged
@@ -46,7 +48,7 @@ interface; Cloudflare provides synchronization and durable file storage in later
 - No sync, no server, no accounts. The outbox grows locally and is reported in Settings.
 - No annotations, shelves, tags, statistics, or selective offline pinning.
 - No PDF outline or in-book search. Real-file EPUB/PDF corpus and mobile memory profiling remain
-  pending. Generated-fixture checks target Chromium, Firefox and Playwright WebKit in CI.
+  pending. Generated-fixture checks pass in Chromium, Firefox and Playwright WebKit in CI.
 - MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
   explicitly marked as unimplemented.
 - DRM-protected books are unsupported and always will be.

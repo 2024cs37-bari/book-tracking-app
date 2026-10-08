@@ -19,6 +19,12 @@ basic generated reading is verified; the UI explicitly labels their wider suppor
 MOBI/AZW3 have no registered adapters; FB2/CBZ reading remains unimplemented.
 See [ADR 0003](decisions/0003-reader-engines.md) for the full upstream SHA and npm provenance decision.
 
+All 39 browser checks (13 cases × 3 engines) passed in
+[CI run 37742014444](https://github.com/2024cs37-bari/book-tracking-app/actions/runs/37742014444).
+These are generated-fixture results on the CI runner, not real-file conformance or Safari/iOS
+hardware certification. Durable offline originals use the probed OPFS/IndexedDB selection in
+[ADR 0004](decisions/0004-durable-file-fallback.md).
+
 ## 2. Import pipeline
 
 1. User selects a file or supported drop target.

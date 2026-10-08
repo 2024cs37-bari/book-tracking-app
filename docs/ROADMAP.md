@@ -18,8 +18,8 @@ Exit criteria: documentation is internally consistent, assumptions are marked, a
 
 ## Phase 1 — Local EPUB/PDF reader MVP
 
-**Status:** In progress. Reader milestone implemented and verified with generated fixtures in
-Chromium; full Phase 1 corpus and remaining features are not complete.
+**Status:** In progress. Reader milestones verified with generated fixtures in Chromium, Firefox
+and Playwright WebKit; full Phase 1 real-file corpus and remaining features are not complete.
 
 Done:
 
@@ -52,6 +52,9 @@ Done:
   deterministic late-font-ready teardown regression.
 - Probed durable IndexedDB binary fallback when OPFS cannot write, and bounded optional persistence
   permission waiting (ADR 0004); the released metadata schema remains unchanged.
+
+Evidence: [CI run 37742014444](https://github.com/2024cs37-bari/book-tracking-app/actions/runs/37742014444)
+on 2026-10-08 passes the full quality gate, 131 Vitest tests and all 39 browser checks.
 
 **Next milestone selected: reader usability and validation (Phase 1 completion).**
 EPUB contents navigation and the generated asset/fixed-layout slice are implemented. Next establish

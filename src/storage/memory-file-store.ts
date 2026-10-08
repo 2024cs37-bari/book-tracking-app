@@ -9,8 +9,8 @@ interface StoredEntry {
 /**
  * In-memory file store.
  *
- * Used by tests and as an explicit fallback when the browser has no usable
- * OPFS. It is not durable: bytes are lost on reload, which is why `durable` is
+ * Used by tests and as a last resort when neither OPFS nor the IndexedDB
+ * binary store is usable. It is not durable: bytes are lost on reload, so `durable` is
  * false and the UI surfaces a warning instead of silently pretending books are
  * available offline.
  */
