@@ -17,7 +17,15 @@ for (const sample of CORPUS) {
     console.info(`${sample.id}: verified cached original (${cached.length} bytes)`);
     continue;
   }
-  const response = await fetch(sample.url, { signal: AbortSignal.timeout(120_000) });
+  const response = await fetch(sample.url, {
+    signal: AbortSignal.timeout(120_000),
+    headers: {
+      // Some upstream document hosts reject Node's default "node" user agent.
+      'User-Agent':
+        'Mozilla/5.0 (compatible; BookTrackingCorpus/1.0; +https://github.com/2024cs37-bari/book-tracking-app)',
+      Accept: 'application/pdf,application/epub+zip,application/octet-stream;q=0.9,*/*;q=0.5',
+    },
+  });
   if (!response.ok) throw new Error(`${sample.id}: download failed with HTTP ${response.status}`);
   const chunks: Uint8Array[] = [];
   let size = 0;
