@@ -146,6 +146,8 @@ test('fixed-layout EPUB preserves page geometry, navigates, blocks scripts and r
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
   await page.getByRole('button', { name: 'Read', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+  await verifyAssets(await assetFrame(page, 2));
   await page.reload();
   await verifyAssets(await assetFrame(page, 2));
   await page.getByRole('button', { name: 'Previous', exact: true }).click();
