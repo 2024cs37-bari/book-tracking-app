@@ -34,7 +34,7 @@ Done:
   extraction, cover storage, incomplete-metadata fallback to filename.
 - Library view with search, sort, status editing, archive/restore, soft delete.
 - Storage reconciliation report and JSON metadata export.
-- 127 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
+- 130 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
   progress/debounce/outbox integration; 13 browser cases across Chromium, Firefox and Playwright
   WebKit projects (39 checks).
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
@@ -50,6 +50,8 @@ Done:
   are generated in memory, with no book/image/font binaries committed.
 - CSP blob-stylesheet allowance and documented upstream paginator lifecycle guards, with a
   deterministic late-font-ready teardown regression.
+- Probed durable IndexedDB binary fallback when OPFS cannot write, and bounded optional persistence
+  permission waiting (ADR 0004); the released metadata schema remains unchanged.
 
 **Next milestone selected: reader usability and validation (Phase 1 completion).**
 EPUB contents navigation and the generated asset/fixed-layout slice are implemented. Next establish

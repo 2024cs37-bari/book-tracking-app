@@ -1,5 +1,6 @@
 import { MemoryBookFileStore } from './memory-file-store';
 import { OpfsBookFileStore, isOpfsSupported } from './opfs-file-store';
+import { IndexedDbBookFileStore } from './indexeddb-file-store';
 import type { BookFileStore } from './file-store';
 
 export type FileStorePreference = 'auto' | 'opfs' | 'memory';
@@ -42,12 +43,9 @@ export async function selectBookFileStore(
   }
 
   if (!isOpfsSupported()) {
-    // Requesting 'opfs' explicitly cannot be honoured either, so both modes
-    // land on the memory fallback with a reason the UI can report.
-    return {
-      store: new MemoryBookFileStore(),
-      fallbackReason: 'This browser does not expose the Origin Private File System.',
-    };
+    // Requesting 'opfs' explicitly cannot be honoured either; probe the durable
+    // binary fallback before resorting to memory.
+    return durableFallback('This browser does not expose the Origin Private File System.');
   }
 
   const opfs = new OpfsBookFileStore();
@@ -55,10 +53,28 @@ export async function selectBookFileStore(
   if (failure === null) {
     return { store: opfs, fallbackReason: null };
   }
-  return {
-    store: new MemoryBookFileStore(),
-    fallbackReason: `Origin Private File System was unusable: ${failure}`,
-  };
+  return durableFallback(`Origin Private File System was unusable: ${failure}`);
+}
+
+async function durableFallback(reason: string): Promise<FileStoreSelection> {
+  const store = new IndexedDbBookFileStore();
+  try {
+    await store.put(PROBE_KEY, new Blob([PROBE_BYTES]));
+    const bytes = new Uint8Array(await (await store.get(PROBE_KEY)).arrayBuffer());
+    if (
+      bytes.length !== PROBE_BYTES.length ||
+      !bytes.every((byte, index) => byte === PROBE_BYTES[index])
+    )
+      throw new Error('IndexedDB probe bytes differed.');
+    await store.remove(PROBE_KEY);
+    return { store, fallbackReason: `${reason} Files use durable IndexedDB storage instead.` };
+  } catch (error) {
+    await store.close().catch(() => {});
+    return {
+      store: new MemoryBookFileStore(),
+      fallbackReason: `${reason} IndexedDB file storage was unusable: ${String(error)}. Files are kept in memory only.`,
+    };
+  }
 }
 
 /**
@@ -78,7 +94,19 @@ export async function requestPersistentStorage(): Promise<boolean | null> {
     ) {
       return true;
     }
-    return await navigator.storage.persist();
+    // Firefox may keep a permission prompt pending. Optional persistence must
+    // never prevent the library from booting; null means no answer yet.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        navigator.storage.persist(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), 1500);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   } catch {
     return null;
   }

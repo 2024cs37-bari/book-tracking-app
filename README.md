@@ -112,7 +112,7 @@ importing storage or database code directly.
 
 ```text
 SolidJS UI / PWA  →  repositories (Dexie + IndexedDB)  →  outbox
-                  →  file store (OPFS, memory fallback)
+                  →  file store (OPFS, IndexedDB fallback, memory last resort)
                   →  renderer registry (EPUB / PDF adapters)
                         ↓ later phase
                   Cloudflare Access → Worker/Hono → D1 + private R2

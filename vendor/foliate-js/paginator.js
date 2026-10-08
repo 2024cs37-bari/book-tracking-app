@@ -945,6 +945,7 @@ export class Paginator extends HTMLElement {
         await this.#scrollToPage(newPage + 1, reason)
     }
     #getVisibleRange() {
+        if (!this.#view?.document?.body) return
         if (this.scrolled) return getVisibleRange(this.#view.document,
             this.start + this.#margin, this.end - this.#margin, this.#getRectMapper())
         const size = this.#rtl ? -this.size : this.size
@@ -953,6 +954,7 @@ export class Paginator extends HTMLElement {
     }
     #afterScroll(reason) {
         const range = this.#getVisibleRange()
+        if (!range) return
         this.#lastVisibleRange = range
         // don't set new anchor if relocation was to scroll to anchor
         if (reason !== 'selection' && reason !== 'navigation' && reason !== 'anchor')

@@ -122,7 +122,7 @@ test('fixed-layout EPUB preserves page geometry, navigates, blocks scripts and r
   );
   const first = await assetFrame(page, 1);
   await verifyAssets(first);
-  await expect(page.getByRole('status')).toContainText(
+  await expect(page.locator('.reader-shell').getByRole('status')).toContainText(
     'Fixed-layout EPUB preserves publisher typography',
   );
   await page.getByText('Reader settings', { exact: true }).click();

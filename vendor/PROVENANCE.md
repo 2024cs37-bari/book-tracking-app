@@ -16,3 +16,5 @@ animation-frame/font-ready callbacks after renderer teardown. Browser regression
 `late font-ready callbacks cannot render replaced or closed chapter frames` reproduces the
 unpatched TypeErrors and verifies cleanup. The base remains the SHA above; on upgrade compare
 this file against upstream and retire the guards only when the regression passes without them.
+Queued scroll/resize relocation also skips ranges when the frame has no body, preventing the
+CI-observed `createTreeWalker` null-root error during reload/teardown.
