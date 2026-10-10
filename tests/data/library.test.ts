@@ -114,6 +114,21 @@ describe('book lifecycle', () => {
     expect(await harness.books.list()).toHaveLength(1);
   });
 
+  it('keeps soft-deleted books out of every browseable shelf', async () => {
+    const activeId = await importFixture(buildEpubFixture({ title: 'Active' }), 'active.epub');
+    const deletedId = await importFixture(buildEpubFixture({ title: 'Trash' }), 'trash.epub');
+    await harness.books.setLifecycle(deletedId, 'deleted');
+
+    expect((await harness.books.list({ lifecycle: 'active' })).map((b) => b.id)).toEqual([
+      activeId,
+    ]);
+    expect((await harness.books.list({ lifecycle: 'all' })).map((b) => b.id)).toEqual([activeId]);
+    // A deleted book is still reachable when explicitly requested.
+    expect((await harness.books.list({ lifecycle: 'deleted' })).map((b) => b.id)).toEqual([
+      deletedId,
+    ]);
+  });
+
   it('clears lifecycle timestamps when a book returns to active', async () => {
     const bookId = await importFixture(buildEpubFixture(), 'timestamps.epub');
     const archived = await harness.books.setLifecycle(bookId, 'archived');
@@ -146,6 +161,68 @@ describe('book lifecycle', () => {
 
   it('rejects lifecycle changes for unknown books', async () => {
     await expect(harness.books.setLifecycle('nope', 'archived')).rejects.toThrow(
+      /not in the library/i,
+    );
+  });
+});
+
+describe('book metadata editing', () => {
+  it('updates editable fields and records the change in the outbox', async () => {
+    const bookId = await importFixture(buildEpubFixture({ title: 'Original' }), 'edit.epub');
+    const before = await harness.changes.pendingCount();
+
+    const updated = await harness.books.updateMetadata(bookId, {
+      title: 'Corrected Title',
+      author: 'New Author',
+      publisher: 'New House',
+      pageCount: 321,
+      metadataIncomplete: false,
+    });
+
+    expect(updated).toMatchObject({
+      title: 'Corrected Title',
+      author: 'New Author',
+      publisher: 'New House',
+      pageCount: 321,
+      metadataIncomplete: false,
+    });
+    expect(await harness.changes.pendingCount()).toBe(before + 1);
+
+    const reloaded = await harness.books.getById(bookId);
+    expect(reloaded?.title).toBe('Corrected Title');
+  });
+
+  it('clears an optional field when the patch sets it to undefined', async () => {
+    const bookId = await importFixture(
+      buildEpubFixture({ title: 'Has Author', creator: 'Someone' }),
+      'clear.epub',
+    );
+    expect((await harness.books.getById(bookId))?.author).toBe('Someone');
+
+    const updated = await harness.books.updateMetadata(bookId, { author: undefined });
+    expect(updated.author).toBeUndefined();
+    expect((await harness.books.getById(bookId))?.author).toBeUndefined();
+  });
+
+  it('refuses to blank out the title', async () => {
+    const bookId = await importFixture(buildEpubFixture(), 'blank-title.epub');
+    await expect(harness.books.updateMetadata(bookId, { title: '   ' })).rejects.toThrow(
+      /title must not be empty/i,
+    );
+  });
+
+  it('rejects a page count that is not a non-negative whole number', async () => {
+    const bookId = await importFixture(buildEpubFixture(), 'bad-pages.epub');
+    await expect(harness.books.updateMetadata(bookId, { pageCount: -5 })).rejects.toThrow(
+      /whole number/i,
+    );
+    await expect(harness.books.updateMetadata(bookId, { pageCount: 1.5 })).rejects.toThrow(
+      /whole number/i,
+    );
+  });
+
+  it('rejects metadata edits for unknown books', async () => {
+    await expect(harness.books.updateMetadata('nope', { title: 'x' })).rejects.toThrow(
       /not in the library/i,
     );
   });

@@ -97,6 +97,37 @@ export function countPdfPages(text: string): number {
 }
 
 /**
+ * Narrows the scanned text to the document information dictionary.
+ *
+ * The trailer references it as `/Info N G R`; this follows that reference to the
+ * `N G obj … endobj` body so `/Title`/`/Author` are read from the Info dict
+ * only. Without this scoping the first `/Title` in the file wins, which in a
+ * PDF with a bookmark outline is a bookmark label, not the document title.
+ * Returns undefined when the reference or object cannot be located as plain
+ * text, so the caller can fall back to a whole-file scan.
+ */
+export function findInfoDictionary(text: string): string | undefined {
+  const refs = [...text.matchAll(/\/Info\s+(\d+)\s+(\d+)\s+R/g)];
+  const ref = refs.at(-1);
+  if (ref === undefined) return undefined;
+  const [, objNum, gen] = ref;
+
+  // Require the dictionary opener `<<` right after `obj` so a bare `N G obj`
+  // appearing inside a content stream or embedded bytes cannot be mistaken for
+  // the real object definition. The latest such definition wins (incremental
+  // updates). `\b` would not fire before `<`, so match the opener explicitly.
+  const objPattern = new RegExp(`(?<![0-9])${objNum}\\s+${gen}\\s+obj\\s*<<`, 'g');
+  let start = -1;
+  for (let match = objPattern.exec(text); match !== null; match = objPattern.exec(text)) {
+    start = match.index;
+  }
+  if (start === -1) return undefined;
+
+  const end = text.indexOf('endobj', start);
+  return end === -1 ? text.slice(start) : text.slice(start, end);
+}
+
+/**
  * Best-effort PDF metadata.
  *
  * PDF has no required metadata and no canonical encoding for it, so this
@@ -122,8 +153,12 @@ export const pdfMetadataExtractor: MetadataExtractor = {
     // Only Title and Author are reliably present in the information
     // dictionary. Producer/Creator name the software that wrote the file, not
     // the publisher, so they are deliberately not mapped to book metadata.
-    const title = readPdfInfoValue(text, 'Title');
-    const author = readPdfInfoValue(text, 'Author');
+    // Scope the read to the Info dictionary so an outline's bookmark titles
+    // cannot be mistaken for the document title; fall back to the full scan
+    // when the Info object cannot be located as plain text.
+    const infoScope = findInfoDictionary(text) ?? text;
+    const title = readPdfInfoValue(infoScope, 'Title');
+    const author = readPdfInfoValue(infoScope, 'Author');
 
     const pageCount = scannedWholeFile ? countPdfPages(text) : 0;
     if (!scannedWholeFile) {

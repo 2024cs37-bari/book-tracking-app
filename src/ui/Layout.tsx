@@ -19,6 +19,7 @@ export default function Layout(props: ParentProps) {
           <A href="/" end>
             Library
           </A>
+          <A href="/stats">Stats</A>
           <A href="/settings">Settings</A>
         </nav>
       </header>

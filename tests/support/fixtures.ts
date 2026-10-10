@@ -267,12 +267,89 @@ export function buildEpubFixture(options: EpubFixtureOptions = {}): Uint8Array<A
   return zipSync(files, { level: 6 });
 }
 
+export interface PdfOutlineFixtureItem {
+  readonly title: string;
+  /** Zero-based page index this entry points at via an explicit `/Fit` destination. */
+  readonly page: number;
+  readonly children?: readonly PdfOutlineFixtureItem[];
+}
+
 export interface PdfFixtureOptions {
   readonly title?: string;
   readonly author?: string;
   readonly pageCount?: number;
   readonly withInfoDictionary?: boolean;
   readonly variedPages?: boolean;
+  /**
+   * Emits a real `/Outlines` document outline (bookmarks) referenced by the
+   * catalog, so `pdf.js` `getOutline`/`getDestination`/`getPageIndex` and the
+   * reader's `getToc()` have a genuine tree to resolve.
+   */
+  readonly outline?: readonly PdfOutlineFixtureItem[];
+}
+
+/** Escapes the characters that are special inside a PDF literal string. */
+function escapePdfString(value: string): string {
+  return value.replace(/[\\()]/g, (character) => `\\${character}`);
+}
+
+interface AssignedOutlineNode {
+  readonly id: number;
+  readonly title: string;
+  readonly page: number;
+  readonly parentId: number;
+  childIds: number[];
+}
+
+/**
+ * Serializes an outline tree into PDF objects in ascending-id order (the root
+ * `/Type /Outlines` object first), so the surrounding xref table stays correct.
+ * Page `n` is addressed as object `n + 3`, matching `buildPdfFixture`'s layout.
+ */
+function buildOutlineObjects(items: readonly PdfOutlineFixtureItem[], rootId: number): string[] {
+  const flat: AssignedOutlineNode[] = [];
+  let counter = rootId;
+  const assign = (nodes: readonly PdfOutlineFixtureItem[], parentId: number): number[] => {
+    const ids: number[] = [];
+    for (const node of nodes) {
+      counter += 1;
+      const assigned: AssignedOutlineNode = {
+        id: counter,
+        title: node.title,
+        page: node.page,
+        parentId,
+        childIds: [],
+      };
+      flat.push(assigned);
+      ids.push(assigned.id);
+      if (node.children !== undefined && node.children.length > 0) {
+        assigned.childIds = assign(node.children, assigned.id);
+      }
+    }
+    return ids;
+  };
+  const topIds = assign(items, rootId);
+
+  const objects: string[] = [
+    `${rootId} 0 obj\n<< /Type /Outlines /First ${topIds[0]} 0 R /Last ${topIds[topIds.length - 1]} 0 R /Count ${items.length} >>\nendobj\n`,
+  ];
+  for (const node of flat) {
+    const siblings = flat.filter((other) => other.parentId === node.parentId).map((n) => n.id);
+    const position = siblings.indexOf(node.id);
+    const parts = [`/Title (${escapePdfString(node.title)})`, `/Parent ${node.parentId} 0 R`];
+    if (position > 0) parts.push(`/Prev ${siblings[position - 1]} 0 R`);
+    if (position < siblings.length - 1) parts.push(`/Next ${siblings[position + 1]} 0 R`);
+    if (node.childIds.length > 0) {
+      parts.push(
+        `/First ${node.childIds[0]} 0 R`,
+        `/Last ${node.childIds[node.childIds.length - 1]} 0 R`,
+        `/Count ${node.childIds.length}`,
+      );
+    }
+    parts.push(`/Dest [${node.page + 3} 0 R /Fit]`);
+    objects.push(`${node.id} 0 obj\n<< ${parts.join(' ')} >>\nendobj\n`);
+  }
+  return objects;
 }
 
 /**
@@ -291,7 +368,23 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
     pageIds.push(index + 3);
   }
 
-  objects.push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  const infoParts: string[] = [];
+  if (options.withInfoDictionary !== false) {
+    if (options.title !== undefined) infoParts.push(`/Title (${options.title})`);
+    if (options.author !== undefined) infoParts.push(`/Author (${options.author})`);
+  }
+  const hasInfo = infoParts.length > 0;
+  const hasOutline = options.outline !== undefined && options.outline.length > 0;
+  // Objects after the page content streams, in emission order: the information
+  // dictionary, then the outline. The /Info block is emitted first so its
+  // `/Title` precedes any outline `/Title` for the byte-scanning metadata
+  // extractor; the outline root id is whatever follows it.
+  const infoId = hasInfo ? 2 * pageCount + 4 : undefined;
+  const outlineRootId = hasOutline ? 2 * pageCount + 4 + (hasInfo ? 1 : 0) : undefined;
+
+  objects.push(
+    `1 0 obj\n<< /Type /Catalog /Pages 2 0 R${outlineRootId !== undefined ? ` /Outlines ${outlineRootId} 0 R` : ''} >>\nendobj\n`,
+  );
   objects.push(
     `2 0 obj\n<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageCount} >>\nendobj\n`,
   );
@@ -311,13 +404,15 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
     );
   }
 
-  const infoParts: string[] = [];
-  if (options.withInfoDictionary !== false) {
-    if (options.title !== undefined) infoParts.push(`/Title (${options.title})`);
-    if (options.author !== undefined) infoParts.push(`/Author (${options.author})`);
+  if (infoId !== undefined) {
+    objects.push(`${infoId} 0 obj\n<< ${infoParts.join(' ')} >>\nendobj\n`);
   }
-  const infoId = objects.length + 1;
-  if (infoParts.length) objects.push(`${infoId} 0 obj\n<< ${infoParts.join(' ')} >>\nendobj\n`);
+  if (outlineRootId !== undefined) {
+    for (const object of buildOutlineObjects(options.outline!, outlineRootId)) {
+      objects.push(object);
+    }
+  }
+
   let text = '%PDF-1.4\n';
   const offsets = [0];
   for (const object of objects) {
@@ -330,7 +425,7 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
     .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
     .join(
       '',
-    )}trailer\n<< /Size ${offsets.length} /Root 1 0 R${infoParts.length ? ` /Info ${infoId} 0 R` : ''} >>\nstartxref\n${xref}\n%%EOF\n`;
+    )}trailer\n<< /Size ${offsets.length} /Root 1 0 R${infoId !== undefined ? ` /Info ${infoId} 0 R` : ''} >>\nstartxref\n${xref}\n%%EOF\n`;
   return strToU8(text);
 }
 

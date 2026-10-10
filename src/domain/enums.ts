@@ -25,8 +25,10 @@ export type RenderSupport = 'supported' | 'experimental' | 'deferred';
 const RENDER_SUPPORT: Record<BookFormat, RenderSupport> = {
   epub: 'experimental',
   pdf: 'experimental',
-  mobi: 'experimental',
-  azw3: 'experimental',
+  // No renderer is registered for these yet, so they import but cannot be
+  // read. They stay 'deferred' until an adapter and corpus coverage exist.
+  mobi: 'deferred',
+  azw3: 'deferred',
   fb2: 'deferred',
   cbz: 'deferred',
 };

@@ -7,6 +7,10 @@ import { ProgressRepository } from '~/data/repositories/progress-repository';
 import { ChangeRepository } from '~/data/repositories/change-repository';
 import { DeviceStateRepository } from '~/data/repositories/device-state-repository';
 import { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
+import { AnnotationRepository } from '~/data/repositories/annotation-repository';
+import { ShelfRepository } from '~/data/repositories/shelf-repository';
+import { TagRepository } from '~/data/repositories/tag-repository';
+import { SessionRepository } from '~/data/repositories/session-repository';
 import { MemoryBookFileStore } from '~/storage/memory-file-store';
 import { ImportService } from '~/services/import-service';
 
@@ -19,6 +23,10 @@ export interface TestHarness {
   readonly changes: ChangeRepository;
   readonly deviceState: DeviceStateRepository;
   readonly syncMeta: SyncMetaRepository;
+  readonly annotations: AnnotationRepository;
+  readonly shelves: ShelfRepository;
+  readonly tags: TagRepository;
+  readonly sessions: SessionRepository;
   readonly files: MemoryBookFileStore;
   readonly imports: ImportService;
   readonly deviceId: string;
@@ -47,6 +55,10 @@ export async function createHarness(options: { startTime?: number } = {}): Promi
   const changes = new ChangeRepository(db);
   const deviceState = new DeviceStateRepository(db);
   const syncMeta = new SyncMetaRepository(db);
+  const annotations = new AnnotationRepository(db, context);
+  const shelves = new ShelfRepository(db, context);
+  const tags = new TagRepository(db, context);
+  const sessions = new SessionRepository(db, context);
   const imports = new ImportService({ db, books, progress, files });
 
   return {
@@ -56,6 +68,10 @@ export async function createHarness(options: { startTime?: number } = {}): Promi
     changes,
     deviceState,
     syncMeta,
+    annotations,
+    shelves,
+    tags,
+    sessions,
     files,
     imports,
     deviceId,

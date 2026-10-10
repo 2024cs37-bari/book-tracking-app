@@ -3,6 +3,7 @@ import { formatHlc } from '~/domain/hlc';
 import type { Book, BookLifecycle } from '~/domain/book';
 import {
   assertBookInput,
+  assertMetadataPatch,
   toBook,
   type BookMetadataPatch,
   type BookSort,
@@ -31,7 +32,11 @@ export class BookRepository {
     const search = options.search?.trim().toLowerCase() ?? '';
 
     let rows = await this.db.books.toArray();
-    if (lifecycle !== 'all') {
+    if (lifecycle === 'all') {
+      // "All" is every browseable book, i.e. active + archived. Soft-deleted
+      // books are trash, not a shelf, and are only listed when asked for by name.
+      rows = rows.filter((row) => row.lifecycle !== 'deleted');
+    } else {
       rows = rows.filter((row) => row.lifecycle === lifecycle);
     }
     if (options.format !== undefined) {
@@ -140,6 +145,7 @@ export class BookRepository {
   }
 
   async updateMetadata(id: string, patch: BookMetadataPatch): Promise<Book> {
+    assertMetadataPatch(patch);
     return this.db.transaction('rw', this.db.books, this.db.changes, async () => {
       const row = await this.db.books.get(id);
       if (row === undefined) {

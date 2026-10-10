@@ -14,18 +14,25 @@ export interface ExportSummary {
  * Library export (requirement F-07).
  *
  * Export is generated entirely on the client and never needs the server, which
- * is what makes it a usable recovery path before sync exists. Annotation and
- * Markdown export arrive with the annotation feature; claiming them now would
- * produce a file that silently omits data.
+ * is what makes it a usable recovery path before sync exists. It includes every
+ * replicated entity so the file is a complete snapshot a clean import can
+ * restore.
  */
 export class ExportService {
   constructor(private readonly db: LibraryDatabase) {}
 
   async buildMetadataExport(generatedAt = Date.now()): Promise<string> {
-    const [bookRows, progressRows] = await Promise.all([
-      this.db.books.toArray(),
-      this.db.progress.toArray(),
-    ]);
+    const [bookRows, progressRows, annotations, shelves, shelfBooks, tags, bookTags, sessions] =
+      await Promise.all([
+        this.db.books.toArray(),
+        this.db.progress.toArray(),
+        this.db.annotations.toArray(),
+        this.db.shelves.toArray(),
+        this.db.shelfBooks.toArray(),
+        this.db.tags.toArray(),
+        this.db.bookTags.toArray(),
+        this.db.sessions.toArray(),
+      ]);
 
     const payload = {
       format: EXPORT_FORMAT,
@@ -34,12 +41,12 @@ export class ExportService {
       localMigrations: LOCAL_MIGRATIONS,
       books: bookRows.map((row) => toBook(row)),
       progress: progressRows,
-      // Present but empty until annotations are implemented, so consumers can
-      // rely on the shape without receiving misleading data.
-      annotations: [],
-      shelves: [],
-      tags: [],
-      sessions: [],
+      annotations,
+      shelves,
+      shelfBooks,
+      tags,
+      bookTags,
+      sessions,
     };
 
     return JSON.stringify(payload, null, 2);

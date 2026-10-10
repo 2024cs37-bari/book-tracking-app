@@ -1,9 +1,15 @@
 import { A, useParams } from '@solidjs/router';
-import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { useApp } from '~/app/context';
-import type { ReaderSettings, ReaderTheme, TocItem } from '~/reader/renderer';
+import type { Locator } from '~/domain/locator';
+import type { Annotation } from '~/domain/annotation';
+import type { ReaderSettings, ReaderTheme, SearchHit, TocItem } from '~/reader/renderer';
 import type { ReaderSession } from '~/services/reader-service';
 import ReaderContents from './ReaderContents';
+
+const MAX_SEARCH_HITS = 200;
+/** Reading spans shorter than this are noise and are not recorded as sessions. */
+const MIN_SESSION_SECONDS = 5;
 
 export default function ReaderView() {
   const app = useApp();
@@ -16,8 +22,15 @@ export default function ReaderView() {
   const [toc, setToc] = createSignal<readonly TocItem[]>([]);
   const [tocLoading, setTocLoading] = createSignal(true);
   const [tocError, setTocError] = createSignal('');
+  const [query, setQuery] = createSignal('');
+  const [hits, setHits] = createSignal<readonly SearchHit[]>([]);
+  const [searching, setSearching] = createSignal(false);
+  const [searchStatus, setSearchStatus] = createSignal('');
+  const [annotations, setAnnotations] = createSignal<readonly Annotation[]>([]);
   let host!: HTMLDivElement;
   let session: ReaderSession | undefined;
+  let searchController: AbortController | undefined;
+  let currentLocator: Locator | undefined;
 
   function updateSettings(patch: Partial<ReaderSettings>): void {
     const next = { ...settings(), ...patch };
@@ -30,17 +43,130 @@ export default function ReaderView() {
     }
   }
 
+  async function reloadAnnotations(bookId: string): Promise<void> {
+    try {
+      setAnnotations(await app.annotations.listByBook(bookId));
+    } catch {
+      // Annotations are optional; a load failure must not break reading.
+    }
+  }
+
+  async function addBookmark(): Promise<void> {
+    const locator = currentLocator;
+    if (locator === undefined) {
+      setMessage('Position is not available yet; try again once the page settles.');
+      return;
+    }
+    try {
+      await app.annotations.create({ bookId: params.id ?? '', kind: 'bookmark', locator });
+      void app.persistClockState();
+      await reloadAnnotations(params.id ?? '');
+    } catch (error) {
+      setMessage(`Could not add bookmark: ${String(error)}`);
+    }
+  }
+
+  async function removeAnnotation(id: string): Promise<void> {
+    try {
+      await app.annotations.remove(id);
+      void app.persistClockState();
+      await reloadAnnotations(params.id ?? '');
+    } catch (error) {
+      setMessage(`Could not remove bookmark: ${String(error)}`);
+    }
+  }
+
+  async function saveNote(id: string, note: string): Promise<void> {
+    try {
+      await app.annotations.update(id, { note: note.trim() === '' ? undefined : note.trim() });
+      void app.persistClockState();
+      await reloadAnnotations(params.id ?? '');
+    } catch (error) {
+      setMessage(`Could not save note: ${String(error)}`);
+    }
+  }
+
+  function stopSearch(): void {
+    searchController?.abort();
+    searchController = undefined;
+    setSearching(false);
+  }
+
+  async function runSearch(event: Event): Promise<void> {
+    event.preventDefault();
+    const current = session;
+    const term = query().trim();
+    searchController?.abort();
+    setHits([]);
+    setSearchStatus('');
+    if (current === undefined || term.length === 0) return;
+
+    const controller = new AbortController();
+    searchController = controller;
+    setSearching(true);
+    const collected: SearchHit[] = [];
+    try {
+      for await (const hit of current.renderer.search(term, controller.signal)) {
+        if (controller.signal.aborted) break;
+        collected.push(hit);
+        setHits([...collected]);
+        if (collected.length >= MAX_SEARCH_HITS) break;
+      }
+      if (!controller.signal.aborted) {
+        const capped = collected.length >= MAX_SEARCH_HITS;
+        setSearchStatus(
+          collected.length === 0
+            ? `No matches for “${term}”.`
+            : `${collected.length}${capped ? '+' : ''} match${collected.length === 1 ? '' : 'es'} for “${term}”.`,
+        );
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) setSearchStatus(`Search failed: ${String(error)}`);
+    } finally {
+      if (searchController === controller) {
+        searchController = undefined;
+        setSearching(false);
+      }
+    }
+  }
+
   createEffect(() => {
     const id = params.id ?? '';
     let disposed = false;
     let current: ReaderSession | undefined;
+    let openedAt: number | undefined;
+    let startFraction = 0;
     setReady(false);
+    setFraction(0);
     setToc([]);
     setTocLoading(true);
     setTocError('');
+    setHits([]);
+    setSearchStatus('');
+    setAnnotations([]);
+    currentLocator = undefined;
+    stopSearch();
+
+    // One reading session per open span. Idempotent: recording clears the
+    // start marker so pagehide + cleanup cannot double-count the same span.
+    const recordSession = () => {
+      if (openedAt === undefined) return;
+      const startedAt = openedAt;
+      openedAt = undefined;
+      const durationS = Math.round((Date.now() - startedAt) / 1000);
+      if (durationS < MIN_SESSION_SECONDS) return;
+      void app.sessions
+        .record({ bookId: id, startedAt, durationS, startFraction, endFraction: fraction() })
+        .then(() => app.persistClockState())
+        .catch(() => {
+          // A lost session is cosmetic; never surface it over the reader.
+        });
+    };
+
     const readerMessage = (event: Event) => setMessage(String((event as CustomEvent).detail));
     const flush = () => {
       void current?.flush();
+      recordSession();
     };
     host.addEventListener('reader-message', readerMessage);
     window.addEventListener('pagehide', flush);
@@ -61,11 +187,15 @@ export default function ReaderView() {
         current.renderer.mount(host);
         current.renderer.applySettings(app.reader.loadSettings());
         setMessage('');
-        await current.open(prepared.file, prepared.startAt, (locator) =>
-          setFraction(locator.fraction),
-        );
+        await current.open(prepared.file, prepared.startAt, (locator) => {
+          currentLocator = locator;
+          setFraction(locator.fraction);
+        });
         if (disposed) return;
         setReady(true);
+        openedAt = Date.now();
+        startFraction = fraction();
+        void reloadAnnotations(id);
         // Contents are optional: their parsing must not delay basic reading.
         try {
           const items = await current.renderer.getToc();
@@ -82,6 +212,8 @@ export default function ReaderView() {
     onCleanup(() => {
       disposed = true;
       session = undefined;
+      stopSearch();
+      recordSession();
       host.removeEventListener('reader-message', readerMessage);
       window.removeEventListener('pagehide', flush);
       document.removeEventListener('visibilitychange', visibility);
@@ -157,6 +289,117 @@ export default function ReaderView() {
               </select>
             </label>
           </div>
+        </details>
+
+        <details class="reader-search">
+          <summary>Search in book</summary>
+          <form class="reader-search-form" onSubmit={(event) => void runSearch(event)}>
+            <input
+              type="search"
+              aria-label="Search in book"
+              placeholder="Find a word or phrase"
+              value={query()}
+              disabled={!ready()}
+              onInput={(event) => setQuery(event.currentTarget.value)}
+            />
+            <button type="submit" class="button" disabled={!ready() || query().trim().length === 0}>
+              Search
+            </button>
+            <Show when={searching()}>
+              <button type="button" class="button" onClick={() => stopSearch()}>
+                Stop
+              </button>
+            </Show>
+          </form>
+          <Show when={searching()}>
+            <p class="note" role="status">
+              Searching…
+            </p>
+          </Show>
+          <Show when={searchStatus()}>
+            {(text) => (
+              <p class="note" role="status">
+                {text()}
+              </p>
+            )}
+          </Show>
+          <Show when={hits().length > 0}>
+            <ol class="reader-search-results">
+              <For each={hits()}>
+                {(hit) => (
+                  <li>
+                    <button
+                      type="button"
+                      class="reader-search-hit"
+                      onClick={() => session?.renderer.goTo(hit.locator)}
+                    >
+                      <span class="reader-search-excerpt">{hit.excerpt}</span>
+                      <span class="reader-search-position">
+                        {Math.round(hit.locator.fraction * 100)}%
+                      </span>
+                    </button>
+                  </li>
+                )}
+              </For>
+            </ol>
+          </Show>
+        </details>
+
+        <details class="reader-bookmarks">
+          <summary>Bookmarks &amp; notes ({annotations().length})</summary>
+          <div class="reader-bookmarks-actions">
+            <button
+              type="button"
+              class="button"
+              disabled={!ready()}
+              onClick={() => void addBookmark()}
+            >
+              Bookmark this position
+            </button>
+          </div>
+          <Show
+            when={annotations().length > 0}
+            fallback={
+              <p class="note">No bookmarks yet. Use the button above to mark your place.</p>
+            }
+          >
+            <ul class="reader-bookmark-list">
+              <For each={annotations()}>
+                {(annotation) => (
+                  <li class="reader-bookmark">
+                    <div class="reader-bookmark-row">
+                      <button
+                        type="button"
+                        class="reader-bookmark-go"
+                        onClick={() => session?.renderer.goTo(annotation.locator)}
+                      >
+                        {Math.round(annotation.locator.fraction * 100)}%
+                        <Show when={annotation.textExcerpt}>
+                          {(excerpt) => <span class="reader-bookmark-excerpt"> — {excerpt()}</span>}
+                        </Show>
+                      </button>
+                      <button
+                        type="button"
+                        class="button button-danger"
+                        aria-label="Delete bookmark"
+                        onClick={() => void removeAnnotation(annotation.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <input
+                      class="reader-bookmark-note"
+                      type="text"
+                      aria-label="Note"
+                      placeholder="Add a note…"
+                      value={annotation.note ?? ''}
+                      onChange={(event) => void saveNote(annotation.id, event.currentTarget.value)}
+                    />
+                  </li>
+                )}
+              </For>
+            </ul>
+          </Show>
         </details>
       </div>
       <Show when={ready()}>

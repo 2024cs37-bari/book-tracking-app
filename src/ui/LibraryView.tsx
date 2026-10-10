@@ -2,36 +2,89 @@ import { A } from '@solidjs/router';
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import { displayAuthor, type Book } from '~/domain/book';
 import { describeLocator } from '~/domain/locator';
-import { progressFraction, type Progress } from '~/domain/progress';
+import { progressFraction, statusLabel, type Progress } from '~/domain/progress';
+import { READING_STATUSES, type ReadingStatus } from '~/domain/enums';
+import type { BookLifecycle } from '~/domain/book';
 import type { BookSort } from '~/data/book-mapping';
+import type { Shelf, Tag } from '~/domain/collections';
 import { useApp } from '~/app/context';
 import type { ImportOutcome } from '~/services/import-service';
 import BookCover from './BookCover';
 import { StatusBadge } from './badges';
 
+type LifecycleFilter = Extract<BookLifecycle, 'active' | 'archived'> | 'all';
+type StatusFilter = ReadingStatus | 'all';
+
 interface LibraryData {
   readonly books: readonly Book[];
   readonly progress: ReadonlyMap<string, Progress>;
+  readonly shelves: readonly Shelf[];
+  readonly tags: readonly Tag[];
+  /** True when the library holds any browseable (active or archived) book. */
+  readonly hasAnyBooks: boolean;
 }
 
 export default function LibraryView() {
   const app = useApp();
   const [search, setSearch] = createSignal('');
   const [sort, setSort] = createSignal<BookSort>('title');
+  const [lifecycle, setLifecycle] = createSignal<LifecycleFilter>('active');
+  const [statusFilter, setStatusFilter] = createSignal<StatusFilter>('all');
+  const [shelfFilter, setShelfFilter] = createSignal<string>('all');
+  const [tagFilter, setTagFilter] = createSignal<string>('all');
   const [refreshToken, setRefreshToken] = createSignal(0);
   const [importing, setImporting] = createSignal(false);
   const [outcomes, setOutcomes] = createSignal<readonly ImportOutcome[] | null>(null);
 
-  const [library] = createResource<LibraryData, { search: string; sort: BookSort; token: number }>(
-    () => ({ search: search(), sort: sort(), token: refreshToken() }),
-    async ({ search: query, sort: order }) => {
-      const [books, progressRows] = await Promise.all([
-        app.books.list({ search: query, sort: order }),
-        app.progress.listAll(),
-      ]);
+  const [library] = createResource<
+    LibraryData,
+    {
+      search: string;
+      sort: BookSort;
+      lifecycle: LifecycleFilter;
+      status: StatusFilter;
+      shelf: string;
+      tag: string;
+      token: number;
+    }
+  >(
+    () => ({
+      search: search(),
+      sort: sort(),
+      lifecycle: lifecycle(),
+      status: statusFilter(),
+      shelf: shelfFilter(),
+      tag: tagFilter(),
+      token: refreshToken(),
+    }),
+    async ({ search: query, sort: order, lifecycle: life, status, shelf, tag }) => {
+      const [books, progressRows, counts, shelves, tags, shelfBookIds, tagBookIds] =
+        await Promise.all([
+          app.books.list({ search: query, sort: order, lifecycle: life }),
+          app.progress.listAll(),
+          app.books.countByLifecycle(),
+          app.shelves.list(),
+          app.tags.list(),
+          shelf === 'all' ? Promise.resolve(null) : app.shelves.listBookIds(shelf),
+          tag === 'all' ? Promise.resolve(null) : app.tags.listBookIds(tag),
+        ]);
+      const progress = new Map(progressRows.map((entry) => [entry.bookId, entry]));
+      const shelfSet = shelfBookIds === null ? null : new Set(shelfBookIds);
+      const tagSet = tagBookIds === null ? null : new Set(tagBookIds);
+      const filtered = books.filter((book) => {
+        if (status !== 'all' && (progress.get(book.id)?.status ?? 'to_read') !== status) {
+          return false;
+        }
+        if (shelfSet !== null && !shelfSet.has(book.id)) return false;
+        if (tagSet !== null && !tagSet.has(book.id)) return false;
+        return true;
+      });
       return {
-        books,
-        progress: new Map(progressRows.map((entry) => [entry.bookId, entry])),
+        books: filtered,
+        progress,
+        shelves,
+        tags,
+        hasAnyBooks: counts.active + counts.archived > 0,
       };
     },
   );
@@ -97,6 +150,65 @@ export default function LibraryView() {
           </select>
         </div>
 
+        <div class="field">
+          <label for="library-lifecycle">Show</label>
+          <select
+            id="library-lifecycle"
+            value={lifecycle()}
+            onChange={(event) => setLifecycle(event.currentTarget.value as LifecycleFilter)}
+          >
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="library-status">Reading status</label>
+          <select
+            id="library-status"
+            value={statusFilter()}
+            onChange={(event) => setStatusFilter(event.currentTarget.value as StatusFilter)}
+          >
+            <option value="all">Any status</option>
+            <For each={READING_STATUSES}>
+              {(status) => <option value={status}>{statusLabel(status)}</option>}
+            </For>
+          </select>
+        </div>
+
+        <Show when={(library()?.shelves.length ?? 0) > 0}>
+          <div class="field">
+            <label for="library-shelf">Shelf</label>
+            <select
+              id="library-shelf"
+              value={shelfFilter()}
+              onChange={(event) => setShelfFilter(event.currentTarget.value)}
+            >
+              <option value="all">Any shelf</option>
+              <For each={library()?.shelves ?? []}>
+                {(shelf) => <option value={shelf.id}>{shelf.name}</option>}
+              </For>
+            </select>
+          </div>
+        </Show>
+
+        <Show when={(library()?.tags.length ?? 0) > 0}>
+          <div class="field">
+            <label for="library-tag">Tag</label>
+            <select
+              id="library-tag"
+              value={tagFilter()}
+              onChange={(event) => setTagFilter(event.currentTarget.value)}
+            >
+              <option value="all">Any tag</option>
+              <For each={library()?.tags ?? []}>
+                {(tag) => <option value={tag.id}>{tag.name}</option>}
+              </For>
+            </select>
+          </div>
+        </Show>
+
         <div class="field field-actions">
           <label for="library-import">Import books</label>
           <input
@@ -144,13 +256,23 @@ export default function LibraryView() {
           <Show
             when={data().books.length > 0}
             fallback={
-              <div class="empty-state">
-                <h2>No books yet</h2>
-                <p>
-                  Import an EPUB or PDF to get started. Files stay in this browser; nothing is
-                  uploaded.
-                </p>
-              </div>
+              <Show
+                when={data().hasAnyBooks}
+                fallback={
+                  <div class="empty-state">
+                    <h2>No books yet</h2>
+                    <p>
+                      Import an EPUB or PDF to get started. Files stay in this browser; nothing is
+                      uploaded.
+                    </p>
+                  </div>
+                }
+              >
+                <div class="empty-state">
+                  <h2>No matching books</h2>
+                  <p>No books match the current search and filters.</p>
+                </div>
+              </Show>
             }
           >
             <ul class="book-grid">
@@ -187,10 +309,6 @@ export default function LibraryView() {
             </ul>
           </Show>
         )}
-      </Show>
-
-      <Show when={!library.loading && library()?.books.length === 0 && search().trim().length > 0}>
-        <p class="note">No books match “{search()}”.</p>
       </Show>
     </section>
   );

@@ -123,7 +123,7 @@ describe('EPUB import', () => {
     expect(outcome.warnings.join(' ')).toMatch(/not implemented yet/i);
   });
 
-  it('warns that experimental format support is unverified', async () => {
+  it('warns that reading is not implemented for MOBI/KF8 until an adapter exists', async () => {
     const outcome = await harness.imports.importFile({
       blob: toBlob(buildMobiFixture()),
       filename: 'book.mobi',
@@ -132,6 +132,17 @@ describe('EPUB import', () => {
     expect(outcome.status).toBe('imported');
     if (outcome.status !== 'imported') return;
     expect(outcome.book.format).toBe('mobi');
+    expect(outcome.warnings.join(' ')).toMatch(/not implemented yet/i);
+  });
+
+  it('warns that EPUB reading support is still experimental', async () => {
+    const outcome = await harness.imports.importFile({
+      blob: toBlob(buildEpubFixture()),
+      filename: 'experimental.epub',
+    });
+
+    expect(outcome.status).toBe('imported');
+    if (outcome.status !== 'imported') return;
     expect(outcome.warnings.join(' ')).toMatch(/experimental/i);
   });
 });

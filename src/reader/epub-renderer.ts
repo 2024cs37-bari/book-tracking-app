@@ -31,7 +31,16 @@ interface FoliateView extends HTMLElement {
   getCFI(index: number, range?: Range): string;
   prev(): Promise<void>;
   next(): Promise<void>;
+  search(opts: { query: string; index?: number }): AsyncIterable<FoliateSearchResult>;
+  clearSearch(): void;
 }
+
+type FoliateSearchExcerpt = { pre: string; match: string; post: string };
+
+type FoliateSearchResult =
+  | 'done'
+  | { progress: number }
+  | { label: string; subitems: ReadonlyArray<{ cfi: string; excerpt: FoliateSearchExcerpt }> };
 
 // Native upstream modules are deliberately not bundled or imported by higher layers.
 const upstream = async (name: string): Promise<Record<string, unknown>> =>
@@ -67,6 +76,15 @@ export function secureBookDocument(data: string, type: string): string {
   return new XMLSerializer().serializeToString(doc);
 }
 
+/**
+ * Flattens foliate's `{ pre, match, post }` excerpt into one string. Foliate
+ * returns the three parts so a caller can style the match; the reader shell
+ * renders a single text run, so they are concatenated and whitespace-collapsed.
+ */
+function flattenExcerpt(excerpt: FoliateSearchExcerpt): string {
+  return `${excerpt.pre}${excerpt.match}${excerpt.post}`.replace(/\s+/g, ' ').trim();
+}
+
 export class EpubRenderer implements Renderer {
   constructor(private readonly loadModule = upstream) {}
   private host?: HTMLElement;
@@ -78,6 +96,7 @@ export class EpubRenderer implements Renderer {
   private tasks = new Set<Promise<unknown>>();
   private closedRenderers = new WeakSet<object>();
   private toc?: Promise<TocItem[]>;
+  private searchToken = 0;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
   private readonly relocate = (event: Event) => {
     const { cfi, fraction } = (event as CustomEvent<{ cfi: string; fraction: number }>).detail;
@@ -268,14 +287,52 @@ export class EpubRenderer implements Renderer {
     this.callbacks.add(callback);
     return () => this.callbacks.delete(callback);
   }
-  search(_query: string, _signal?: AbortSignal): AsyncIterable<SearchHit> {
-    return {
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          throw new Error('In-book search is not implemented.');
-        },
-      }),
-    };
+  async *search(query: string, signal?: AbortSignal): AsyncGenerator<SearchHit> {
+    const view = this.view;
+    const trimmed = query.trim();
+    if (!view || this.dead || trimmed.length === 0) return;
+    // A newer search preempts this one: it owns the token, so this generator
+    // stops iterating and its finally must not clear the newer highlights.
+    const token = ++this.searchToken;
+    // The CFI anchors navigation; section progress is a best-effort fraction
+    // fallback, updated as foliate reports it per section.
+    let progress = 0;
+    try {
+      for await (const result of view.search({ query: trimmed })) {
+        if (this.dead || signal?.aborted || token !== this.searchToken) break;
+        if (result === 'done') break;
+        if ('progress' in result) {
+          progress = result.progress;
+          continue;
+        }
+        for (const hit of result.subitems) {
+          if (this.dead || signal?.aborted || token !== this.searchToken) break;
+          let locator;
+          try {
+            locator = createCfiLocator(hit.cfi, progress);
+          } catch {
+            // A pathological hit — e.g. a range CFI past the locator length
+            // cap — cannot be navigated to anyway. Skip it rather than let one
+            // bad hit abort the whole search and drop every later match.
+            continue;
+          }
+          yield {
+            locator,
+            excerpt: flattenExcerpt(hit.excerpt),
+          };
+        }
+      }
+    } finally {
+      // Only the current search clears the view, so a superseded search cannot
+      // wipe the overlay highlights a newer one just drew.
+      if (token === this.searchToken) {
+        try {
+          view.clearSearch();
+        } catch {
+          // The view may already be torn down; nothing to clear.
+        }
+      }
+    }
   }
   applySettings(settings: ReaderSettings): void {
     this.settings = settings;

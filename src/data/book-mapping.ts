@@ -81,3 +81,30 @@ export function assertBookInput(input: NewBook): void {
     throw new Error('Book title must not be empty.');
   }
 }
+
+/** Upper bound for free-text metadata fields, matching the import-side limits. */
+export const MAX_METADATA_FIELD_LENGTH = 512;
+
+/**
+ * Validates a user-supplied metadata edit before it reaches the database.
+ *
+ * A field present in the patch is written as given; a field present with
+ * `undefined` deliberately clears it. The title is the one field that may
+ * never be cleared or blank, because it anchors sorting and display.
+ */
+export function assertMetadataPatch(patch: BookMetadataPatch): void {
+  if (patch.title !== undefined && patch.title.trim().length === 0) {
+    throw new Error('Book title must not be empty.');
+  }
+  for (const [field, value] of Object.entries(patch)) {
+    if (typeof value === 'string' && value.length > MAX_METADATA_FIELD_LENGTH) {
+      throw new Error(`Book ${field} must be ${MAX_METADATA_FIELD_LENGTH} characters or fewer.`);
+    }
+  }
+  if (
+    patch.pageCount !== undefined &&
+    (!Number.isInteger(patch.pageCount) || patch.pageCount < 0)
+  ) {
+    throw new Error('Page count must be a whole number of pages or empty.');
+  }
+}

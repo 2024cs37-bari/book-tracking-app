@@ -8,6 +8,8 @@ import type { LibraryDatabase } from '~/data/db';
 import type { BookRepository } from '~/data/repositories/book-repository';
 import type { ProgressRepository } from '~/data/repositories/progress-repository';
 import { extractBookMetadata, type MetadataExtractor } from './metadata';
+import type { ExtractedCover } from './metadata/types';
+import type { BookFormat } from '~/domain/enums';
 
 export interface ImportRequest {
   readonly blob: Blob;
@@ -74,7 +76,7 @@ export class ImportService {
 
       const extraWarnings: string[] = [];
       let coverKey: string | undefined;
-      const cover = extraction.metadata.cover;
+      const cover = extraction.metadata.cover ?? (await this.generateCover(format, request.blob));
       if (cover !== undefined) {
         const candidateKey = coverFileKey(bookId, cover.extension);
         try {
@@ -162,6 +164,22 @@ export class ImportService {
       onOutcome?.(outcome, index);
     }
     return outcomes;
+  }
+
+  /**
+   * Produces a cover for formats whose metadata carries none, currently by
+   * rasterizing a PDF's first page. Lazy-imported and DOM-gated so a headless
+   * import never loads pdf.js; any failure yields `undefined` because a cover
+   * is cosmetic.
+   */
+  private async generateCover(format: BookFormat, blob: Blob): Promise<ExtractedCover | undefined> {
+    if (format !== 'pdf' || typeof document === 'undefined') return undefined;
+    try {
+      const { renderPdfCover } = await import('~/reader/pdf-cover');
+      return (await renderPdfCover(blob)) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

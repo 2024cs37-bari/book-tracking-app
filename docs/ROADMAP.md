@@ -32,11 +32,13 @@ Done:
 - Format detection by content, including MOBI vs KF8 (AZW3) discrimination.
 - Import pipeline: hashing, dedup by content hash, EPUB (OPF) and PDF (Info dictionary) metadata
   extraction, cover storage, incomplete-metadata fallback to filename.
-- Library view with search, sort, status editing, archive/restore, soft delete.
+- Library view with search, sort, reading-status filter, an archived-books shelf, status editing,
+  archive/restore, soft delete, and manual metadata editing.
 - Storage reconciliation report and JSON metadata export.
-- 137 Vitest tests covering the original foundation plus DOM adapter lifecycle/bounds and reader
-  progress/debounce/outbox integration; 13 browser cases across Chromium, Firefox and Playwright
-  WebKit projects (39 checks).
+- 197 Vitest tests across 23 files covering the original foundation plus DOM adapter
+  lifecycle/bounds, reader progress/debounce/outbox integration, metadata editing, PDF outline
+  conversion, PDF cover rendering and cancellable in-book search; 13 browser cases across Chromium,
+  Firefox and Playwright WebKit projects (39 checks).
 - CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
 - Vendored upstream foliate-js at `78914aef4466eb960965702401634c2cb348e9b1` (ADR 0003).
 - EPUB/PDF adapters, `/read/:id`, reader settings, native locators plus fractions, debounced progress
@@ -60,25 +62,38 @@ Done:
   browser checks. Oversized-image cases assert explicit limits and recovery, not full readability.
 - Per-document pdf.js stream-error guard, failed-page progress protection and cancellation/resize
   handling (ADR 0005); no schema changes or original-file deletion.
+- PDF outline/TOC extraction (pdf.js destinations resolved to page locators; unresolved entries kept
+  but disabled), lazy first-page PDF cover rendering bounded by edge and pixel caps, cancellable
+  in-book search for both EPUB (via vendored foliate-js) and PDF (page text scan), and manual
+  metadata editing wired to the transactional `updateMetadata` outbox path.
 
 Evidence: [CI run 37742014444](https://github.com/2024cs37-bari/book-tracking-app/actions/runs/37742014444)
-on 2026-10-08 passes the full quality gate, 131 Vitest tests and all 39 browser checks.
+on 2026-10-08 passed the full quality gate and all 39 browser checks. The local quality gate
+(typecheck, lint, format, build) now passes with 197 Vitest tests across 23 files, and the
+generated-file browser suite has been re-run against the new reader/library features — 42 checks
+pass on Chromium and Firefox. WebKit cannot launch on the current Arch dev host (missing system
+libraries), so WebKit/Safari remains CI- and hardware-validated only. The real-file corpus suite has
+not been re-run since the feature work below and should be before this milestone is declared complete.
 
 **Next milestone selected: reader usability and validation (Phase 1 completion).**
+The remaining feature work for Phase 1 (PDF outline, in-book search, PDF covers, manual metadata
+editing, reading-status filter and an archived-books shelf) is now implemented and unit-tested.
 EPUB contents, generated assets and selected real-file corpus slices are implemented. Desktop
-mobile-sized measurements are recorded in [Reader validation](READER-VALIDATION.md). Next obtain
-physical-device measurements and further PDF/oversized-image variants, and expand obfuscated-font
-and layout variants. Finish PDF covers and manual metadata editing alongside validation.
-Phase 2 bookmarks/annotations will build on these navigation and locator guarantees.
+mobile-sized measurements are recorded in [Reader validation](READER-VALIDATION.md). What remains is
+validation, not features: physical-device measurements, further PDF/oversized-image variants, and
+expanded obfuscated-font and layout coverage. Phase 2 bookmarks/annotations will build on these
+navigation and locator guarantees.
 
 Remaining:
 
-- PDF outline UI and in-book search.
-- Cover generation for PDFs.
-- Manual metadata editing.
+- Re-run the **real-file corpus** suite against the new reader features (PDF outline navigation,
+  in-book search, generated covers) and extend it to cover those paths. The generated-file
+  cross-browser suite has been re-run and extended (new `library`, `metadata`, `pdf-outline` and
+  `search` specs) and passes on Chromium and Firefox.
 - Real-file format corpus, fixed-layout spreads/SVG, obfuscated fonts and mobile memory profiling.
   The cross-browser generated-file suite covers offline reload; broader platform storage behavior,
-  browser restart and actual Safari/iOS/Android hardware validation remain pending.
+  browser restart and actual Safari/iOS/Android hardware validation remain pending (WebKit cannot
+  run on the local dev host).
 
 Acceptance criteria (unchanged):
 
@@ -91,6 +106,16 @@ Acceptance criteria (unchanged):
 ## Phase 2 — Collections and reading history
 
 **Dependencies:** Phase 1 local data boundaries.
+
+**Status:** In progress. The data layer landed first: Dexie schema **v2** (annotations, shelves,
+shelfBooks, tags, bookTags, sessions) with a tested v1→v2 migration, repositories that co-write the
+outbox for every replicated mutation (membership tracked by add/remove HLC, deletes tombstoned),
+reading-session recording with derived statistics, and export extended to every new entity. The UI
+has since landed too: shelf/tag management (in Settings) and tag/shelf membership plus manual
+metadata editing on the book page, a reading-status + shelf/tag library filter, a reading-stats
+view, and backup **restore** (the recovery counterpart to export: a snapshot `bulkPut` that writes
+no outbox and refuses a newer schema version). Still to come in Phase 2: bookmarks/annotations
+surfaces in the reader itself.
 
 Deliverables:
 

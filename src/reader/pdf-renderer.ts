@@ -6,6 +6,7 @@ import type {
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { observePdfStreamErrors } from './pdf-stream-errors';
+import { buildPdfToc, type PdfOutlineNode } from './pdf-outline';
 import { assertLocator, createPdfLocator, parsePdfLocator, type Locator } from '~/domain/locator';
 import {
   DEFAULT_READER_SETTINGS,
@@ -216,20 +217,61 @@ export class PdfRenderer implements Renderer {
     this.move(this.index + 1);
   }
   async getToc(): Promise<TocItem[]> {
-    return [];
+    const pdf = this.document;
+    if (!pdf || this.dead) return [];
+    return buildPdfToc({
+      numPages: pdf.numPages,
+      getOutline: () => pdf.getOutline() as Promise<readonly PdfOutlineNode[] | null>,
+      getDestination: (id) => pdf.getDestination(id),
+      getPageIndex: (ref) => pdf.getPageIndex(ref as Parameters<typeof pdf.getPageIndex>[0]),
+    });
   }
   onRelocate(callback: (locator: Locator, fraction: number) => void): () => void {
     this.callbacks.add(callback);
     return () => this.callbacks.delete(callback);
   }
-  search(_query: string, _signal?: AbortSignal): AsyncIterable<SearchHit> {
-    return {
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          throw new Error('PDF search is not implemented.');
-        },
-      }),
-    };
+  async *search(query: string, signal?: AbortSignal): AsyncGenerator<SearchHit> {
+    const pdf = this.document;
+    const needle = query.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!pdf || this.dead || needle.length === 0) return;
+    const total = pdf.numPages;
+    for (let pageIndex = 0; pageIndex < total; pageIndex += 1) {
+      if (this.dead || signal?.aborted) break;
+      let text: string;
+      try {
+        const page = await pdf.getPage(pageIndex + 1);
+        try {
+          const content = await page.getTextContent();
+          // Join items with whitespace so a phrase split across text runs or a
+          // line break still matches, then collapse runs so matching and
+          // excerpts see single spaces.
+          text = content.items
+            .map((item) => ('str' in item ? item.str : ''))
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        } finally {
+          page.cleanup();
+        }
+      } catch {
+        // A page that cannot be read is skipped, not fatal to the search.
+        continue;
+      }
+      const haystack = text.toLowerCase();
+      // Lowercasing is length-preserving for almost all text; fall back to the
+      // lowercased snippet only when a rare case-fold changed the length.
+      const excerptSource = haystack.length === text.length ? text : haystack;
+      const fraction = total > 0 ? pageIndex / total : 0;
+      let from = haystack.indexOf(needle);
+      while (from !== -1) {
+        if (this.dead || signal?.aborted) return;
+        yield {
+          locator: createPdfLocator(pageIndex, 0, fraction),
+          excerpt: buildExcerpt(excerptSource, from, needle.length),
+        };
+        from = haystack.indexOf(needle, from + needle.length);
+      }
+    }
   }
   applySettings(settings: ReaderSettings): void {
     const offset = this.offset();
@@ -273,4 +315,13 @@ export class PdfRenderer implements Renderer {
       });
     this.callbacks.clear();
   }
+}
+
+/** A short snippet of surrounding text with the match roughly centered. */
+function buildExcerpt(text: string, at: number, length: number): string {
+  const radius = 40;
+  const start = Math.max(0, at - radius);
+  const end = Math.min(text.length, at + length + radius);
+  const snippet = text.slice(start, end).replace(/\s+/g, ' ').trim();
+  return `${start > 0 ? '…' : ''}${snippet}${end < text.length ? '…' : ''}`;
 }

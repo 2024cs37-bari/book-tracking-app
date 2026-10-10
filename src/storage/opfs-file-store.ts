@@ -22,9 +22,10 @@ export function isOpfsSupported(): boolean {
  * Origin Private File System adapter.
  *
  * OPFS is the preferred browser store because it keeps book bytes out of
- * IndexedDB, where large binary values inflate the metadata database. Writes
- * are staged into a temporary name and then committed, so an interrupted write
- * cannot leave a truncated file under a valid content key.
+ * IndexedDB, where large binary values inflate the metadata database. Bytes
+ * stream straight to the content-addressed key; `createWritable` commits
+ * atomically on `close()`, so an interrupted write leaves any previous file
+ * under that key untouched rather than truncating it.
  */
 export class OpfsBookFileStore implements BookFileStore {
   readonly kind = 'opfs' as const;
