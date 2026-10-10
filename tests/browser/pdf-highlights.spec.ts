@@ -34,7 +34,7 @@ test('selecting PDF text creates a persistent highlight drawn over the page', as
   await expect(page.locator('.pdf-page .textLayer')).toContainText('Generated page 1');
 
   const panel = page.locator('.reader-bookmarks');
-  await panel.locator('summary').click();
+  await page.getByRole('tab', { name: 'Notes' }).click();
   const highlightButton = page.getByRole('button', { name: 'Highlight selection' });
   await expect(highlightButton).toBeVisible();
 
@@ -42,7 +42,7 @@ test('selecting PDF text creates a persistent highlight drawn over the page', as
   await expect(highlightButton).toBeEnabled();
 
   await highlightButton.click();
-  await expect(panel.locator('summary')).toContainText('(1)');
+  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
   await expect(panel.locator('.reader-annotation-kind')).toHaveText('Highlight');
   // The highlight is drawn as positioned boxes over the page.
   await expect
@@ -79,7 +79,7 @@ test('selecting PDF text creates a persistent highlight drawn over the page', as
   expect(live[0]!.locatorValue).toMatch(/^0:\d+:\d+:\d+$/);
 
   // Deleting clears the overlay.
-  await page.locator('.reader-bookmarks summary').click();
+  await page.getByRole('tab', { name: 'Notes' }).click();
   await page.getByRole('button', { name: 'Delete highlight' }).click();
   await expect.poll(() => page.locator('.pdf-highlight-layer .pdf-highlight').count()).toBe(0);
 });

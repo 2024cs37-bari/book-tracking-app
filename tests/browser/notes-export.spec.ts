@@ -18,7 +18,7 @@ test('exports the book notes as a downloadable Markdown file', async ({ page }) 
   );
 
   const panel = page.locator('.reader-bookmarks');
-  await panel.locator('summary').click();
+  await page.getByRole('tab', { name: 'Notes' }).click();
 
   // Nothing to export until there is at least one annotation.
   const exportButton = page.getByRole('button', { name: 'Export notes' });

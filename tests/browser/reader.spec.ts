@@ -100,9 +100,9 @@ test('PDF uses one bounded visible canvas, handles varied/rotated pages and rest
   );
   const canvas = page.locator('.pdf-scroll canvas[data-render-state="ready"]');
   await expect(canvas).toHaveAttribute('aria-label', 'Page 1 of 30');
-  await page.getByText('Table of contents', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Contents' }).click();
   await expect(page.getByText('No table of contents available.', { exact: true })).toBeVisible();
-  await page.getByText('Table of contents', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Contents' }).click();
   // Ensure actual text pixels were painted, not just a blank allocated canvas.
   expect(
     await canvas.evaluate((element) => {
@@ -181,9 +181,8 @@ for (const version of ['2.0', '3.0'] as const) {
       'contents.epub',
       `Contents ${version}`,
     );
-    const summary = page.getByText('Table of contents', { exact: true });
-    await summary.focus();
-    await page.keyboard.press('Enter');
+    const contentsTab = page.getByRole('tab', { name: 'Contents' });
+    await contentsTab.click();
     const contents = page.getByRole('navigation', { name: 'Book contents' });
     await expect(contents.getByRole('button', { name: 'Missing section' })).toBeDisabled();
     await expect(contents.getByRole('button', { name: 'External link' })).toBeDisabled();
@@ -192,8 +191,6 @@ for (const version of ['2.0', '3.0'] as const) {
     const target = contents.getByRole('button', { name: 'Middle <em>section</em>', exact: true });
     await target.focus();
     await page.keyboard.press('Enter');
-    await expect(summary).toBeFocused();
-    await expect(contents).not.toBeVisible();
     await expect.poll(() => targetParagraphVisible(page)).toBe(true);
     await expect.poll(async () => (await position(page)).fraction).toBeGreaterThan(0.4);
     const saved = await position(page);
@@ -208,7 +205,7 @@ for (const version of ['2.0', '3.0'] as const) {
     await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
     await page.reload();
     await expect.poll(() => targetParagraphVisible(page)).toBe(true);
-    await summary.click();
+    await contentsTab.click();
     await expect(contents.getByRole('button', { name: 'Last chapter' })).toBeEnabled();
     await contents.getByRole('button', { name: 'Last chapter' }).click();
     await expect.poll(async () => (await position(page)).fraction).toBeGreaterThan(0.65);

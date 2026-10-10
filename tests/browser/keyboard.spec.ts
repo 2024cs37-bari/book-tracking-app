@@ -27,7 +27,7 @@ test('arrow keys turn PDF pages from the reader chrome, but not while typing', a
   await expect(canvas).toHaveAttribute('aria-label', 'Page 1 of 3');
 
   // Keys are ignored while a text field has focus, so searching is unaffected.
-  await page.getByText('Search in book', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Search' }).click();
   const search = page.getByRole('searchbox', { name: 'Search in book' });
   await search.focus();
   await page.keyboard.press('ArrowRight');

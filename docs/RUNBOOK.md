@@ -57,7 +57,8 @@ npm run test:browser -- --project=webkit
 The sync server (`server/`) runs locally against a local D1 with no Cloudflare
 Access in front, so the whole client↔server flow is testable offline. `.dev.vars`
 (copied from `.dev.vars.example`) supplies a dev identity; the client points at
-the local Worker via `.env.local` (`VITE_SYNC_URL`). Both are git-ignored.
+the local Worker with the `VITE_SYNC_URL` build variable, passed inline so it never leaks into the
+production or test build. `.dev.vars` is git-ignored.
 
 ```bash
 # One-time: install server deps and create the local D1 schema.
@@ -68,8 +69,9 @@ npm run migrate:local
 # some hosts, which workerd cannot bind).
 cd server && npm run dev            # http://127.0.0.1:8787
 
-# Terminal 2 — the client, pointed at the local Worker by .env.local.
-npm run dev -- --host 127.0.0.1     # http://127.0.0.1:5173
+# Terminal 2 — the client, pointed at the local Worker. Pass VITE_SYNC_URL inline
+# (do not use .env.local — Vite would bake it into the test build too).
+VITE_SYNC_URL=http://127.0.0.1:8787/api npm run dev -- --host 127.0.0.1   # http://127.0.0.1:5173
 ```
 
 Then open `http://127.0.0.1:5173`, import a book or make changes, and use

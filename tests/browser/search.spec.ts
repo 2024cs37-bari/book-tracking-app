@@ -10,7 +10,7 @@ test.beforeEach(({ page }) => {
 test.afterEach(() => expect(browserErrors).toEqual([]));
 
 async function openSearch(page: Page, query: string): Promise<void> {
-  await page.getByText('Search in book', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Search' }).click();
   await page.getByLabel('Search in book', { exact: true }).fill(query);
   await page.getByRole('button', { name: 'Search', exact: true }).click();
 }

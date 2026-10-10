@@ -36,7 +36,7 @@ test('PDF outline renders a nested table of contents and navigates on selection'
   const canvas = page.locator('.pdf-scroll canvas[data-render-state="ready"]');
   await expect(canvas).toHaveAttribute('aria-label', 'Page 1 of 8');
 
-  await page.getByText('Table of contents', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Contents' }).click();
   const contents = page.getByRole('navigation', { name: 'Book contents' });
   await expect(contents.getByRole('button', { name: 'Cover', exact: true })).toBeVisible();
   await expect(contents.getByRole('button', { name: 'Part One', exact: true })).toBeVisible();

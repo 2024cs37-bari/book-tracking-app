@@ -170,7 +170,7 @@ for (const assets of ['missing', 'malformed'] as const) {
         .locator('#asset-image')
         .evaluate((image) => (image as HTMLImageElement).naturalWidth),
     ).toBe(0);
-    await page.getByText('Table of contents', { exact: true }).click();
+    await page.getByRole('tab', { name: 'Contents' }).click();
     await page
       .getByRole('navigation', { name: 'Book contents' })
       .getByRole('button', { name: 'Chapter 2', exact: true })
@@ -199,7 +199,7 @@ test('late font-ready callbacks cannot render replaced or closed chapter frames'
     'Late fonts',
   );
   await assetFrame(page, 1);
-  await page.getByText('Table of contents', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Contents' }).click();
   await page
     .getByRole('navigation', { name: 'Book contents' })
     .getByRole('button', { name: 'Chapter 2', exact: true })
