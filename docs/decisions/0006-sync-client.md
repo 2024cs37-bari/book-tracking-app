@@ -50,10 +50,13 @@ outbox, so a remote change never echoes back as a local mutation.
 
 - The engine is fully tested without a server: `tests/sync/` includes a two-device fake-server
   round-trip proving convergence, plus idempotent push, partial-batch acknowledgement, failed-pull
-  cursor safety, membership order-independence and no-echo.
-- Not yet built: the Worker/D1/R2/Access server and the real `fetch` transport; file transfer;
+  cursor safety, membership order-independence and no-echo. The real network adapter
+  (`http-transport.ts`, `createHttpSyncTransport`) is also in place and tested with a stubbed
+  `fetch`: Access-credentialed JSON over HTTPS, response validation, and error classification
+  (retryable vs auth-expiry vs cursor-expiry vs permanent, honouring `Retry-After`).
+- Not yet built: the Worker/D1/R2/Access **server** the transport points at; file transfer;
   progress-divergence prompting (SYNC.md §6 — baseline is LWW); per-field book-metadata policy;
-  snapshot/bootstrap and cursor-expiry handling (SYNC.md §7). These are follow-ups; the thresholds
-  and limits in SYNC.md §11 remain open and must come from measured service behaviour.
+  snapshot/bootstrap and cursor-expiry handling beyond surfacing the error (SYNC.md §7). The
+  thresholds and limits in SYNC.md §11 remain open and must come from measured service behaviour.
 - The engine is not wired into the running app yet, because there is no server to point it at;
-  construction waits for the real transport.
+  construction waits for a configured server URL.
