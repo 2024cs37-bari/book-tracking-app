@@ -81,6 +81,8 @@ export class PdfRenderer implements Renderer {
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
   private readonly scroll = () => this.emit();
   private resize?: ResizeObserver;
+  private lastWidth = 0;
+  private resizeTimer?: ReturnType<typeof setTimeout>;
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -92,8 +94,18 @@ export class PdfRenderer implements Renderer {
     document.addEventListener('selectionchange', this.onSelectionChange);
     host.append(scroller);
     this.scroller = scroller;
-    this.resize = new ResizeObserver(() => {
-      if (this.document) this.move(this.index, this.offset());
+    this.resize = new ResizeObserver((entries) => {
+      if (!this.document || this.dead) return;
+      // Only a WIDTH change alters the render scale; height-only changes (and
+      // the stream of ticks during a sidebar drag) must not re-raster. Debounce
+      // so one re-render happens after resizing settles, not on every frame.
+      const width = Math.round(entries[0]?.contentRect.width ?? this.host?.clientWidth ?? 0);
+      if (width === 0 || width === this.lastWidth) return;
+      this.lastWidth = width;
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        if (this.document && !this.dead) this.move(this.index, this.offset());
+      }, 150);
     });
     this.resize.observe(host);
   }
@@ -541,6 +553,7 @@ export class PdfRenderer implements Renderer {
     this.generation++;
     this.task?.cancel();
     this.resize?.disconnect();
+    clearTimeout(this.resizeTimer);
     this.scroller?.removeEventListener('scroll', this.scroll);
     document.removeEventListener('selectionchange', this.onSelectionChange);
     this.selectionCallbacks.clear();
