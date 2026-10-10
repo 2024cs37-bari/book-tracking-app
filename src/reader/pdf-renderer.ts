@@ -38,6 +38,9 @@ export const PDF_MAX_CANVAS_PIXELS = 4_000_000;
 export const PDF_PAGE_CACHE_LIMIT = 1;
 /** Pixel ceiling for a sidebar page thumbnail (small, so cheap to render). */
 export const PDF_THUMBNAIL_MAX_PIXELS = 400_000;
+/** Pinch-to-zoom clamps the extra scale factor applied on top of the fit width. */
+export const PDF_MIN_ZOOM = 0.5;
+export const PDF_MAX_ZOOM = 4;
 
 /** Minimal structural type for pdf.js's TextLayer, to avoid importing it eagerly. */
 interface PdfTextLayer {
@@ -83,6 +86,12 @@ export class PdfRenderer implements Renderer {
   private resize?: ResizeObserver;
   private lastWidth = 0;
   private resizeTimer?: ReturnType<typeof setTimeout>;
+  /** Extra render-scale factor from pinch-to-zoom, on top of the fit-to-width scale. */
+  private zoom = 1;
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private pinchStartDistance = 0;
+  private pinchStartZoom = 1;
+  private pinchTimer?: ReturnType<typeof setTimeout>;
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -94,6 +103,10 @@ export class PdfRenderer implements Renderer {
     document.addEventListener('selectionchange', this.onSelectionChange);
     host.append(scroller);
     this.scroller = scroller;
+    host.addEventListener('pointerdown', this.onPointerDown);
+    host.addEventListener('pointermove', this.onPointerMove);
+    host.addEventListener('pointerup', this.onPointerUp);
+    host.addEventListener('pointercancel', this.onPointerUp);
     this.resize = new ResizeObserver((entries) => {
       if (!this.document || this.dead) return;
       // Only a WIDTH change alters the render scale; height-only changes (and
@@ -210,7 +223,7 @@ export class PdfRenderer implements Renderer {
         const natural = page.getViewport({ scale: 1 });
         this.height = natural.height;
         const width = Math.max(200, (this.host?.clientWidth ?? 800) - 2 * this.settings.marginPx);
-        const requestedScale = ((width / natural.width) * this.settings.fontSizePx) / 18;
+        const requestedScale = ((width / natural.width) * this.settings.fontSizePx * this.zoom) / 18;
         const pixelRatio = Math.min(globalThis.devicePixelRatio || 1, 2);
         this.scale = Math.min(
           requestedScale,
@@ -343,6 +356,45 @@ export class PdfRenderer implements Renderer {
       this.emitSelection(null);
     }
   };
+  // Two-pointer pinch over the reader surface changes the render zoom. The
+  // live gesture only tracks pointers and updates `zoom`; a single re-raster
+  // runs once the gesture settles (debounced, via schedule()'s queue), never
+  // on every move — mirroring the resize debounce.
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.pointers.size === 2) {
+      this.pinchStartDistance = this.pointerDistance();
+      this.pinchStartZoom = this.zoom;
+      if (this.scroller) this.scroller.style.touchAction = 'none';
+    }
+  };
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    if (!this.pointers.has(event.pointerId)) return;
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.pointers.size !== 2 || this.pinchStartDistance === 0) return;
+    event.preventDefault();
+    const ratio = this.pointerDistance() / this.pinchStartDistance;
+    this.zoom = clampZoom(this.pinchStartZoom * ratio);
+  };
+  private readonly onPointerUp = (event: PointerEvent): void => {
+    if (!this.pointers.delete(event.pointerId)) return;
+    if (this.pointers.size >= 2 || this.pinchStartDistance === 0) return;
+    const changed = this.zoom !== this.pinchStartZoom;
+    this.pinchStartDistance = 0;
+    if (this.scroller) this.scroller.style.touchAction = '';
+    if (!changed) return;
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = setTimeout(() => {
+      if (this.document && !this.dead) this.move(this.index, this.offset());
+    }, 150);
+  };
+  private pointerDistance(): number {
+    const points = [...this.pointers.values()];
+    const a = points[0];
+    const b = points[1];
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
   /** Character offset of a DOM point within the text layer's rendered text. */
   private globalOffset(el: HTMLElement, node: Node, offset: number): number | null {
     try {
@@ -554,6 +606,12 @@ export class PdfRenderer implements Renderer {
     this.task?.cancel();
     this.resize?.disconnect();
     clearTimeout(this.resizeTimer);
+    clearTimeout(this.pinchTimer);
+    this.host?.removeEventListener('pointerdown', this.onPointerDown);
+    this.host?.removeEventListener('pointermove', this.onPointerMove);
+    this.host?.removeEventListener('pointerup', this.onPointerUp);
+    this.host?.removeEventListener('pointercancel', this.onPointerUp);
+    this.pointers.clear();
     this.scroller?.removeEventListener('scroll', this.scroll);
     document.removeEventListener('selectionchange', this.onSelectionChange);
     this.selectionCallbacks.clear();
@@ -570,6 +628,11 @@ export class PdfRenderer implements Renderer {
       });
     this.callbacks.clear();
   }
+}
+
+/** Clamps the pinch zoom factor to the supported range. */
+function clampZoom(zoom: number): number {
+  return Math.min(PDF_MAX_ZOOM, Math.max(PDF_MIN_ZOOM, zoom));
 }
 
 /** A short snippet of surrounding text with the match roughly centered. */

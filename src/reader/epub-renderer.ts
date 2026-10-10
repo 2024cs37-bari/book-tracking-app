@@ -24,6 +24,10 @@ const HIGHLIGHT_COLORS: Record<string, string> = {
   pink: '#f67ab5',
 };
 
+/** Pinch-to-zoom maps to the reader font size, kept within these inclusive bounds. */
+export const EPUB_MIN_FONT_PX = 12;
+export const EPUB_MAX_FONT_PX = 36;
+
 interface EpubBook {
   transformTarget: EventTarget;
   toc?: { label: string; href?: string | null; subitems?: EpubBook['toc'] }[];
@@ -125,6 +129,11 @@ export class EpubRenderer implements Renderer {
   private currentFraction = 0;
   private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
   private readonly selectionDocs = new WeakSet<Document>();
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private pinchStartDistance = 0;
+  private pinchStartFont = 0;
+  private pinchFont = 0;
+  private pinchTimer?: ReturnType<typeof setTimeout>;
   private readonly relocate = (event: Event) => {
     const { cfi, fraction } = (event as CustomEvent<{ cfi: string; fraction: number }>).detail;
     const locator = createCfiLocator(cfi, fraction);
@@ -159,6 +168,48 @@ export class EpubRenderer implements Renderer {
 
   mount(host: HTMLElement): void {
     this.host = host;
+    host.addEventListener('pointerdown', this.onPointerDown);
+    host.addEventListener('pointermove', this.onPointerMove);
+    host.addEventListener('pointerup', this.onPointerUp);
+    host.addEventListener('pointercancel', this.onPointerUp);
+  }
+
+  // Two-pointer pinch over the reader surface maps to a font-size change. The
+  // live gesture only tracks pointers; a single reflow runs once the gesture
+  // settles (debounced), through the normal applySettings path.
+  private readonly onPointerDown = (event: PointerEvent): void => {
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.pointers.size === 2) {
+      this.pinchStartDistance = this.pointerDistance();
+      this.pinchStartFont = this.settings.fontSizePx;
+      this.pinchFont = this.settings.fontSizePx;
+    }
+  };
+  private readonly onPointerMove = (event: PointerEvent): void => {
+    if (!this.pointers.has(event.pointerId)) return;
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.pointers.size !== 2 || this.pinchStartDistance === 0) return;
+    event.preventDefault();
+    const ratio = this.pointerDistance() / this.pinchStartDistance;
+    this.pinchFont = clampFont(Math.round(this.pinchStartFont * ratio));
+  };
+  private readonly onPointerUp = (event: PointerEvent): void => {
+    if (!this.pointers.delete(event.pointerId)) return;
+    if (this.pointers.size >= 2 || this.pinchStartDistance === 0) return;
+    const next = this.pinchFont;
+    this.pinchStartDistance = 0;
+    if (next === this.settings.fontSizePx) return;
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = setTimeout(() => {
+      if (!this.dead) this.applySettings({ ...this.settings, fontSizePx: next });
+    }, 150);
+  };
+  private pointerDistance(): number {
+    const points = [...this.pointers.values()];
+    const a = points[0];
+    const b = points[1];
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   open(file: Blob, startAt?: Locator): Promise<void> {
@@ -502,6 +553,12 @@ export class EpubRenderer implements Renderer {
   destroy(): void {
     if (this.dead) return;
     this.dead = true;
+    clearTimeout(this.pinchTimer);
+    this.host?.removeEventListener('pointerdown', this.onPointerDown);
+    this.host?.removeEventListener('pointermove', this.onPointerMove);
+    this.host?.removeEventListener('pointerup', this.onPointerUp);
+    this.host?.removeEventListener('pointercancel', this.onPointerUp);
+    this.pointers.clear();
     this.selectionCallbacks.clear();
     this.view?.removeEventListener('relocate', this.relocate);
     this.view?.removeEventListener('draw-annotation', this.handleDrawAnnotation);
@@ -531,4 +588,9 @@ export class EpubRenderer implements Renderer {
     this.closedRenderers.add(view.renderer);
     view.close();
   }
+}
+
+/** Clamps a pinch-derived font size to the supported reader range. */
+function clampFont(px: number): number {
+  return Math.min(EPUB_MAX_FONT_PX, Math.max(EPUB_MIN_FONT_PX, px));
 }
