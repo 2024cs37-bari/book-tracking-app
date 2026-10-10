@@ -89,6 +89,13 @@ export interface Renderer {
    * the URL when done.
    */
   renderThumbnail(index: number, maxEdgePx: number): Promise<string | null>;
+  /**
+   * The plain text of what is currently on screen — the current PDF page or the
+   * current EPUB spine section — collapsed to single spaces. Used by features
+   * like read-aloud that narrate the visible unit. Resolves to an empty string
+   * when nothing is open or the text cannot be extracted.
+   */
+  getVisibleText(): Promise<string>;
   applySettings(settings: ReaderSettings): void;
   destroy(): void;
 }

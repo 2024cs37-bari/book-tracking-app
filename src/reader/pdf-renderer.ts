@@ -535,6 +535,31 @@ export class PdfRenderer implements Renderer {
       }
     }
   }
+  async getVisibleText(): Promise<string> {
+    const pdf = this.document;
+    if (!pdf || this.dead) return '';
+    // The page actually painted on screen, falling back to the pending target
+    // before the first paint completes.
+    const index = this.renderedIndex ?? this.index;
+    if (index < 0 || index >= pdf.numPages) return '';
+    try {
+      const page = await pdf.getPage(index + 1);
+      try {
+        const content = await page.getTextContent();
+        // Join runs with spaces and collapse, exactly like search(), so a word
+        // split across text runs or line breaks reads as one word aloud.
+        return content.items
+          .map((item) => ('str' in item ? item.str : ''))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      } finally {
+        page.cleanup();
+      }
+    } catch {
+      return '';
+    }
+  }
   async *search(query: string, signal?: AbortSignal): AsyncGenerator<SearchHit> {
     const pdf = this.document;
     const needle = query.trim().toLowerCase().replace(/\s+/g, ' ');
