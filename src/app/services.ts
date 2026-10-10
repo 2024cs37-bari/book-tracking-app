@@ -17,6 +17,8 @@ import { ImportService } from '~/services/import-service';
 import { ExportService } from '~/services/export-service';
 import { RestoreService } from '~/services/restore-service';
 import { ReaderService } from '~/services/reader-service';
+import { SyncEngine } from '~/sync/engine';
+import { createHttpSyncTransport } from '~/sync/http-transport';
 import { EpubRenderer } from '~/reader/epub-renderer';
 import { PdfRenderer } from '~/reader/pdf-renderer';
 
@@ -45,6 +47,12 @@ export interface AppServices {
   readonly reader: ReaderService;
   readonly clock: Clock;
   readonly deviceId: string;
+  /**
+   * The sync engine, or null when no server URL is configured for this build
+   * (the current default — Phase 3's server is not deployed yet). Gating here
+   * keeps the UI honest and ensures no network work runs without a target.
+   */
+  readonly sync: SyncEngine | null;
   /** Set when a non-durable or degraded storage adapter is in use. */
   readonly storageWarning: string | null;
   readonly persistentStorage: boolean | null;
@@ -56,6 +64,8 @@ export interface CreateAppServicesOptions {
   readonly dbName?: string;
   /** Overrides storage selection, used by tests and future desktop builds. */
   readonly fileStore?: BookFileStore;
+  /** Sync server base URL; defaults to `VITE_SYNC_URL`. Empty disables sync. */
+  readonly syncBaseUrl?: string;
 }
 
 export async function createAppServices(
@@ -111,6 +121,21 @@ export async function createAppServices(
     if (last !== null) await syncMeta.setClockState(last);
   };
 
+  const syncBaseUrl =
+    options.syncBaseUrl ?? (import.meta.env.VITE_SYNC_URL as string | undefined) ?? '';
+  const sync =
+    syncBaseUrl.length > 0
+      ? new SyncEngine({
+          db,
+          changes,
+          syncMeta,
+          clock,
+          deviceId,
+          transport: createHttpSyncTransport({ baseUrl: syncBaseUrl }),
+          persistClock: persistClockState,
+        })
+      : null;
+
   return {
     db,
     books,
@@ -137,6 +162,7 @@ export async function createAppServices(
     }),
     clock,
     deviceId,
+    sync,
     storageWarning: selection.fallbackReason,
     persistentStorage,
     persistClockState,

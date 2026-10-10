@@ -122,6 +122,24 @@ export default function SettingsView() {
     input.click();
   }
 
+  async function runSync(): Promise<void> {
+    if (app.sync === null) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await app.sync.sync();
+      setMessage(
+        `Synced: pushed ${result.pushed} change${result.pushed === 1 ? '' : 's'}, applied ` +
+          `${result.applied} from other devices${result.caughtUp ? ', now up to date' : ', more to pull'}.`,
+      );
+      await refetch();
+    } catch (error) {
+      setMessage(`Sync failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function cleanOrphans(): Promise<void> {
     const report = diagnostics()?.orphans;
     if (report === undefined || report.orphanKeys.length === 0) return;
@@ -389,6 +407,33 @@ export default function SettingsView() {
                   </ul>
                 </Show>
               </div>
+            </section>
+
+            <section class="panel">
+              <h3>Sync</h3>
+              <Show
+                when={app.sync !== null}
+                fallback={
+                  <p class="note">
+                    Sync is not configured for this build. Changes are queued locally and will
+                    upload once a sync server is set.
+                  </p>
+                }
+              >
+                <p class="note">
+                  Push changes queued on this device and pull updates from your other devices.
+                </p>
+                <div class="panel-actions">
+                  <button
+                    type="button"
+                    class="button button-primary"
+                    disabled={busy()}
+                    onClick={() => void runSync()}
+                  >
+                    Sync now
+                  </button>
+                </div>
+              </Show>
             </section>
 
             <section class="panel">

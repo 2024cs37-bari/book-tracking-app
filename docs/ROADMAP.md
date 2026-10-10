@@ -147,10 +147,12 @@ round-trip proves convergence; idempotent push, partial-batch acknowledgement, f
 safety and transport error handling are covered too. The **Worker server** now exists in `server/`
 (Hono + D1 + Access): a durable, idempotent, sequenced change log with push/pull endpoints, per-user
 scoping from the verified Access identity, request validation, pure logic tested against an
-in-memory store, and a clean `wrangler` bundle. Remaining: provision + **deploy** it
-(`wrangler d1 create`, Access policy/vars — needs the account), wire `SyncEngine` +
-`createHttpSyncTransport` into `AppServices` once the URL is live, progress-divergence prompting,
-per-field book-metadata policy, and bootstrap/cursor-expiry recovery.
+in-memory store, and a clean `wrangler` bundle. The client is already **wired** into the app behind
+a `VITE_SYNC_URL` build config (Settings shows a "Sync now" action when a server is configured, and
+"not configured" otherwise), so the engine goes live the moment a URL is set. Remaining: provision +
+**deploy** the Worker (`wrangler d1 create`, Access policy/vars — needs the account) and set
+`VITE_SYNC_URL`; progress-divergence prompting; per-field book-metadata policy; and bootstrap/
+cursor-expiry recovery.
 
 Deliverables:
 
