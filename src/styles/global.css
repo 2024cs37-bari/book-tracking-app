@@ -20,6 +20,14 @@
   --warning-surface: #fff6e5;
   --warning-border: #e0b25f;
   --danger: #b3261e;
+  /* Accent-derived and incidental colours. These are defined once and follow
+     --accent automatically (via color-mix), so an accent override in Settings
+     recolours selections and selected rows without any extra rules. */
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --selection: color-mix(in srgb, var(--accent) 38%, transparent);
+  --scrim: rgba(0, 0, 0, 0.45);
+  --shadow-popover: 0 6px 24px rgba(0, 0, 0, 0.25);
+  --pdf-highlight: #f6c744;
   --radius: 10px;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -31,8 +39,11 @@
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 }
 
+/* Dark palette: applied when the OS prefers dark AND the user has not forced
+   light, or when the user explicitly chose dark in Settings (data-theme). The
+   block is duplicated across the two selectors because CSS cannot share one. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --surface: #16181c;
     --surface-sunken: #1d2025;
     --surface-raised: #21252b;
@@ -45,6 +56,23 @@
     --warning-border: #8a6d2f;
     --danger: #ff8a80;
   }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: #16181c;
+  --surface-sunken: #1d2025;
+  --surface-raised: #21252b;
+  --text: #e8eaed;
+  --text-muted: #a3a9b3;
+  --border: #333941;
+  --accent: #7ea2ff;
+  --accent-text: #10131a;
+  --warning-surface: #33290f;
+  --warning-border: #8a6d2f;
+  --danger: #ff8a80;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 *,
@@ -534,8 +562,8 @@ input[type='file'] {
   font-size: 0.85rem;
 }
 .reader-tab.active {
-  background: var(--accent, #5aa9f6);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-text);
 }
 .reader-sidebar-close {
   margin-left: auto;
@@ -590,7 +618,7 @@ input[type='file'] {
   cursor: pointer;
 }
 .reader-thumb.active {
-  outline: 2px solid var(--accent, #5aa9f6);
+  outline: 2px solid var(--accent);
 }
 .reader-thumb-image {
   width: 100%;
@@ -598,7 +626,7 @@ input[type='file'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(127, 127, 127, 0.12);
+  background: var(--surface-sunken);
   overflow: hidden;
 }
 .reader-thumb-image img {
@@ -629,7 +657,7 @@ input[type='file'] {
   cursor: pointer;
 }
 .reader-page-row.active {
-  background: rgba(90, 169, 246, 0.18);
+  background: var(--accent-soft);
 }
 @media (max-width: 767px) {
   .reader-sidebar {
@@ -637,7 +665,7 @@ input[type='file'] {
     inset: 0 auto 0 0;
     z-index: 20;
     max-width: 85vw;
-    background: var(--bg, #fff);
+    background: var(--surface-raised);
   }
   .reader-sidebar-resize {
     display: none;
@@ -647,7 +675,7 @@ input[type='file'] {
     position: absolute;
     inset: 0;
     z-index: 10;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--scrim);
   }
 }
 .reader-toolbar {
@@ -735,7 +763,7 @@ input[type='file'] {
   height: 0;
 }
 .textLayer ::selection {
-  background: rgba(90, 169, 246, 0.4);
+  background: var(--selection);
 }
 .pdf-highlight-layer {
   position: absolute;
@@ -745,7 +773,7 @@ input[type='file'] {
 }
 .pdf-highlight {
   position: absolute;
-  background: var(--pdf-highlight-color, #f6c744);
+  background: var(--pdf-highlight-color, var(--pdf-highlight));
   opacity: 0.35;
   border-radius: 2px;
 }
@@ -859,7 +887,7 @@ input[type='file'] {
 }
 .chip-active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-text);
   border-color: var(--accent);
 }
 .chip-add {
@@ -897,7 +925,7 @@ input[type='file'] {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--accent, #5aa9f6);
+  color: var(--accent);
 }
 .annotation-review-list {
   list-style: none;
@@ -1035,7 +1063,7 @@ input[type='file'] {
   border: 1px solid var(--border);
   background: var(--surface-raised);
   color: var(--text);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-popover);
   pointer-events: auto;
 }
 .toast-text {
@@ -1043,14 +1071,14 @@ input[type='file'] {
   font-size: 0.9rem;
 }
 .toast-error {
-  border-color: var(--danger, #d9534f);
-  border-left: 4px solid var(--danger, #d9534f);
+  border-color: var(--danger);
+  border-left: 4px solid var(--danger);
 }
 .toast-success {
-  border-left: 4px solid var(--accent, #5aa9f6);
+  border-left: 4px solid var(--accent);
 }
 .toast-info {
-  border-left: 4px solid var(--text-muted, #888);
+  border-left: 4px solid var(--text-muted);
 }
 .toast-dismiss {
   border: 0;
@@ -1060,4 +1088,32 @@ input[type='file'] {
   font-size: 1.1rem;
   line-height: 1;
   padding: 0;
+}
+
+/* Appearance settings: accent colour picker. */
+.accent-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.accent-swatch {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.65rem;
+  color: var(--text);
+  background: var(--surface);
+}
+.accent-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.accent-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
 }

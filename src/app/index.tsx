@@ -3,6 +3,7 @@ import { render } from 'solid-js/web';
 import App from './App';
 import { AppProvider } from './context';
 import { createAppServices } from './services';
+import { initTheme } from '~/ui/theme';
 import '~/styles/global.css';
 
 const root = document.getElementById('root');
@@ -35,6 +36,9 @@ async function boot(): Promise<void> {
   if (root === null) {
     throw new Error('The #root element is missing from index.html.');
   }
+
+  // Apply the saved theme/accent before first paint to avoid a flash.
+  initTheme();
 
   try {
     const services = await createAppServices();

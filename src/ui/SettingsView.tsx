@@ -5,6 +5,14 @@ import { inspectStorage, removeStoredFiles, type OrphanReport } from '~/storage/
 import type { Shelf, Tag } from '~/domain/collections';
 import { useApp } from '~/app/context';
 import { showToast } from './toast';
+import {
+  ACCENT_PRESETS,
+  applyAccent,
+  applyTheme,
+  loadAccent,
+  loadTheme,
+  type AppTheme,
+} from './theme';
 
 interface Diagnostics {
   readonly lifecycle: Record<string, number>;
@@ -30,6 +38,19 @@ export default function SettingsView() {
   // lingering inline line; errors stay until the user dismisses them.
   function setMessage(text: string | null, kind: 'error' | 'success' = 'success'): void {
     if (text !== null) showToast(text, kind);
+  }
+
+  // Appearance is a device-local preference (like reader settings), applied to
+  // the document root and persisted; see src/ui/theme.ts.
+  const [theme, setTheme] = createSignal<AppTheme>(loadTheme());
+  const [accent, setAccent] = createSignal(loadAccent());
+  function changeTheme(next: AppTheme): void {
+    setTheme(next);
+    applyTheme(next);
+  }
+  function changeAccent(next: string): void {
+    setAccent(next);
+    applyAccent(next);
   }
 
   const [diagnostics, { refetch }] = createResource<Diagnostics, number>(
@@ -224,6 +245,55 @@ export default function SettingsView() {
         These values describe this device only. They are not synchronized and are safe to share when
         reporting a problem.
       </p>
+
+      <section class="panel">
+        <h3>Appearance</h3>
+        <p class="note">
+          Theme and accent are stored on this device only and apply across the whole app
+          immediately.
+        </p>
+        <div class="field">
+          <label for="app-theme">Theme</label>
+          <select
+            id="app-theme"
+            value={theme()}
+            onChange={(event) => changeTheme(event.currentTarget.value as AppTheme)}
+          >
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+        <div class="field">
+          <span id="accent-label">Accent colour</span>
+          <div class="accent-swatches" role="group" aria-labelledby="accent-label">
+            <For each={ACCENT_PRESETS}>
+              {(preset) => (
+                <button
+                  type="button"
+                  class="accent-swatch"
+                  classList={{ active: accent() === preset.value }}
+                  style={preset.value === '' ? undefined : { background: preset.value }}
+                  aria-label={preset.name}
+                  aria-pressed={accent() === preset.value}
+                  onClick={() => changeAccent(preset.value)}
+                >
+                  {preset.value === '' ? 'Default' : ''}
+                </button>
+              )}
+            </For>
+            <label class="accent-custom">
+              Custom
+              <input
+                type="color"
+                aria-label="Custom accent colour"
+                value={accent() === '' ? '#2f5bd7' : accent()}
+                onInput={(event) => changeAccent(event.currentTarget.value)}
+              />
+            </label>
+          </div>
+        </div>
+      </section>
 
       <Show when={diagnostics.error}>
         <p class="note note-error" role="alert">
