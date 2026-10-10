@@ -131,6 +131,8 @@ export class EpubRenderer implements Renderer {
   private visibleIndex = 0;
   private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
   private readonly selectionDocs = new WeakSet<Document>();
+  private readonly contextMenuCallbacks = new Set<(point: { x: number; y: number }) => void>();
+  private readonly contextDocs = new WeakSet<Document>();
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinchStartDistance = 0;
   private pinchStartFont = 0;
@@ -158,7 +160,10 @@ export class EpubRenderer implements Renderer {
     queueMicrotask(() => {
       this.reapplyHighlights();
       const doc = this.view?.renderer.getContents().find((c) => c.index === index)?.doc;
-      if (doc) this.attachSelection(doc, index);
+      if (doc) {
+        this.attachSelection(doc, index);
+        this.attachContextMenu(doc);
+      }
     });
   };
 
@@ -468,6 +473,57 @@ export class EpubRenderer implements Renderer {
   private emitSelection(selection: SelectionInfo | null): void {
     for (const callback of this.selectionCallbacks) callback(selection);
   }
+  onContextMenu(callback: (point: { x: number; y: number }) => void): () => void {
+    this.contextMenuCallbacks.add(callback);
+    return () => this.contextMenuCallbacks.delete(callback);
+  }
+  // Book content lives in a sandboxed iframe, so its contextmenu/long-press
+  // never bubbles to the reader surface. Forward it from inside each section's
+  // document, translated into host-viewport coordinates, so the shell can open
+  // its selection menu over EPUB exactly as it does over the PDF text layer.
+  private attachContextMenu(doc: Document): void {
+    if (this.contextDocs.has(doc)) return;
+    this.contextDocs.add(doc);
+    doc.addEventListener('contextmenu', (event) => {
+      if (this.dead) return;
+      const mouse = event as MouseEvent;
+      event.preventDefault();
+      this.emitContextMenu(this.hostPoint(doc, mouse.clientX, mouse.clientY));
+    });
+    // Touch long-press, where there is no right click to catch.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cancel = (): void => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+    doc.addEventListener(
+      'touchstart',
+      (event) => {
+        const touch = (event as TouchEvent).touches[0];
+        if (!touch) return;
+        const { clientX, clientY } = touch;
+        cancel();
+        timer = setTimeout(() => {
+          timer = undefined;
+          if (!this.dead) this.emitContextMenu(this.hostPoint(doc, clientX, clientY));
+        }, 500);
+      },
+      { passive: true },
+    );
+    doc.addEventListener('touchmove', cancel, { passive: true });
+    doc.addEventListener('touchend', cancel);
+    doc.addEventListener('touchcancel', cancel);
+  }
+  private emitContextMenu(point: { x: number; y: number }): void {
+    for (const callback of this.contextMenuCallbacks) callback(point);
+  }
+  /** Translates an in-iframe client point into host-viewport coordinates. */
+  private hostPoint(doc: Document, clientX: number, clientY: number): { x: number; y: number } {
+    const rect = doc.defaultView?.frameElement?.getBoundingClientRect();
+    return rect ? { x: rect.left + clientX, y: rect.top + clientY } : { x: clientX, y: clientY };
+  }
   listPages(): Promise<ReaderPage[]> {
     const book = this.book;
     if (book === undefined || this.dead) return Promise.resolve([]);
@@ -594,6 +650,7 @@ export class EpubRenderer implements Renderer {
     this.host?.removeEventListener('pointercancel', this.onPointerUp);
     this.pointers.clear();
     this.selectionCallbacks.clear();
+    this.contextMenuCallbacks.clear();
     this.view?.removeEventListener('relocate', this.relocate);
     this.view?.removeEventListener('draw-annotation', this.handleDrawAnnotation);
     this.view?.removeEventListener('create-overlay', this.handleCreateOverlay);

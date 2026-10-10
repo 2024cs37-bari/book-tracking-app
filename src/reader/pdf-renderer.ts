@@ -313,6 +313,12 @@ export class PdfRenderer implements Renderer {
     this.selectionCallbacks.add(callback);
     return () => this.selectionCallbacks.delete(callback);
   }
+  onContextMenu(): () => void {
+    // The PDF text layer lives in the host document, so the reader shell's own
+    // surface contextmenu/long-press handling already opens the menu over PDF.
+    // There is nothing to forward from an iframe here.
+    return () => {};
+  }
   applyHighlights(highlights: readonly Highlight[]): void {
     this.highlights = highlights;
     this.drawHighlights();

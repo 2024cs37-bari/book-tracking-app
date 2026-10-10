@@ -35,6 +35,9 @@ class TestRenderer implements Renderer {
   onSelection() {
     return () => {};
   }
+  onContextMenu() {
+    return () => {};
+  }
   applyHighlights() {}
   readonly supportsThumbnails = false;
   async listPages() {

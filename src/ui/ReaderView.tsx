@@ -379,6 +379,7 @@ export default function ReaderView() {
     currentLocator = undefined;
     stopSearch();
     let offSelection: (() => void) | undefined;
+    let offContextMenu: (() => void) | undefined;
 
     // One reading session per open span. Idempotent: recording clears the
     // start marker so pagehide + cleanup cannot double-count the same span.
@@ -455,6 +456,15 @@ export default function ReaderView() {
         setCanHighlight(current.renderer.supportsHighlights);
         setSupportsThumbnails(current.renderer.supportsThumbnails);
         offSelection = current.renderer.onSelection(setSelection);
+        // EPUB forwards right-click / long-press from inside its iframe (where
+        // the event cannot bubble to the surface); PDF leaves this a no-op and
+        // is covered by the surface handler below.
+        offContextMenu = current.renderer.onContextMenu((point) => {
+          const selected = selection();
+          if (selected !== null) {
+            setContextMenu({ x: point.x, y: point.y, selection: selected });
+          }
+        });
         void current.renderer
           .listPages()
           .then((list) => {
@@ -481,6 +491,7 @@ export default function ReaderView() {
       disposed = true;
       session = undefined;
       offSelection?.();
+      offContextMenu?.();
       stopSearch();
       recordSession();
       host.removeEventListener('reader-message', readerMessage);

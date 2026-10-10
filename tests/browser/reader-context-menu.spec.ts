@@ -1,5 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-import { buildPdfFixture } from '../support/fixtures';
+import { expect, test, type Frame, type Page } from '@playwright/test';
+import { buildEpubFixture, buildPdfFixture } from '../support/fixtures';
 import { importBook } from './support';
 
 let browserErrors: string[];
@@ -95,4 +95,107 @@ test('a selection context menu offers highlight colours, Bookmark, and Copy', as
   await expect(menu).toHaveCount(0);
   await expect(notesPanel.locator('.reader-annotation-list li')).toHaveCount(1);
   await expect(notesPanel.locator('.reader-annotation-kind')).toHaveText('Highlight');
+});
+
+/** The live foliate book frame (its document is a blob: URL). */
+async function bookFrame(page: Page): Promise<Frame> {
+  await expect
+    .poll(() => page.frames().filter((frame) => frame.url().startsWith('blob:')).length)
+    .toBeGreaterThan(0);
+  return page.frames().find((frame) => frame.url().startsWith('blob:'))!;
+}
+
+/** Selects the first paragraph (or just its first word) inside the book frame. */
+async function selectInFrame(frame: Frame, singleWord: boolean): Promise<void> {
+  await frame.evaluate((single) => {
+    const paragraph = document.querySelector('p');
+    if (!paragraph) throw new Error('No paragraph to select');
+    const selection = document.getSelection();
+    if (!selection) throw new Error('No selection API');
+    const range = document.createRange();
+    if (single) {
+      const node = paragraph.firstChild;
+      if (!node || node.nodeType !== Node.TEXT_NODE) throw new Error('No text node');
+      const text = node.textContent ?? '';
+      const space = text.indexOf(' ');
+      range.setStart(node, 0);
+      range.setEnd(node, space === -1 ? text.length : Math.max(1, space));
+    } else {
+      range.selectNodeContents(paragraph);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  }, singleWord);
+}
+
+/** Fires a bubbling contextmenu from inside the book frame, as a right click would. */
+async function contextMenuInFrame(frame: Frame): Promise<void> {
+  await frame.evaluate(() => {
+    const paragraph = document.querySelector('p');
+    if (!paragraph) throw new Error('No paragraph for context menu');
+    const rect = paragraph.getBoundingClientRect();
+    paragraph.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: Math.round(rect.left + 5),
+        clientY: Math.round(rect.top + 5),
+      }),
+    );
+  });
+}
+
+test('the context menu reaches an EPUB selection inside the book frame', async ({ page }) => {
+  await importBook(
+    page,
+    buildEpubFixture({ title: 'Context Menu EPUB', chapters: 1, paragraphs: 6 }),
+    'context-menu.epub',
+    'Context Menu EPUB',
+  );
+
+  await page.getByRole('tab', { name: 'Notes' }).click();
+  const notesPanel = page.locator('.reader-notes-panel');
+  const highlightReady = page.getByRole('button', { name: 'Highlight selection' });
+  await expect(highlightReady).toBeDisabled();
+
+  const frame = await bookFrame(page);
+  await selectInFrame(frame, false);
+  await expect(highlightReady).toBeEnabled();
+
+  const menu = page.getByRole('menu', { name: 'Selection actions' });
+  await expect(menu).toHaveCount(0);
+  await contextMenuInFrame(frame);
+  await expect(menu).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Highlight Yellow' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Bookmark here' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Copy' })).toBeVisible();
+
+  // Choosing a swatch highlights the EPUB selection and closes the menu.
+  await page.getByRole('menuitem', { name: 'Highlight Yellow' }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(notesPanel.locator('.reader-annotation-list li')).toHaveCount(1);
+  await expect(notesPanel.locator('.reader-annotation-kind')).toHaveText('Highlight');
+});
+
+test('a single-word EPUB selection offers a Define action', async ({ page }) => {
+  await importBook(
+    page,
+    buildEpubFixture({ title: 'Define EPUB', chapters: 1, paragraphs: 6 }),
+    'define.epub',
+    'Define EPUB',
+  );
+
+  await page.getByRole('tab', { name: 'Notes' }).click();
+  const highlightReady = page.getByRole('button', { name: 'Highlight selection' });
+  const frame = await bookFrame(page);
+  await selectInFrame(frame, true);
+  await expect(highlightReady).toBeEnabled();
+
+  const menu = page.getByRole('menu', { name: 'Selection actions' });
+  await contextMenuInFrame(frame);
+  await expect(menu).toBeVisible();
+  // The dictionary lookup itself needs the network and is not exercised here;
+  // we only assert the single-word action is offered.
+  await expect(page.getByRole('menuitem', { name: /^Define/ })).toBeVisible();
 });

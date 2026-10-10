@@ -77,6 +77,15 @@ export interface Renderer {
   readonly supportsHighlights: boolean;
   /** Notifies with the current selection, or null when it is cleared. */
   onSelection(callback: (selection: SelectionInfo | null) => void): Unsubscribe;
+  /**
+   * Notifies when the user requests a context menu (right-click or touch
+   * long-press) over the reading surface, with the pointer position in
+   * host-viewport (CSS) pixels. Engines whose content is sandboxed in an iframe
+   * (EPUB) forward the event from inside it, since it cannot bubble to the host;
+   * engines whose content lives in the host document (PDF) may leave this a
+   * no-op and let the shell's own surface handling cover them.
+   */
+  onContextMenu(callback: (point: { x: number; y: number }) => void): Unsubscribe;
   /** Draws the given highlights, replacing any previously drawn set. */
   applyHighlights(highlights: readonly Highlight[]): void;
   /** True when `renderThumbnail` can produce page images (PDF yes, EPUB no). */
