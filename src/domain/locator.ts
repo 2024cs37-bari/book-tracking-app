@@ -78,13 +78,63 @@ export interface PdfPosition {
 }
 
 export function parsePdfLocator(value: string): PdfPosition | null {
-  const separator = value.indexOf(':');
-  if (separator <= 0) return null;
-  const page = Number(value.slice(0, separator));
-  const yOffset = Number(value.slice(separator + 1));
+  // A value is `<page>:<yOffset>` and may carry extra `:`-separated fields
+  // (a highlight adds `:<start>:<end>`); only the first two drive navigation.
+  const parts = value.split(':');
+  if (parts.length < 2) return null;
+  const page = Number(parts[0]);
+  const yOffset = Number(parts[1]);
   if (!Number.isInteger(page) || page < 0) return null;
   if (!Number.isFinite(yOffset) || yOffset < 0) return null;
   return { page, yOffset };
+}
+
+export interface PdfHighlightAnchor {
+  readonly page: number;
+  readonly yOffset: number;
+  /** Character offsets into the page's rendered text layer. */
+  readonly start: number;
+  readonly end: number;
+}
+
+/**
+ * A PDF highlight serializes as `<page>:<yOffset>:<start>:<end>`: the page and
+ * scroll offset locate it for navigation, and the character range into the
+ * page's text layer lets the renderer recompute the drawn rectangles at any
+ * zoom. The kind stays `pdf` so no new locator kind (and no migration) is
+ * needed.
+ */
+export function createPdfHighlightLocator(
+  page: number,
+  yOffset: number,
+  start: number,
+  end: number,
+  fraction: number,
+): Locator {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new AppError('invalid_argument', 'PDF page must be a non-negative integer.');
+  }
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) {
+    throw new AppError('invalid_argument', 'PDF highlight range must be start < end, both >= 0.');
+  }
+  return {
+    kind: 'pdf',
+    value: `${page}:${Math.max(0, Math.round(yOffset))}:${start}:${end}`,
+    fraction: clampFraction(fraction),
+  };
+}
+
+export function parsePdfHighlight(value: string): PdfHighlightAnchor | null {
+  const parts = value.split(':');
+  if (parts.length < 4) return null;
+  const page = Number(parts[0]);
+  const yOffset = Number(parts[1]);
+  const start = Number(parts[2]);
+  const end = Number(parts[3]);
+  if (![page, yOffset, start, end].every((n) => Number.isFinite(n))) return null;
+  if (!Number.isInteger(page) || page < 0) return null;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) return null;
+  return { page, yOffset, start, end };
 }
 
 export function formatPercent(fraction: number): string {

@@ -7,14 +7,31 @@ import type {
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { observePdfStreamErrors } from './pdf-stream-errors';
 import { buildPdfToc, type PdfOutlineNode } from './pdf-outline';
-import { assertLocator, createPdfLocator, parsePdfLocator, type Locator } from '~/domain/locator';
+import {
+  assertLocator,
+  createPdfHighlightLocator,
+  createPdfLocator,
+  parsePdfHighlight,
+  parsePdfLocator,
+  type Locator,
+} from '~/domain/locator';
 import {
   DEFAULT_READER_SETTINGS,
+  type Highlight,
   type ReaderSettings,
   type Renderer,
   type SearchHit,
+  type SelectionInfo,
   type TocItem,
 } from './renderer';
+
+/** Highlight colour tokens → concrete CSS colours (drawn at low opacity). */
+const PDF_HIGHLIGHT_COLORS: Record<string, string> = {
+  yellow: '#f6c744',
+  green: '#5bd08a',
+  blue: '#5aa9f6',
+  pink: '#f67ab5',
+};
 
 export const PDF_MAX_CANVAS_PIXELS = 4_000_000;
 export const PDF_PAGE_CACHE_LIMIT = 1;
@@ -22,6 +39,8 @@ export const PDF_PAGE_CACHE_LIMIT = 1;
 /** Minimal structural type for pdf.js's TextLayer, to avoid importing it eagerly. */
 interface PdfTextLayer {
   render(): Promise<unknown>;
+  readonly textDivs: HTMLElement[];
+  readonly textContentItemsStr: string[];
 }
 type PdfTextLayerCtor = new (opts: {
   textContentSource: ReadableStream;
@@ -49,18 +68,15 @@ export class PdfRenderer implements Renderer {
   private settings = DEFAULT_READER_SETTINGS;
   private textLayerCtor?: PdfTextLayerCtor;
   private pageEl?: HTMLDivElement;
+  readonly supportsHighlights = true;
+  private highlights: readonly Highlight[] = [];
+  private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
+  private textLayerEl?: HTMLElement;
+  private highlightLayerEl?: HTMLDivElement;
+  private textPageIndex = -1;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
   private readonly scroll = () => this.emit();
   private resize?: ResizeObserver;
-
-  // Highlighting needs a selectable text layer, which the canvas-only PDF
-  // renderer does not yet have; the capability is reported false so the reader
-  // UI hides the affordance rather than offering a dead control.
-  readonly supportsHighlights = false;
-  onSelection(): () => void {
-    return () => {};
-  }
-  applyHighlights(): void {}
 
   mount(host: HTMLElement): void {
     this.host = host;
@@ -69,6 +85,7 @@ export class PdfRenderer implements Renderer {
     scroller.tabIndex = 0;
     scroller.setAttribute('aria-label', 'PDF page');
     scroller.addEventListener('scroll', this.scroll);
+    document.addEventListener('selectionchange', this.onSelectionChange);
     host.append(scroller);
     this.scroller = scroller;
     this.resize = new ResizeObserver(() => {
@@ -196,6 +213,10 @@ export class PdfRenderer implements Renderer {
         pageEl.className = 'pdf-page';
         pageEl.append(canvas);
         this.pageEl = pageEl;
+        // The old page's text/highlight layers are gone; the new ones attach
+        // when this page's text layer finishes rendering.
+        this.textLayerEl = undefined;
+        this.highlightLayerEl = undefined;
         this.scroller!.replaceChildren(pageEl);
         this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
         const task = page.render({ canvas, viewport });
@@ -221,7 +242,7 @@ export class PdfRenderer implements Renderer {
           this.emit();
           // A selectable text layer over the canvas; drawn after the page so it
           // never delays the first paint. Stale appends are guarded by pageEl.
-          void this.renderTextLayer(page, pageEl, generation);
+          void this.renderTextLayer(page, pageEl, generation, target);
         }
       });
     this.queue = result;
@@ -231,6 +252,7 @@ export class PdfRenderer implements Renderer {
     page: PDFPageProxy,
     pageEl: HTMLDivElement,
     generation: number,
+    pageIndex: number,
   ): Promise<void> {
     const ctor = this.textLayerCtor;
     if (!ctor) return;
@@ -244,12 +266,126 @@ export class PdfRenderer implements Renderer {
       container.style.height = `${Math.floor(viewport.height)}px`;
       const layer = new ctor({ textContentSource: page.streamTextContent(), container, viewport });
       await layer.render();
-      if (generation === this.generation && !this.dead && this.pageEl === pageEl) {
-        pageEl.append(container);
-      }
+      if (generation !== this.generation || this.dead || this.pageEl !== pageEl) return;
+      const highlightLayer = document.createElement('div');
+      highlightLayer.className = 'pdf-highlight-layer';
+      pageEl.append(container, highlightLayer);
+      this.textLayerEl = container;
+      this.highlightLayerEl = highlightLayer;
+      this.textPageIndex = pageIndex;
+      this.drawHighlights();
     } catch {
       // The text layer is a selection/accessibility enhancement; a failure must
       // not break page rendering.
+    }
+  }
+  onSelection(callback: (selection: SelectionInfo | null) => void): () => void {
+    this.selectionCallbacks.add(callback);
+    return () => this.selectionCallbacks.delete(callback);
+  }
+  applyHighlights(highlights: readonly Highlight[]): void {
+    this.highlights = highlights;
+    this.drawHighlights();
+  }
+  private emitSelection(selection: SelectionInfo | null): void {
+    for (const callback of this.selectionCallbacks) callback(selection);
+  }
+  private readonly onSelectionChange = (): void => {
+    const el = this.textLayerEl;
+    const selection = el ? document.getSelection() : null;
+    if (!el || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      this.emitSelection(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+      this.emitSelection(null);
+      return;
+    }
+    const a = this.globalOffset(el, range.startContainer, range.startOffset);
+    const b = this.globalOffset(el, range.endContainer, range.endOffset);
+    const text = selection.toString().replace(/\s+/g, ' ').trim();
+    if (a === null || b === null || a === b || text === '') {
+      this.emitSelection(null);
+      return;
+    }
+    const [start, end] = a < b ? [a, b] : [b, a];
+    const pageRect = this.pageEl?.getBoundingClientRect();
+    const first = range.getClientRects()[0];
+    const yOffset = pageRect && first ? Math.max(0, (first.top - pageRect.top) / this.scale) : 0;
+    const pages = this.document?.numPages ?? 1;
+    try {
+      const locator = createPdfHighlightLocator(
+        this.textPageIndex,
+        yOffset,
+        start,
+        end,
+        this.textPageIndex / pages,
+      );
+      this.emitSelection({ locator, excerpt: text.slice(0, 300) });
+    } catch {
+      this.emitSelection(null);
+    }
+  };
+  /** Character offset of a DOM point within the text layer's rendered text. */
+  private globalOffset(el: HTMLElement, node: Node, offset: number): number | null {
+    try {
+      const range = document.createRange();
+      range.setStart(el, 0);
+      range.setEnd(node, offset);
+      return range.toString().length;
+    } catch {
+      return null;
+    }
+  }
+  /** Resolves a character offset back to a (text node, offset) within el. */
+  private resolvePoint(el: HTMLElement, target: number): { node: Node; offset: number } | null {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let seen = 0;
+    let last: Node | null = null;
+    let node = walker.nextNode();
+    while (node) {
+      const length = node.nodeValue?.length ?? 0;
+      if (seen + length >= target) return { node, offset: target - seen };
+      seen += length;
+      last = node;
+      node = walker.nextNode();
+    }
+    return last ? { node: last, offset: last.nodeValue?.length ?? 0 } : null;
+  }
+  private drawHighlights(): void {
+    const el = this.textLayerEl;
+    const layer = this.highlightLayerEl;
+    const pageEl = this.pageEl;
+    if (!el || !layer || !pageEl) return;
+    layer.replaceChildren();
+    const pageRect = pageEl.getBoundingClientRect();
+    for (const highlight of this.highlights) {
+      const anchor = parsePdfHighlight(highlight.locator.value);
+      if (!anchor || anchor.page !== this.textPageIndex) continue;
+      const start = this.resolvePoint(el, anchor.start);
+      const end = this.resolvePoint(el, anchor.end);
+      if (!start || !end) continue;
+      const range = document.createRange();
+      try {
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+      } catch {
+        continue;
+      }
+      const color = highlight.color
+        ? (PDF_HIGHLIGHT_COLORS[highlight.color] ?? highlight.color)
+        : (PDF_HIGHLIGHT_COLORS.yellow ?? '#f6c744');
+      for (const rect of range.getClientRects()) {
+        const box = document.createElement('div');
+        box.className = 'pdf-highlight';
+        box.style.left = `${rect.left - pageRect.left}px`;
+        box.style.top = `${rect.top - pageRect.top}px`;
+        box.style.width = `${rect.width}px`;
+        box.style.height = `${rect.height}px`;
+        box.style.setProperty('--pdf-highlight-color', color);
+        layer.append(box);
+      }
     }
   }
   private move(index: number, offset = 0): void {
@@ -356,6 +492,8 @@ export class PdfRenderer implements Renderer {
     this.task?.cancel();
     this.resize?.disconnect();
     this.scroller?.removeEventListener('scroll', this.scroll);
+    document.removeEventListener('selectionchange', this.onSelectionChange);
+    this.selectionCallbacks.clear();
     this.scroller?.remove();
     // Wait for cancellation before disposing the page/worker.
     void this.queue

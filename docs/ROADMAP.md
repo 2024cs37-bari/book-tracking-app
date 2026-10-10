@@ -117,10 +117,12 @@ view, and backup **restore** (the recovery counterpart to export: a snapshot `bu
 no outbox and refuses a newer schema version), and reader annotations — bookmarks, notes and
 **EPUB text-selection highlights** (drawn via foliate's overlayer and re-applied per section on
 navigation). The reader also turns pages with the arrow keys and exports a book's bookmarks,
-highlights and notes as a Markdown file. Still to come in Phase 2: **PDF highlights**, which need a
-selectable text layer over
-the canvas-only PDF renderer; the data model, reader UI and EPUB path are already in place, so this
-is a renderer addition gated by `PdfRenderer.supportsHighlights`.
+highlights and notes as a Markdown file. **PDF highlights** have since landed too: a selectable
+pdf.js text layer over the canvas (the single bounded-canvas invariant is preserved), with
+highlights anchored by a character range into the page text (`<page>:<yOffset>:<start>:<end>`,
+still the `pdf` locator kind) and redrawn as positioned boxes at any zoom. Both reading formats now
+have text-selection highlights, so Phase 2's reader-annotation surface is feature-complete; the next
+milestone is Phase 3 sync.
 
 Deliverables:
 

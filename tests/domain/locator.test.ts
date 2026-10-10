@@ -3,10 +3,12 @@ import {
   assertLocator,
   clampFraction,
   createCfiLocator,
+  createPdfHighlightLocator,
   createPdfLocator,
   describeLocator,
   formatPercent,
   isLocator,
+  parsePdfHighlight,
   parsePdfLocator,
 } from '~/domain/locator';
 import { titleFromFilename } from '~/domain/book';
@@ -34,6 +36,21 @@ describe('locators', () => {
     expect(parsePdfLocator('1:-5')).toBeNull();
     expect(() => createPdfLocator(-1, 0, 0)).toThrow(/non-negative/i);
     expect(() => createPdfLocator(1.5, 0, 0)).toThrow(/integer/i);
+  });
+
+  it('encodes and parses a PDF highlight range while staying navigable', () => {
+    const locator = createPdfHighlightLocator(4, 120, 10, 42, 0.3);
+    expect(locator.value).toBe('4:120:10:42');
+    expect(parsePdfLocator(locator.value)).toEqual({ page: 4, yOffset: 120 });
+    expect(parsePdfHighlight(locator.value)).toEqual({ page: 4, yOffset: 120, start: 10, end: 42 });
+  });
+
+  it('rejects malformed PDF highlight anchors and ranges', () => {
+    expect(parsePdfHighlight('4:120')).toBeNull();
+    expect(parsePdfHighlight('4:120:42:10')).toBeNull();
+    expect(parsePdfHighlight('4:120:10:10')).toBeNull();
+    expect(() => createPdfHighlightLocator(1, 0, 5, 5, 0)).toThrow(/start < end/i);
+    expect(() => createPdfHighlightLocator(-1, 0, 0, 1, 0)).toThrow(/non-negative/i);
   });
 
   it('accepts a well-formed locator and rejects malformed ones', () => {
