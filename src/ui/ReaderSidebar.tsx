@@ -26,14 +26,17 @@ export default function ReaderSidebar(props: {
 
   function startResize(event: PointerEvent): void {
     event.preventDefault();
+    const left = aside?.getBoundingClientRect().left ?? 0;
+    let latest = props.width;
+    // Commit the width only on release so the reading surface resizes (and the
+    // engine reflows/re-renders) once, not on every pointer frame of the drag.
     const move = (moveEvent: PointerEvent): void => {
-      if (aside === undefined) return;
-      const left = aside.getBoundingClientRect().left;
-      props.onResize(Math.max(220, Math.min(520, Math.round(moveEvent.clientX - left))));
+      latest = Math.max(220, Math.min(520, Math.round(moveEvent.clientX - left)));
     };
     const up = (): void => {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      props.onResize(latest);
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
