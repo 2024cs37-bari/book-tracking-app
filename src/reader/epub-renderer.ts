@@ -127,6 +127,8 @@ export class EpubRenderer implements Renderer {
   private overlayerModule?: OverlayerModule;
   private highlights: readonly Highlight[] = [];
   private currentFraction = 0;
+  /** Spine index of the section currently on screen, tracked from relocate. */
+  private visibleIndex = 0;
   private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
   private readonly selectionDocs = new WeakSet<Document>();
   private readonly pointers = new Map<number, { x: number; y: number }>();
@@ -135,9 +137,16 @@ export class EpubRenderer implements Renderer {
   private pinchFont = 0;
   private pinchTimer?: ReturnType<typeof setTimeout>;
   private readonly relocate = (event: Event) => {
-    const { cfi, fraction } = (event as CustomEvent<{ cfi: string; fraction: number }>).detail;
-    const locator = createCfiLocator(cfi, fraction);
+    const detail = (
+      event as CustomEvent<{
+        cfi: string;
+        fraction: number;
+        section?: { current?: number };
+      }>
+    ).detail;
+    const locator = createCfiLocator(detail.cfi, detail.fraction);
     this.currentFraction = locator.fraction;
+    if (typeof detail.section?.current === 'number') this.visibleIndex = detail.section.current;
     for (const callback of this.callbacks) callback(locator, locator.fraction);
   };
 
@@ -534,6 +543,31 @@ export class EpubRenderer implements Renderer {
       }
     }
   }
+  async getVisibleText(): Promise<string> {
+    const view = this.view;
+    const book = this.book;
+    if (!view || !book || this.dead) return '';
+    let index = this.visibleIndex;
+    // Prefer the live rendered section: its index is authoritative and its
+    // document is exactly what the reader shows.
+    try {
+      const live = view.renderer.getContents?.()[0];
+      if (live) {
+        index = live.index;
+        if (live.doc) return normalizeVisibleText(live.doc.body?.textContent ?? '');
+      }
+    } catch {
+      // getContents may be unavailable mid-teardown; fall back to re-parsing.
+    }
+    const section = book.sections[index];
+    if (!section) return '';
+    try {
+      const doc = await section.createDocument();
+      return normalizeVisibleText(doc.body?.textContent ?? doc.documentElement?.textContent ?? '');
+    } catch {
+      return '';
+    }
+  }
   applySettings(settings: ReaderSettings): void {
     this.settings = settings;
     const colors = {
@@ -593,4 +627,9 @@ export class EpubRenderer implements Renderer {
 /** Clamps a pinch-derived font size to the supported reader range. */
 function clampFont(px: number): number {
   return Math.min(EPUB_MAX_FONT_PX, Math.max(EPUB_MIN_FONT_PX, px));
+}
+
+/** Collapses a section's text to single spaces for narration/extraction. */
+function normalizeVisibleText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }

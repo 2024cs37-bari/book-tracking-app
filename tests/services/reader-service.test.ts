@@ -43,6 +43,9 @@ class TestRenderer implements Renderer {
   async renderThumbnail() {
     return null;
   }
+  async getVisibleText() {
+    return '';
+  }
   destroy = vi.fn();
   onRelocate(callback: (locator: Locator, fraction: number) => void) {
     this.callback = callback;
