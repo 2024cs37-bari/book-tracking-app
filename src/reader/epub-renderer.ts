@@ -2,11 +2,26 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { assertLocator, createCfiLocator, type Locator } from '~/domain/locator';
 import {
   DEFAULT_READER_SETTINGS,
+  type Highlight,
   type ReaderSettings,
   type Renderer,
   type SearchHit,
+  type SelectionInfo,
   type TocItem,
 } from './renderer';
+
+type OverlayerDraw = (rects: unknown, options?: Record<string, unknown>) => Element;
+interface OverlayerModule {
+  Overlayer: { highlight: OverlayerDraw };
+}
+
+/** Overlay colour tokens map to concrete CSS colours; the overlay opacity is low. */
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  yellow: '#f6c744',
+  green: '#5bd08a',
+  blue: '#5aa9f6',
+  pink: '#f67ab5',
+};
 
 interface EpubBook {
   transformTarget: EventTarget;
@@ -22,6 +37,8 @@ interface FoliateView extends HTMLElement {
     setStyles?(css: string): void;
     setAttribute(name: string, value: string): void;
     goTo(target: { index: number; anchor?: unknown }): Promise<void>;
+    getContents(): { index: number; doc?: Document; overlayer?: unknown }[];
+    addEventListener(type: string, listener: (event: Event) => void): void;
   };
   open(book: EpubBook): Promise<void>;
   close(): void;
@@ -33,6 +50,8 @@ interface FoliateView extends HTMLElement {
   next(): Promise<void>;
   search(opts: { query: string; index?: number }): AsyncIterable<FoliateSearchResult>;
   clearSearch(): void;
+  addAnnotation(annotation: { value: string; color?: string }): Promise<unknown>;
+  deleteAnnotation(annotation: { value: string }): Promise<unknown>;
 }
 
 type FoliateSearchExcerpt = { pre: string; match: string; post: string };
@@ -98,10 +117,42 @@ export class EpubRenderer implements Renderer {
   private toc?: Promise<TocItem[]>;
   private searchToken = 0;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
+  readonly supportsHighlights = true;
+  private overlayerModule?: OverlayerModule;
+  private highlights: readonly Highlight[] = [];
+  private currentFraction = 0;
+  private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
+  private readonly selectionDocs = new WeakSet<Document>();
   private readonly relocate = (event: Event) => {
     const { cfi, fraction } = (event as CustomEvent<{ cfi: string; fraction: number }>).detail;
     const locator = createCfiLocator(cfi, fraction);
+    this.currentFraction = locator.fraction;
     for (const callback of this.callbacks) callback(locator, locator.fraction);
+  };
+
+  // A new overlay is created when a section renders; the overlayer is attached
+  // right after this event, so re-draw highlights and wire selection on the
+  // next microtask when getContents() can see them.
+  private readonly handleCreateOverlay = (event: Event) => {
+    const { index } = (event as CustomEvent<{ index: number }>).detail;
+    queueMicrotask(() => {
+      this.reapplyHighlights();
+      const doc = this.view?.renderer.getContents().find((c) => c.index === index)?.doc;
+      if (doc) this.attachSelection(doc, index);
+    });
+  };
+
+  private readonly handleDrawAnnotation = (event: Event) => {
+    const detail = (
+      event as CustomEvent<{
+        draw: (func: OverlayerDraw, options: Record<string, unknown>) => void;
+        annotation: { color?: string };
+      }>
+    ).detail;
+    const highlight = this.overlayerModule?.Overlayer.highlight;
+    if (!highlight) return;
+    const color = HIGHLIGHT_COLORS[detail.annotation.color ?? ''] ?? HIGHLIGHT_COLORS.yellow;
+    detail.draw(highlight, { color });
   };
 
   mount(host: HTMLElement): void {
@@ -117,7 +168,12 @@ export class EpubRenderer implements Renderer {
 
   private async openBook(file: Blob, startAt?: Locator): Promise<void> {
     if (!this.host || this.dead) throw new Error('Reader is not mounted.');
-    const [{ EPUB }] = await Promise.all([this.loadModule('epub'), this.loadModule('view')]);
+    const [{ EPUB }, , overlayerModule] = await Promise.all([
+      this.loadModule('epub'),
+      this.loadModule('view'),
+      this.loadModule('overlayer'),
+    ]);
+    this.overlayerModule = overlayerModule as unknown as OverlayerModule;
     if (this.dead) return;
     // A bounded archive loader avoids upstream's ZIP worker/WASM dependencies.
     if (file.size > 256 * 1024 * 1024) throw new Error('EPUB exceeds the 256 MiB reader limit.');
@@ -157,6 +213,8 @@ export class EpubRenderer implements Renderer {
     this.view = view;
     view.style.cssText = 'display:block;width:100%;height:100%';
     view.addEventListener('relocate', this.relocate);
+    view.addEventListener('draw-annotation', this.handleDrawAnnotation);
+    view.addEventListener('create-overlay', this.handleCreateOverlay);
     this.host.append(view);
     try {
       await view.open(book);
@@ -287,6 +345,67 @@ export class EpubRenderer implements Renderer {
     this.callbacks.add(callback);
     return () => this.callbacks.delete(callback);
   }
+  onSelection(callback: (selection: SelectionInfo | null) => void): () => void {
+    this.selectionCallbacks.add(callback);
+    return () => this.selectionCallbacks.delete(callback);
+  }
+  applyHighlights(highlights: readonly Highlight[]): void {
+    const previous = this.highlights;
+    this.highlights = highlights;
+    const view = this.view;
+    if (!view) return;
+    const next = new Set(highlights.map((item) => item.locator.value));
+    for (const stale of previous) {
+      if (!next.has(stale.locator.value)) {
+        void view.deleteAnnotation({ value: stale.locator.value }).catch(() => {});
+      }
+    }
+    this.reapplyHighlights();
+  }
+  private reapplyHighlights(): void {
+    const view = this.view;
+    if (!view) return;
+    for (const highlight of this.highlights) {
+      // addAnnotation only draws where the target section is live; it removes
+      // any same-value overlay first, so re-applying on each section load is
+      // idempotent rather than duplicating overlays.
+      void view
+        .addAnnotation({ value: highlight.locator.value, color: highlight.color })
+        .catch(() => {});
+    }
+  }
+  private attachSelection(doc: Document, index: number): void {
+    if (this.selectionDocs.has(doc)) return;
+    this.selectionDocs.add(doc);
+    doc.addEventListener('selectionchange', () => {
+      const selection = doc.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        this.emitSelection(null);
+        return;
+      }
+      const text = selection.toString().replace(/\s+/g, ' ').trim();
+      if (text.length === 0) {
+        this.emitSelection(null);
+        return;
+      }
+      let locator: Locator;
+      try {
+        locator = createCfiLocator(
+          this.view!.getCFI(index, selection.getRangeAt(0)),
+          this.currentFraction,
+        );
+      } catch {
+        // A selection whose CFI is unusable (e.g. past the length cap) cannot
+        // be anchored; treat it as no selectable target.
+        this.emitSelection(null);
+        return;
+      }
+      this.emitSelection({ locator, excerpt: text.slice(0, 300) });
+    });
+  }
+  private emitSelection(selection: SelectionInfo | null): void {
+    for (const callback of this.selectionCallbacks) callback(selection);
+  }
   async *search(query: string, signal?: AbortSignal): AsyncGenerator<SearchHit> {
     const view = this.view;
     const trimmed = query.trim();
@@ -353,7 +472,10 @@ export class EpubRenderer implements Renderer {
   destroy(): void {
     if (this.dead) return;
     this.dead = true;
+    this.selectionCallbacks.clear();
     this.view?.removeEventListener('relocate', this.relocate);
+    this.view?.removeEventListener('draw-annotation', this.handleDrawAnnotation);
+    this.view?.removeEventListener('create-overlay', this.handleCreateOverlay);
     if (this.view) this.closeView(this.view);
     this.view?.remove();
     const view = this.view;

@@ -642,6 +642,17 @@ input[type='file'] {
 }
 .reader-bookmarks-actions {
   padding: var(--space-2) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.reader-annotation-kind {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent, #5aa9f6);
 }
 .reader-bookmark-list {
   list-style: none;

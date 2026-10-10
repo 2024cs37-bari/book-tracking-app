@@ -3,7 +3,13 @@ import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { useApp } from '~/app/context';
 import type { Locator } from '~/domain/locator';
 import type { Annotation } from '~/domain/annotation';
-import type { ReaderSettings, ReaderTheme, SearchHit, TocItem } from '~/reader/renderer';
+import type {
+  ReaderSettings,
+  ReaderTheme,
+  SearchHit,
+  SelectionInfo,
+  TocItem,
+} from '~/reader/renderer';
 import type { ReaderSession } from '~/services/reader-service';
 import ReaderContents from './ReaderContents';
 
@@ -27,6 +33,8 @@ export default function ReaderView() {
   const [searching, setSearching] = createSignal(false);
   const [searchStatus, setSearchStatus] = createSignal('');
   const [annotations, setAnnotations] = createSignal<readonly Annotation[]>([]);
+  const [selection, setSelection] = createSignal<SelectionInfo | null>(null);
+  const [canHighlight, setCanHighlight] = createSignal(false);
   let host!: HTMLDivElement;
   let session: ReaderSession | undefined;
   let searchController: AbortController | undefined;
@@ -45,9 +53,40 @@ export default function ReaderView() {
 
   async function reloadAnnotations(bookId: string): Promise<void> {
     try {
-      setAnnotations(await app.annotations.listByBook(bookId));
+      const list = await app.annotations.listByBook(bookId);
+      setAnnotations(list);
+      // Keep the renderer's drawn overlays in step with stored highlights; it
+      // re-draws them per section as the reader navigates.
+      session?.renderer.applyHighlights(
+        list
+          .filter((annotation) => annotation.kind === 'highlight')
+          .map((annotation) => ({
+            id: annotation.id,
+            locator: annotation.locator,
+            color: annotation.color,
+          })),
+      );
     } catch {
       // Annotations are optional; a load failure must not break reading.
+    }
+  }
+
+  async function addHighlight(): Promise<void> {
+    const selected = selection();
+    if (selected === null) return;
+    try {
+      await app.annotations.create({
+        bookId: params.id ?? '',
+        kind: 'highlight',
+        locator: selected.locator,
+        textExcerpt: selected.excerpt,
+        color: 'yellow',
+      });
+      void app.persistClockState();
+      setSelection(null);
+      await reloadAnnotations(params.id ?? '');
+    } catch (error) {
+      setMessage(`Could not add highlight: ${String(error)}`);
     }
   }
 
@@ -144,8 +183,11 @@ export default function ReaderView() {
     setHits([]);
     setSearchStatus('');
     setAnnotations([]);
+    setSelection(null);
+    setCanHighlight(false);
     currentLocator = undefined;
     stopSearch();
+    let offSelection: (() => void) | undefined;
 
     // One reading session per open span. Idempotent: recording clears the
     // start marker so pagehide + cleanup cannot double-count the same span.
@@ -195,6 +237,8 @@ export default function ReaderView() {
         setReady(true);
         openedAt = Date.now();
         startFraction = fraction();
+        setCanHighlight(current.renderer.supportsHighlights);
+        offSelection = current.renderer.onSelection(setSelection);
         void reloadAnnotations(id);
         // Contents are optional: their parsing must not delay basic reading.
         try {
@@ -212,6 +256,7 @@ export default function ReaderView() {
     onCleanup(() => {
       disposed = true;
       session = undefined;
+      offSelection?.();
       stopSearch();
       recordSession();
       host.removeEventListener('reader-message', readerMessage);
@@ -356,7 +401,24 @@ export default function ReaderView() {
             >
               Bookmark this position
             </button>
+            <Show when={canHighlight()}>
+              <button
+                type="button"
+                class="button"
+                disabled={selection() === null}
+                onClick={() => void addHighlight()}
+              >
+                Highlight selection
+              </button>
+            </Show>
           </div>
+          <Show when={canHighlight()}>
+            <p class="note">
+              {selection() === null
+                ? 'Select text in the book to highlight it.'
+                : 'Text selected — use “Highlight selection” to keep it.'}
+            </p>
+          </Show>
           <Show
             when={annotations().length > 0}
             fallback={
@@ -373,6 +435,13 @@ export default function ReaderView() {
                         class="reader-bookmark-go"
                         onClick={() => session?.renderer.goTo(annotation.locator)}
                       >
+                        <span class="reader-annotation-kind">
+                          {annotation.kind === 'highlight'
+                            ? 'Highlight'
+                            : annotation.kind === 'note'
+                              ? 'Note'
+                              : 'Bookmark'}
+                        </span>{' '}
                         {Math.round(annotation.locator.fraction * 100)}%
                         <Show when={annotation.textExcerpt}>
                           {(excerpt) => <span class="reader-bookmark-excerpt"> — {excerpt()}</span>}
@@ -381,7 +450,7 @@ export default function ReaderView() {
                       <button
                         type="button"
                         class="button button-danger"
-                        aria-label="Delete bookmark"
+                        aria-label={`Delete ${annotation.kind}`}
                         onClick={() => void removeAnnotation(annotation.id)}
                       >
                         Delete

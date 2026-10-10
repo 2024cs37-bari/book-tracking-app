@@ -41,6 +41,15 @@ export class PdfRenderer implements Renderer {
   private readonly scroll = () => this.emit();
   private resize?: ResizeObserver;
 
+  // Highlighting needs a selectable text layer, which the canvas-only PDF
+  // renderer does not yet have; the capability is reported false so the reader
+  // UI hides the affordance rather than offering a dead control.
+  readonly supportsHighlights = false;
+  onSelection(): () => void {
+    return () => {};
+  }
+  applyHighlights(): void {}
+
   mount(host: HTMLElement): void {
     this.host = host;
     const scroller = document.createElement('div');

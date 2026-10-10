@@ -114,8 +114,11 @@ reading-session recording with derived statistics, and export extended to every 
 has since landed too: shelf/tag management (in Settings) and tag/shelf membership plus manual
 metadata editing on the book page, a reading-status + shelf/tag library filter, a reading-stats
 view, and backup **restore** (the recovery counterpart to export: a snapshot `bulkPut` that writes
-no outbox and refuses a newer schema version). Still to come in Phase 2: bookmarks/annotations
-surfaces in the reader itself.
+no outbox and refuses a newer schema version), and reader annotations — bookmarks, notes and
+**EPUB text-selection highlights** (drawn via foliate's overlayer and re-applied per section on
+navigation). Still to come in Phase 2: **PDF highlights**, which need a selectable text layer over
+the canvas-only PDF renderer; the data model, reader UI and EPUB path are already in place, so this
+is a renderer addition gated by `PdfRenderer.supportsHighlights`.
 
 Deliverables:
 

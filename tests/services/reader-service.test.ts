@@ -31,6 +31,11 @@ class TestRenderer implements Renderer {
     };
   }
   applySettings() {}
+  readonly supportsHighlights = false;
+  onSelection() {
+    return () => {};
+  }
+  applyHighlights() {}
   destroy = vi.fn();
   onRelocate(callback: (locator: Locator, fraction: number) => void) {
     this.callback = callback;

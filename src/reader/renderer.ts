@@ -13,6 +13,22 @@ export interface SearchHit {
   readonly excerpt: string;
 }
 
+/** A persisted highlight to (re)draw as an overlay over its anchored range. */
+export interface Highlight {
+  readonly id: string;
+  readonly locator: Locator;
+  /** Colour token, e.g. "yellow"; the renderer maps it to an overlay colour. */
+  readonly color?: string;
+}
+
+/** A live text selection the user could turn into a highlight. */
+export interface SelectionInfo {
+  /** Anchor for the selected range (a range CFI for EPUB). */
+  readonly locator: Locator;
+  /** The selected text, trimmed; empty-selection events are not emitted. */
+  readonly excerpt: string;
+}
+
 export type ReaderTheme = 'light' | 'sepia' | 'dark';
 
 export interface ReaderSettings {
@@ -47,6 +63,12 @@ export interface Renderer {
   getToc(): Promise<TocItem[]>;
   onRelocate(callback: (locator: Locator, fraction: number) => void): Unsubscribe;
   search(query: string, signal?: AbortSignal): AsyncIterable<SearchHit>;
+  /** True when this engine can capture selections and draw highlight overlays. */
+  readonly supportsHighlights: boolean;
+  /** Notifies with the current selection, or null when it is cleared. */
+  onSelection(callback: (selection: SelectionInfo | null) => void): Unsubscribe;
+  /** Draws the given highlights, replacing any previously drawn set. */
+  applyHighlights(highlights: readonly Highlight[]): void;
   applySettings(settings: ReaderSettings): void;
   destroy(): void;
 }
