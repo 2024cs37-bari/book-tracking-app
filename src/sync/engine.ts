@@ -4,7 +4,7 @@ import type { ChangeRepository } from '~/data/repositories/change-repository';
 import type { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
 import { applyPullPage } from './apply';
 import { buildPushRequest } from './protocol';
-import type { SyncTransport } from './transport';
+import { isCursorExpiredError, type SyncTransport } from './transport';
 
 export interface SyncResult {
   /** Outbox rows the server acknowledged this cycle. */
@@ -13,6 +13,12 @@ export interface SyncResult {
   readonly applied: number;
   /** True when the pull caught up to the server (no more pages). */
   readonly caughtUp: boolean;
+  /**
+   * True when the server reported the held cursor expired (SYNC.md §7) and this
+   * cycle re-bootstrapped from zero. The caller should not treat a bootstrapped
+   * cycle as proof the prior local state was complete.
+   */
+  readonly bootstrapped: boolean;
 }
 
 export interface SyncEngineOptions {
@@ -62,9 +68,9 @@ export class SyncEngine {
 
   private async run(): Promise<SyncResult> {
     const pushed = await this.pushOutbox();
-    const { applied, caughtUp } = await this.pullAndApply();
+    const { applied, caughtUp, bootstrapped } = await this.pullAndApply();
     if (this.options.persistClock) await this.options.persistClock();
-    return { pushed, applied, caughtUp };
+    return { pushed, applied, caughtUp, bootstrapped };
   }
 
   private async pushOutbox(): Promise<number> {
@@ -90,7 +96,32 @@ export class SyncEngine {
     return pushed;
   }
 
-  private async pullAndApply(): Promise<{ applied: number; caughtUp: boolean }> {
+  private async pullAndApply(): Promise<{
+    applied: number;
+    caughtUp: boolean;
+    bootstrapped: boolean;
+  }> {
+    let bootstrapped = false;
+    for (;;) {
+      try {
+        const result = await this.pullPages();
+        return { ...result, bootstrapped };
+      } catch (error) {
+        // The server dropped the sequence this device holds (its history was
+        // compacted past our cursor). Discard the cursor and re-pull the whole
+        // history from zero; apply is idempotent LWW, so replay is safe. Guard
+        // against a second expiry so a misbehaving server cannot spin us.
+        if (!bootstrapped && isCursorExpiredError(error)) {
+          await this.options.syncMeta.setPullCursor(0);
+          bootstrapped = true;
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  private async pullPages(): Promise<{ applied: number; caughtUp: boolean }> {
     let applied = 0;
     for (let page = 0; page < this.options.maxPages; page += 1) {
       const since = await this.options.syncMeta.getPullCursor();

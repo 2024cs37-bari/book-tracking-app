@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, type TestHarness } from '../support/harness';
 import { buildEpubFixture, toBlob } from '../support/fixtures';
 import { SyncEngine } from '~/sync/engine';
+import { SyncHttpError } from '~/sync/http-transport';
 import type { SyncTransport } from '~/sync/transport';
 import type { PullResponse, PushRequest, PushResponse } from '~/sync/protocol';
 
@@ -144,6 +145,47 @@ describe('SyncEngine', () => {
     server.failPull = true;
     await expect(engineFor(a, transportFor(server)).sync()).rejects.toThrow(/pull failed/);
     expect(await a.syncMeta.getPullCursor()).toBe(0);
+  });
+
+  it('re-bootstraps from zero when the server reports the cursor expired (§7)', async () => {
+    const b = await createHarness();
+    try {
+      const bookId = await seedBook(a, 'Compacted');
+      await engineFor(a, transportFor(server)).sync();
+
+      // B catches up once, so it holds a non-zero cursor.
+      await engineFor(b, transportFor(server)).sync();
+      expect(await b.syncMeta.getPullCursor()).toBeGreaterThan(0);
+      expect((await b.db.books.get(bookId))?.title).toBe('Compacted');
+
+      // The server compacts past B's cursor: the next pull with since>0 reports
+      // the cursor expired exactly once; after B resets to zero it serves the
+      // whole history again.
+      const base = transportFor(server);
+      let expired = false;
+      const flaky: SyncTransport = {
+        push: base.push,
+        pull: (since, limit) => {
+          if (!expired && since > 0) {
+            expired = true;
+            return Promise.reject(
+              new SyncHttpError('cursor expired', { retryable: false, cursorExpired: true }),
+            );
+          }
+          return base.pull(since, limit);
+        },
+      };
+
+      const result = await engineFor(b, flaky).sync();
+      expect(result.bootstrapped).toBe(true);
+      expect(result.caughtUp).toBe(true);
+      // Replay from zero is idempotent: B still has exactly the server's data
+      // and its cursor is caught up again.
+      expect((await b.db.books.get(bookId))?.title).toBe('Compacted');
+      expect(await b.syncMeta.getPullCursor()).toBe(server.log.length);
+    } finally {
+      await b.close();
+    }
   });
 
   it('runs single-flight: concurrent calls join one cycle', async () => {

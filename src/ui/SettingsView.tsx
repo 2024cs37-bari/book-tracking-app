@@ -162,7 +162,10 @@ export default function SettingsView() {
       const result = await app.sync.sync();
       setMessage(
         `Synced: pushed ${result.pushed} change${result.pushed === 1 ? '' : 's'}, applied ` +
-          `${result.applied} from other devices${result.caughtUp ? ', now up to date' : ', more to pull'}.`,
+          `${result.applied} from other devices${result.caughtUp ? ', now up to date' : ', more to pull'}.` +
+          (result.bootstrapped
+            ? ' (re-synced from scratch after the server history was compacted.)'
+            : ''),
       );
       await refetch();
     } catch (error) {
