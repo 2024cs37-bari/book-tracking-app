@@ -1,0 +1,23 @@
+name = "book-reader-sync"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# The authoritative change log and accepted rows (docs/DATA-MODEL.md §1).
+[[d1_databases]]
+binding = "DB"
+database_name = "book_reader_sync"
+# database_id is filled in by `wrangler d1 create book_reader_sync` before deploy.
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+# Cloudflare Access application audience (AUD) tag and team domain. Set real
+# values with `wrangler secret`/dashboard vars before deploy; see docs/BACKEND.md.
+ACCESS_AUD = ""
+ACCESS_TEAM_DOMAIN = ""
+
+# Private R2 bucket for original files is a Phase 4 concern; see docs/STORAGE.md.
+# [[r2_buckets]]
+# binding = "FILES"
+# bucket_name = "book-reader-files"

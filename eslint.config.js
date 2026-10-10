@@ -12,6 +12,9 @@ export default tseslint.config(
       'vendor/**',
       'test-results/**',
       'playwright-report/**',
+      // The sync server is a separate Worker workspace with its own tsconfig
+      // and gate (see server/); the client ESLint config does not apply to it.
+      'server/**',
     ],
   },
   js.configs.recommended,

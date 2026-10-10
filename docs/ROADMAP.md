@@ -144,9 +144,13 @@ dedupe, tombstones) that applies a page and advances the cursor in one transacti
 outbox echo, a single-flight `SyncEngine` cycle, and the real `createHttpSyncTransport` (Access-
 credentialed JSON with retryable/auth/cursor-expiry error classification). A two-device fake-server
 round-trip proves convergence; idempotent push, partial-batch acknowledgement, failed-pull cursor
-safety and transport error handling are covered too. Remaining: the Worker/D1/R2/Access **server**
-the transport points at, wiring the engine into the app once a server URL is configured, progress-
-divergence prompting, per-field book-metadata policy, and bootstrap/cursor-expiry recovery.
+safety and transport error handling are covered too. The **Worker server** now exists in `server/`
+(Hono + D1 + Access): a durable, idempotent, sequenced change log with push/pull endpoints, per-user
+scoping from the verified Access identity, request validation, pure logic tested against an
+in-memory store, and a clean `wrangler` bundle. Remaining: provision + **deploy** it
+(`wrangler d1 create`, Access policy/vars — needs the account), wire `SyncEngine` +
+`createHttpSyncTransport` into `AppServices` once the URL is live, progress-divergence prompting,
+per-field book-metadata policy, and bootstrap/cursor-expiry recovery.
 
 Deliverables:
 

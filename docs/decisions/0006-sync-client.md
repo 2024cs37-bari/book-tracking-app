@@ -54,9 +54,12 @@ outbox, so a remote change never echoes back as a local mutation.
   (`http-transport.ts`, `createHttpSyncTransport`) is also in place and tested with a stubbed
   `fetch`: Access-credentialed JSON over HTTPS, response validation, and error classification
   (retryable vs auth-expiry vs cursor-expiry vs permanent, honouring `Retry-After`).
-- Not yet built: the Worker/D1/R2/Access **server** the transport points at; file transfer;
-  progress-divergence prompting (SYNC.md §6 — baseline is LWW); per-field book-metadata policy;
-  snapshot/bootstrap and cursor-expiry handling beyond surfacing the error (SYNC.md §7). The
-  thresholds and limits in SYNC.md §11 remain open and must come from measured service behaviour.
-- The engine is not wired into the running app yet, because there is no server to point it at;
-  construction waits for a configured server URL.
+- Not yet built: **deploying** the server (it exists in `server/` — a Hono + D1 + Access change-log
+  Worker with pure logic tested against an in-memory store and a clean `wrangler` bundle — but
+  provisioning D1 and an Access policy needs the account); wiring the engine into the running app
+  once the server URL is live; file transfer; progress-divergence prompting (SYNC.md §6 — baseline
+  is LWW); per-field book-metadata policy; snapshot/bootstrap and cursor-expiry handling beyond
+  surfacing the error (SYNC.md §7). The thresholds and limits in SYNC.md §11 remain open and must
+  come from measured service behaviour.
+- The engine is not wired into the running app yet, because the server is not deployed; construction
+  waits for a live server URL.
