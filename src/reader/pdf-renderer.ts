@@ -223,7 +223,8 @@ export class PdfRenderer implements Renderer {
         const natural = page.getViewport({ scale: 1 });
         this.height = natural.height;
         const width = Math.max(200, (this.host?.clientWidth ?? 800) - 2 * this.settings.marginPx);
-        const requestedScale = ((width / natural.width) * this.settings.fontSizePx * this.zoom) / 18;
+        const requestedScale =
+          ((width / natural.width) * this.settings.fontSizePx * this.zoom) / 18;
         const pixelRatio = Math.min(globalThis.devicePixelRatio || 1, 2);
         this.scale = Math.min(
           requestedScale,
