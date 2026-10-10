@@ -1152,3 +1152,92 @@ input[type='file'] {
   gap: 0.3rem;
   font-size: 0.85rem;
 }
+
+/* In-text dictionary lookup popup (positioned over a selected word). */
+.word-lookup {
+  position: fixed;
+  z-index: 1200;
+  width: min(22rem, calc(100vw - 2 * var(--space-4)));
+  max-height: min(60vh, 26rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+  color: var(--text);
+  overflow: hidden;
+}
+.word-lookup-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.word-lookup-titles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+.word-lookup-word {
+  font-weight: 600;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.word-lookup-phonetic {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.word-lookup-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.word-lookup-body {
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+.word-lookup-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.word-lookup-meaning + .word-lookup-meaning {
+  margin-top: var(--space-3);
+}
+.word-lookup-pos {
+  margin: 0 0 var(--space-2);
+  font-size: 0.8rem;
+  font-style: italic;
+  font-weight: 600;
+  color: var(--accent);
+}
+.word-lookup-defs {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.word-lookup-def {
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+.word-lookup-def-text {
+  display: block;
+}
+.word-lookup-example {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-style: italic;
+}
