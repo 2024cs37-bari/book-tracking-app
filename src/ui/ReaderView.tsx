@@ -11,6 +11,7 @@ import type {
   TocItem,
 } from '~/reader/renderer';
 import type { ReaderSession } from '~/services/reader-service';
+import { buildNotesMarkdown, notesFilename } from '~/services/notes-markdown';
 import ReaderContents from './ReaderContents';
 
 const MAX_SEARCH_HITS = 200;
@@ -113,6 +114,19 @@ export default function ReaderView() {
     } catch (error) {
       setMessage(`Could not remove bookmark: ${String(error)}`);
     }
+  }
+
+  function exportNotes(): void {
+    const markdown = buildNotesMarkdown(title(), annotations(), Date.now());
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = notesFilename(title());
+    anchor.rel = 'noopener';
+    anchor.click();
+    // Keep the blob alive until the download starts; see ExportService.download.
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
 
   async function saveNote(id: string, note: string): Promise<void> {
@@ -431,6 +445,14 @@ export default function ReaderView() {
                 Highlight selection
               </button>
             </Show>
+            <button
+              type="button"
+              class="button"
+              disabled={annotations().length === 0}
+              onClick={() => exportNotes()}
+            >
+              Export notes
+            </button>
           </div>
           <Show when={canHighlight()}>
             <p class="note">
