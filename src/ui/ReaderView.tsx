@@ -216,6 +216,25 @@ export default function ReaderView() {
       if (document.visibilityState === 'hidden') flush();
     };
     document.addEventListener('visibilitychange', visibility);
+    // Shell-level page turns. Keydown inside the book iframe stays with the
+    // engine (which has its own keys), so this only fires when focus is on the
+    // reader chrome, and never while typing in the search box.
+    const onKey = (event: KeyboardEvent) => {
+      if (!ready() || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        session?.renderer.prev();
+        event.preventDefault();
+      } else if (event.key === 'ArrowRight') {
+        session?.renderer.next();
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
     void app.reader
       .prepare(id, setMessage)
       .then(async (prepared) => {
@@ -262,6 +281,7 @@ export default function ReaderView() {
       host.removeEventListener('reader-message', readerMessage);
       window.removeEventListener('pagehide', flush);
       document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('keydown', onKey);
       void current?.close();
     });
   });
