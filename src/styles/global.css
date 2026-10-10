@@ -1013,3 +1013,51 @@ input[type='file'] {
   color: var(--text-muted);
   flex: 0 0 auto;
 }
+
+/* Toasts — transient, auto-dismissing notifications. */
+.toaster {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: min(90vw, 24rem);
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+}
+.toast-text {
+  flex: 1;
+  font-size: 0.9rem;
+}
+.toast-error {
+  border-color: var(--danger, #d9534f);
+  border-left: 4px solid var(--danger, #d9534f);
+}
+.toast-success {
+  border-left: 4px solid var(--accent, #5aa9f6);
+}
+.toast-info {
+  border-left: 4px solid var(--text-muted, #888);
+}
+.toast-dismiss {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+}

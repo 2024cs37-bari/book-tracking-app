@@ -22,6 +22,7 @@ import type {
 } from '~/reader/renderer';
 import type { ReaderSession } from '~/services/reader-service';
 import { buildNotesMarkdown, notesFilename } from '~/services/notes-markdown';
+import { showToast } from './toast';
 import ReaderContents from './ReaderContents';
 import ReaderSidebar, { type SidebarTab } from './ReaderSidebar';
 import ReaderPages from './ReaderPages';
@@ -121,7 +122,7 @@ export default function ReaderView() {
     try {
       app.reader.saveSettings(next);
     } catch (error) {
-      setMessage(`Settings could not be saved: ${String(error)}`);
+      showToast(`Settings could not be saved: ${String(error)}`, 'error');
     }
   }
 
@@ -160,14 +161,14 @@ export default function ReaderView() {
       setSelection(null);
       await reloadAnnotations(params.id ?? '');
     } catch (error) {
-      setMessage(`Could not add highlight: ${String(error)}`);
+      showToast(`Could not add highlight: ${String(error)}`, 'error');
     }
   }
 
   async function addBookmark(): Promise<void> {
     const locator = currentLocator;
     if (locator === undefined) {
-      setMessage('Position is not available yet; try again once the page settles.');
+      showToast('Position is not available yet; try again once the page settles.', 'info');
       return;
     }
     try {
@@ -175,7 +176,7 @@ export default function ReaderView() {
       void app.persistClockState();
       await reloadAnnotations(params.id ?? '');
     } catch (error) {
-      setMessage(`Could not add bookmark: ${String(error)}`);
+      showToast(`Could not add bookmark: ${String(error)}`, 'error');
     }
   }
 
@@ -185,7 +186,7 @@ export default function ReaderView() {
       void app.persistClockState();
       await reloadAnnotations(params.id ?? '');
     } catch (error) {
-      setMessage(`Could not remove bookmark: ${String(error)}`);
+      showToast(`Could not remove bookmark: ${String(error)}`, 'error');
     }
   }
 
@@ -208,7 +209,7 @@ export default function ReaderView() {
       void app.persistClockState();
       await reloadAnnotations(params.id ?? '');
     } catch (error) {
-      setMessage(`Could not save note: ${String(error)}`);
+      showToast(`Could not save note: ${String(error)}`, 'error');
     }
   }
 

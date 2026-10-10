@@ -1,6 +1,7 @@
 import { A, useLocation } from '@solidjs/router';
 import { Show, type ParentProps } from 'solid-js';
 import { useApp } from '~/app/context';
+import { Toaster } from './toast';
 
 export default function Layout(props: ParentProps) {
   const app = useApp();
@@ -47,6 +48,7 @@ export default function Layout(props: ParentProps) {
           configured.
         </p>
       </footer>
+      <Toaster />
     </div>
   );
 }

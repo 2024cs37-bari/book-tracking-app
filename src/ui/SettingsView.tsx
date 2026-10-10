@@ -4,6 +4,7 @@ import { SYNC_META_KEYS } from '~/data/repositories/sync-meta-repository';
 import { inspectStorage, removeStoredFiles, type OrphanReport } from '~/storage/maintenance';
 import type { Shelf, Tag } from '~/domain/collections';
 import { useApp } from '~/app/context';
+import { showToast } from './toast';
 
 interface Diagnostics {
   readonly lifecycle: Record<string, number>;
@@ -25,7 +26,11 @@ interface Diagnostics {
 export default function SettingsView() {
   const app = useApp();
   const [busy, setBusy] = createSignal(false);
-  const [message, setMessage] = createSignal<string | null>(null);
+  // Status/error notifications surface as auto-dismissing toasts rather than a
+  // lingering inline line; errors stay until the user dismisses them.
+  function setMessage(text: string | null, kind: 'error' | 'success' = 'success'): void {
+    if (text !== null) showToast(text, kind);
+  }
 
   const [diagnostics, { refetch }] = createResource<Diagnostics, number>(
     () => Date.now(),
@@ -77,7 +82,10 @@ export default function SettingsView() {
         `Exported ${summary.bookCount} books and ${summary.progressCount} reading-state rows to ${summary.filename}.`,
       );
     } catch (error) {
-      setMessage(`Export failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      setMessage(
+        `Export failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        'error',
+      );
     } finally {
       setBusy(false);
     }
@@ -106,7 +114,10 @@ export default function SettingsView() {
       );
       await refetch();
     } catch (error) {
-      setMessage(`Restore failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      setMessage(
+        `Restore failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        'error',
+      );
     } finally {
       setBusy(false);
     }
@@ -134,7 +145,10 @@ export default function SettingsView() {
       );
       await refetch();
     } catch (error) {
-      setMessage(`Sync failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      setMessage(
+        `Sync failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        'error',
+      );
     } finally {
       setBusy(false);
     }
@@ -154,7 +168,7 @@ export default function SettingsView() {
       setMessage(`Removed ${removed} unreferenced file(s).`);
       await refetch();
     } catch (error) {
-      setMessage(`Could not remove unreferenced files: ${String(error)}`);
+      setMessage(`Could not remove unreferenced files: ${String(error)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -169,7 +183,7 @@ export default function SettingsView() {
       void app.persistClockState();
       await refetch();
     } catch (error) {
-      setMessage(`Could not rename shelf: ${String(error)}`);
+      setMessage(`Could not rename shelf: ${String(error)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -183,7 +197,7 @@ export default function SettingsView() {
       void app.persistClockState();
       await refetch();
     } catch (error) {
-      setMessage(`Could not delete the shelf: ${String(error)}`);
+      setMessage(`Could not delete the shelf: ${String(error)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -197,7 +211,7 @@ export default function SettingsView() {
       void app.persistClockState();
       await refetch();
     } catch (error) {
-      setMessage(`Could not delete the tag: ${String(error)}`);
+      setMessage(`Could not delete the tag: ${String(error)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -476,14 +490,6 @@ export default function SettingsView() {
                 </For>
               </ol>
             </section>
-
-            <Show when={message()}>
-              {(text) => (
-                <p class="note note-result" role="status">
-                  {text()}
-                </p>
-              )}
-            </Show>
           </>
         )}
       </Show>
