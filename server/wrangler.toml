@@ -7,8 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "book_reader_sync"
-# database_id is filled in by `wrangler d1 create book_reader_sync` before deploy.
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+# Placeholder so config validates and `--local` dev works; replace with the real
+# id from `wrangler d1 create book_reader_sync` before deploying.
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
 [vars]

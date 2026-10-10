@@ -1,0 +1,5 @@
+# Copy to `.dev.vars` for local development (that file is git-ignored and is
+# never uploaded by `wrangler deploy`). These let the stack run without
+# Cloudflare Access in front — requests act as DEV_USER. Never use in production.
+DEV_USER = "dev@local"
+CLIENT_ORIGIN = "http://127.0.0.1:5173"

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { verifyAccess } from './access';
 import { D1ChangeStore } from './d1-storage';
 import { handlePull, handlePush } from './sync-core';
@@ -13,13 +14,42 @@ interface Env {
   readonly DB: D1Database;
   readonly ACCESS_AUD: string;
   readonly ACCESS_TEAM_DOMAIN: string;
+  /**
+   * LOCAL DEVELOPMENT ONLY. When set (via `.dev.vars`, which `wrangler deploy`
+   * never uploads), requests skip Access and act as this user, so the stack is
+   * testable without Cloudflare Access in front. Never set it in production.
+   */
+  readonly DEV_USER?: string;
+  /** Allowed browser origin for CORS; reflects the request origin when unset. */
+  readonly CLIENT_ORIGIN?: string;
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
+// The client is served from a different origin than the API (and from the Vite
+// dev server locally), so cross-origin credentialed requests need CORS. Preflight
+// is handled here before auth, scoped to CLIENT_ORIGIN when configured.
+app.use('/api/*', (c, next) =>
+  cors({
+    origin: (origin) =>
+      c.env.CLIENT_ORIGIN !== undefined && c.env.CLIENT_ORIGIN.length > 0
+        ? c.env.CLIENT_ORIGIN
+        : origin,
+    credentials: true,
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['content-type'],
+  })(c, next),
+);
+
 // Every sync route is gated by a verified Cloudflare Access identity, which
 // also scopes the user's change log (docs/SYNC.md §2, §4).
 app.use('/api/v1/sync/*', async (c, next) => {
+  const devUser = c.env.DEV_USER;
+  if (devUser !== undefined && devUser.length > 0) {
+    c.set('userId', devUser);
+    await next();
+    return;
+  }
   const identity = await verifyAccess(c.req.raw, c.env);
   if (identity === null) return c.json({ code: 'unauthenticated' }, 401);
   c.set('userId', identity.userId);
