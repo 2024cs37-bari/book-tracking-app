@@ -61,6 +61,8 @@ On pull, query ordered rows after `since`, bounded by row and byte limit. The cu
 
 Duplicate hash upload should resolve to the existing object without creating duplicate bytes. Abandoned multipart uploads require an expiration/cleanup policy. Deleting metadata does not automatically delete R2 content.
 
+Baseline implementation: for a single-user deployment the Worker **mediates** the transfer (bytes PUT/GET through `/api/v1/files/*`, authorized by the same Access identity and written to private R2 under a per-user, hash-derived key) rather than issuing S3 presigned URLs — no S3 credentials are provisioned and every byte is Access-gated. The trade-off is a conservative per-request size bound (`MAX_FILE_BYTES`, 100 MiB); a presigned-URL/multipart path is the route for larger objects. R2 cannot verify SHA-256 server-side, so `begin`/`finish` record availability on existence + size and the **client independently verifies the hash on download** before marking local presence (the documented residual limitation of §6.4).
+
 ## 7. D1 schema and operations
 
 Keep migration SQL in source control. Separate replicated entity tables, idempotency records, and append-only change log. Use indexes for primary access paths, parameterized queries, and batches/transactions that preserve event atomicity. Establish maximum payloads and pagination before public deployment. Test migrations on empty DB and representative prior schemas.
@@ -83,6 +85,7 @@ Log request IDs, route, timing, status, and coarse error category. Do not log au
 ## 10. Deployment checklist
 
 - Separate dev/prod Pages, Worker bindings, D1, R2, and Access policy.
+- Create the private R2 bucket before first deploy: `wrangler r2 bucket create book-reader-files` (the `FILES` binding in `wrangler.toml`). `wrangler dev` simulates it locally.
 - Verify authentication on every path, including direct Worker URLs.
 - Verify R2 bucket is private and object keys are content-derived, not user-controlled paths.
 - Apply reviewed D1 migrations and verify rollback/recovery approach.

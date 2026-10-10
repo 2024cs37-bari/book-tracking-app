@@ -4,6 +4,14 @@ import { verifyAccess } from './access';
 import { D1ChangeStore } from './d1-storage';
 import { handlePull, handlePush } from './sync-core';
 import { validatePushRequest, type PushRequest } from './protocol';
+import {
+  fileObjectKey,
+  handleBeginUpload,
+  handleFinishUpload,
+  isSha256Hex,
+  MAX_FILE_BYTES,
+  R2ObjectStore,
+} from './files';
 
 /** Schema version this server speaks; mirrors the client's DB_SCHEMA_VERSION. */
 const SCHEMA_VERSION = 2;
@@ -12,6 +20,8 @@ const MAX_PULL_LIMIT = 500;
 
 interface Env {
   readonly DB: D1Database;
+  /** Private R2 bucket for original book files (Phase 4; see docs/STORAGE.md §7). */
+  readonly FILES: R2Bucket;
   readonly ACCESS_AUD: string;
   readonly ACCESS_TEAM_DOMAIN: string;
   /**
@@ -36,14 +46,14 @@ app.use('/api/*', (c, next) =>
         ? c.env.CLIENT_ORIGIN
         : origin,
     credentials: true,
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'OPTIONS'],
     allowHeaders: ['content-type'],
   })(c, next),
 );
 
-// Every sync route is gated by a verified Cloudflare Access identity, which
-// also scopes the user's change log (docs/SYNC.md §2, §4).
-app.use('/api/v1/sync/*', async (c, next) => {
+// Every sync and file route is gated by a verified Cloudflare Access identity,
+// which also scopes the user's change log and object keys (SYNC.md §2, §4).
+app.use('/api/v1/*', async (c, next) => {
   const devUser = c.env.DEV_USER;
   if (devUser !== undefined && devUser.length > 0) {
     c.set('userId', devUser);
@@ -88,6 +98,63 @@ app.get('/api/v1/sync/pull', async (c) => {
     SCHEMA_VERSION,
   );
   return c.json(response);
+});
+
+// --- File transfer (Phase 4): original bytes PUT/GET through private R2. ---
+
+app.post('/api/v1/files/begin', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ code: 'bad_json' }, 400);
+  }
+  const { sha256, size } = (body ?? {}) as { sha256?: unknown; size?: unknown };
+  const result = await handleBeginUpload(
+    new R2ObjectStore(c.env.FILES),
+    c.get('userId'),
+    sha256,
+    size,
+  );
+  return c.json(result.body as Record<string, unknown>, result.status as 200);
+});
+
+app.post('/api/v1/files/finish', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ code: 'bad_json' }, 400);
+  }
+  const { sha256, size } = (body ?? {}) as { sha256?: unknown; size?: unknown };
+  const result = await handleFinishUpload(
+    new R2ObjectStore(c.env.FILES),
+    c.get('userId'),
+    sha256,
+    size,
+  );
+  return c.json(result.body as Record<string, unknown>, result.status as 200);
+});
+
+app.put('/api/v1/files/:sha', async (c) => {
+  const sha = c.req.param('sha');
+  if (!isSha256Hex(sha)) return c.json({ code: 'bad_hash' }, 400);
+  const bytes = await c.req.arrayBuffer();
+  if (bytes.byteLength === 0) return c.json({ code: 'empty' }, 400);
+  if (bytes.byteLength > MAX_FILE_BYTES) return c.json({ code: 'too_large' }, 413);
+  await new R2ObjectStore(c.env.FILES).put(fileObjectKey(c.get('userId'), sha), bytes);
+  return c.json({ ok: true });
+});
+
+app.get('/api/v1/files/:sha', async (c) => {
+  const sha = c.req.param('sha');
+  if (!isSha256Hex(sha)) return c.json({ code: 'bad_hash' }, 400);
+  const object = await new R2ObjectStore(c.env.FILES).get(fileObjectKey(c.get('userId'), sha));
+  if (object === null) return c.json({ code: 'not_found' }, 404);
+  return c.body(object.bytes, 200, {
+    'content-type': 'application/octet-stream',
+    'content-length': String(object.size),
+  });
 });
 
 export default app;

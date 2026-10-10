@@ -18,7 +18,9 @@ migrations_dir = "migrations"
 ACCESS_AUD = ""
 ACCESS_TEAM_DOMAIN = ""
 
-# Private R2 bucket for original files is a Phase 4 concern; see docs/STORAGE.md.
-# [[r2_buckets]]
-# binding = "FILES"
-# bucket_name = "book-reader-files"
+# Private R2 bucket for original book files (Phase 4; see docs/STORAGE.md §7).
+# Create it before first deploy: `wrangler r2 bucket create book-reader-files`.
+# Local `wrangler dev` provides a simulated bucket automatically.
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "book-reader-files"
