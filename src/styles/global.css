@@ -654,6 +654,24 @@ input[type='file'] {
   letter-spacing: 0.03em;
   color: var(--accent, #5aa9f6);
 }
+.annotation-review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.annotation-review-row {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.annotation-review-excerpt {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-2);
+  border-left: 3px solid var(--border);
+  color: var(--text-muted, inherit);
+}
+.annotation-review-note {
+  margin: var(--space-1) 0 0;
+}
 .reader-bookmark-list {
   list-style: none;
   margin: 0;

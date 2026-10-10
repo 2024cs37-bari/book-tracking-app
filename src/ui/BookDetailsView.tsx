@@ -12,6 +12,8 @@ import { progressFraction, statusLabel, type Progress } from '~/domain/progress'
 import { READING_STATUSES } from '~/domain/enums';
 import type { BookMetadataPatch } from '~/data/book-mapping';
 import type { Shelf, Tag } from '~/domain/collections';
+import type { Annotation } from '~/domain/annotation';
+import { buildNotesMarkdown, notesFilename } from '~/services/notes-markdown';
 import { bookFileKey } from '~/storage/file-store';
 import { useApp } from '~/app/context';
 import BookCover from './BookCover';
@@ -72,6 +74,25 @@ export default function BookDetailsView() {
       };
     },
   );
+
+  const [annotations] = createResource<readonly Annotation[], string>(
+    () => `${bookId()}:${refreshToken()}`,
+    () => app.annotations.listByBook(bookId()),
+  );
+
+  function exportNotes(): void {
+    const title = details()?.book?.title ?? 'Untitled book';
+    const markdown = buildNotesMarkdown(title, annotations() ?? [], Date.now());
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = notesFilename(title);
+    anchor.rel = 'noopener';
+    anchor.click();
+    // Keep the blob alive until the download starts; see ExportService.download.
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
 
   async function withCollections(action: () => Promise<void>): Promise<void> {
     setBusy(true);
@@ -321,6 +342,52 @@ export default function BookDetailsView() {
                       come from the filename. Use “Edit details” to correct it.
                     </p>
                   </Show>
+
+                  <section class="annotations-review">
+                    <h3>Notes &amp; highlights</h3>
+                    <Show
+                      when={(annotations() ?? []).length > 0}
+                      fallback={
+                        <p class="note">
+                          No bookmarks, highlights or notes yet. Add them while reading.
+                        </p>
+                      }
+                    >
+                      <div class="panel-actions">
+                        <button type="button" class="button" onClick={() => exportNotes()}>
+                          Export notes as Markdown
+                        </button>
+                      </div>
+                      <ul class="annotation-review-list">
+                        <For each={annotations() ?? []}>
+                          {(annotation) => (
+                            <li class="annotation-review-row">
+                              <span class="annotation-review-head">
+                                <span class="reader-annotation-kind">
+                                  {annotation.kind === 'highlight'
+                                    ? 'Highlight'
+                                    : annotation.kind === 'note'
+                                      ? 'Note'
+                                      : 'Bookmark'}
+                                </span>{' '}
+                                {Math.round(annotation.locator.fraction * 100)}%
+                              </span>
+                              <Show when={annotation.textExcerpt}>
+                                {(excerpt) => (
+                                  <blockquote class="annotation-review-excerpt">
+                                    {excerpt()}
+                                  </blockquote>
+                                )}
+                              </Show>
+                              <Show when={annotation.note}>
+                                {(note) => <p class="annotation-review-note">{note()}</p>}
+                              </Show>
+                            </li>
+                          )}
+                        </For>
+                      </ul>
+                    </Show>
+                  </section>
 
                   <section class="collections">
                     <h3>Collections</h3>
