@@ -78,6 +78,91 @@ describe('applyPullPage', () => {
     expect((await harness.db.books.get('b1'))?.title).toBe('Once');
   });
 
+  it('book metadata: a newer edit does not erase a non-empty value it lacks (§6)', async () => {
+    await apply(
+      [
+        change('book', 'b1', hlc(100, 0), {
+          ...bookRow('b1', 'Title', hlc(100, 0)),
+          author: 'A. Writer',
+        }),
+      ],
+      1,
+    );
+    // A newer edit (hlc 200) changes the title but carries no author.
+    await apply([change('book', 'b1', hlc(200, 0), bookRow('b1', 'Edited Title', hlc(200, 0)))], 2);
+    const row = await harness.db.books.get('b1');
+    expect(row?.title).toBe('Edited Title');
+    expect(row?.author).toBe('A. Writer');
+    expect(row?.updatedHlc).toBe(hlc(200, 0));
+  });
+
+  it('book metadata: an older remote fills a gap without changing the position', async () => {
+    await apply([change('book', 'b1', hlc(200, 0), bookRow('b1', 'Local', hlc(200, 0)))], 1);
+    // An OLDER remote (hlc 100) carries an author the local row lacks.
+    await apply(
+      [
+        change('book', 'b1', hlc(100, 0), {
+          ...bookRow('b1', 'Local', hlc(100, 0)),
+          author: 'Extracted',
+        }),
+      ],
+      2,
+    );
+    const row = await harness.db.books.get('b1');
+    expect(row?.author).toBe('Extracted');
+    expect(row?.title).toBe('Local');
+    // The merged row keeps the later HLC, so a newer edit still wins afterwards.
+    expect(row?.updatedHlc).toBe(hlc(200, 0));
+  });
+
+  it('book metadata: a newer differing non-empty value wins', async () => {
+    await apply(
+      [
+        change('book', 'b1', hlc(100, 0), {
+          ...bookRow('b1', 'T', hlc(100, 0)),
+          publisher: 'Old Press',
+        }),
+      ],
+      1,
+    );
+    await apply(
+      [
+        change('book', 'b1', hlc(200, 0), {
+          ...bookRow('b1', 'T', hlc(200, 0)),
+          publisher: 'New Press',
+        }),
+      ],
+      2,
+    );
+    expect((await harness.db.books.get('b1'))?.publisher).toBe('New Press');
+  });
+
+  it('book metadata: a newer lifecycle tombstone applies while metadata is preserved', async () => {
+    await apply(
+      [
+        change('book', 'b1', hlc(100, 0), {
+          ...bookRow('b1', 'Keeper', hlc(100, 0)),
+          author: 'Keep Me',
+        }),
+      ],
+      1,
+    );
+    await apply(
+      [
+        change('book', 'b1', hlc(200, 0), {
+          ...bookRow('b1', 'Keeper', hlc(200, 0)),
+          lifecycle: 'deleted',
+          deletedAt: 5,
+        }),
+      ],
+      2,
+    );
+    const row = await harness.db.books.get('b1');
+    expect(row?.lifecycle).toBe('deleted');
+    expect(row?.deletedAt).toBe(5);
+    expect(row?.author).toBe('Keep Me');
+  });
+
   it('tombstones replicate: a newer delete hides the entity', async () => {
     await apply(
       [
