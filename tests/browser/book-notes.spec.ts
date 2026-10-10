@@ -20,7 +20,7 @@ test('a book page lists its notes and exports them', async ({ page }) => {
   // Make an annotation in the reader, then return to the book page.
   await page.getByRole('tab', { name: 'Notes' }).click();
   await page.getByRole('button', { name: 'Bookmark this position' }).click();
-  await expect(page.locator('.reader-bookmark-list li')).toHaveCount(1);
+  await expect(page.locator('.reader-annotation-list li')).toHaveCount(1);
   await page.getByRole('link', { name: '← Close reader' }).click();
 
   const review = page.locator('.annotations-review');

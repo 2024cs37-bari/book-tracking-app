@@ -31,7 +31,7 @@ test('selecting text creates a persistent highlight with a drawn overlay', async
     'Highlighted Reader',
   );
 
-  const panel = page.locator('.reader-bookmarks');
+  const panel = page.locator('.reader-notes-panel');
   await page.getByRole('tab', { name: 'Notes' }).click();
   // Highlighting is offered for EPUB; the control is disabled until a selection.
   const highlightButton = page.getByRole('button', { name: 'Highlight selection' });
@@ -47,7 +47,7 @@ test('selecting text creates a persistent highlight with a drawn overlay', async
   await expect(highlightButton).toBeEnabled();
 
   await highlightButton.click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(1);
   await expect(panel.locator('.reader-annotation-kind')).toHaveText('Highlight');
   // The overlay itself is drawn into foliate's closed shadow root, which cannot
   // be inspected from a test; its creation is asserted via the stored annotation
@@ -57,7 +57,7 @@ test('selecting text creates a persistent highlight with a drawn overlay', async
   await page.reload();
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
   await page.getByRole('tab', { name: 'Notes' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(1);
   await expect(panel.locator('.reader-annotation-kind')).toHaveText('Highlight');
 
   // The stored annotation is a non-deleted highlight carrying its excerpt.
@@ -84,6 +84,6 @@ test('selecting text creates a persistent highlight with a drawn overlay', async
 
   // Deleting removes the row and the list entry.
   await page.getByRole('button', { name: 'Delete highlight' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(0);
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(0);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(0);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(0);
 });

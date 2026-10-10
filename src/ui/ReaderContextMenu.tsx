@@ -1,4 +1,4 @@
-import { For, type JSX, onCleanup, onMount } from 'solid-js';
+import { For, type JSX, onCleanup, onMount, Show } from 'solid-js';
 
 /** A single entry in the reader context menu. */
 export interface ContextMenuAction {
@@ -7,11 +7,25 @@ export interface ContextMenuAction {
   readonly disabled?: boolean;
 }
 
+/** A highlight colour swatch offered at the top of the menu. */
+export interface ContextMenuColor {
+  readonly token: string;
+  readonly label: string;
+  readonly css: string;
+}
+
 export interface ReaderContextMenuProps {
   /** Pointer x in viewport (CSS) pixels; the menu is clamped to stay on screen. */
   readonly x: number;
   readonly y: number;
   readonly actions: readonly ContextMenuAction[];
+  /**
+   * Optional highlight-colour swatches rendered as a row above the actions.
+   * When present (with {@link onColor}), choosing a swatch highlights the
+   * selection in that colour.
+   */
+  readonly colors?: readonly ContextMenuColor[];
+  readonly onColor?: (token: string) => void;
   /** Called when the menu should disappear (action chosen, Escape, outside click). */
   readonly onClose: () => void;
 }
@@ -29,10 +43,16 @@ const EDGE_MARGIN = 8;
  */
 export default function ReaderContextMenu(props: ReaderContextMenuProps): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
+  const swatchEls: (HTMLButtonElement | undefined)[] = [];
   const itemEls: (HTMLButtonElement | undefined)[] = [];
 
+  // All focusable controls in DOM order: colour swatches first, then actions.
   function enabledEls(): HTMLButtonElement[] {
     const result: HTMLButtonElement[] = [];
+    (props.colors ?? []).forEach((_, index) => {
+      const element = swatchEls[index];
+      if (element !== undefined) result.push(element);
+    });
     props.actions.forEach((action, index) => {
       const element = itemEls[index];
       if (action.disabled !== true && element !== undefined) result.push(element);
@@ -78,6 +98,11 @@ export default function ReaderContextMenu(props: ReaderContextMenuProps): JSX.El
   function choose(action: ContextMenuAction): void {
     if (action.disabled === true) return;
     action.onSelect();
+    props.onClose();
+  }
+
+  function chooseColor(token: string): void {
+    props.onColor?.(token);
     props.onClose();
   }
 
@@ -133,6 +158,26 @@ export default function ReaderContextMenu(props: ReaderContextMenuProps): JSX.El
       style={{ left: `${props.x}px`, top: `${props.y}px` }}
       onKeyDown={onKeyDown}
     >
+      <Show when={(props.colors?.length ?? 0) > 0}>
+        <div class="reader-context-menu-swatches" role="group" aria-label="Highlight colour">
+          <For each={props.colors}>
+            {(colour, index) => (
+              <button
+                ref={(element) => {
+                  swatchEls[index()] = element;
+                }}
+                type="button"
+                class="reader-context-menu-swatch"
+                role="menuitem"
+                style={{ background: colour.css }}
+                aria-label={`Highlight ${colour.label}`}
+                title={`Highlight ${colour.label}`}
+                onClick={() => chooseColor(colour.token)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
       <For each={props.actions}>
         {(action, index) => (
           <button

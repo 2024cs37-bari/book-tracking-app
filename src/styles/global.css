@@ -757,6 +757,26 @@ input[type='file'] {
   color: var(--text-muted);
   cursor: default;
 }
+.reader-context-menu-swatches {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.reader-context-menu-swatch {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.reader-context-menu-swatch:hover,
+.reader-context-menu-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .pdf-scroll {
   width: 100%;
   height: 100%;

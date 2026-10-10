@@ -19,19 +19,19 @@ test('bookmarks and notes are created, annotated, persisted across reload, and d
     'Annotated Reader',
   );
 
-  const panel = page.locator('.reader-bookmarks');
+  const panel = page.locator('.reader-notes-panel');
   await page.getByRole('tab', { name: 'Notes' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(0);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(0);
 
   // Bookmark the opening position.
   await page.getByRole('button', { name: 'Bookmark this position' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(1);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(1);
   // The jump control is labelled with the position fraction.
-  await expect(panel.locator('.reader-bookmark-go')).toContainText('%');
+  await expect(panel.locator('.reader-annotation-jump')).toContainText('%');
 
   // Attach a note; the input commits on change (blur).
-  const note = panel.locator('.reader-bookmark-note');
+  const note = panel.locator('.reader-annotation-note');
   await note.fill('Return to this argument');
   await note.blur();
 
@@ -39,8 +39,8 @@ test('bookmarks and notes are created, annotated, persisted across reload, and d
   await page.reload();
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
   await page.getByRole('tab', { name: 'Notes' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
-  await expect(panel.locator('.reader-bookmark-note')).toHaveValue('Return to this argument');
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(1);
+  await expect(panel.locator('.reader-annotation-note')).toHaveValue('Return to this argument');
 
   // The annotation also persists as a non-deleted row in the annotations store.
   const stored = await page.evaluate(async () => {
@@ -65,6 +65,6 @@ test('bookmarks and notes are created, annotated, persisted across reload, and d
 
   // Deleting removes it from the list and tombstones the row.
   await page.getByRole('button', { name: 'Delete bookmark' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(0);
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(0);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(0);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(0);
 });

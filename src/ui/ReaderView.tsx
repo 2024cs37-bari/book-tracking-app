@@ -22,22 +22,28 @@ import type {
 } from '~/reader/renderer';
 import type { ReaderSession } from '~/services/reader-service';
 import { buildNotesMarkdown, notesFilename } from '~/services/notes-markdown';
+import { normalizeLookupTerm } from '~/services/dictionary';
+import { createSpeech } from '~/reader/tts';
 import { showToast } from './toast';
 import ReaderContents from './ReaderContents';
 import ReaderSidebar, { type SidebarTab } from './ReaderSidebar';
 import ReaderPages from './ReaderPages';
+import ReaderAnnotations, { HIGHLIGHT_PALETTE } from './ReaderAnnotations';
+import ReaderTts from './ReaderTts';
+import WordLookup from './WordLookup';
 import ReaderContextMenu, { type ContextMenuAction } from './ReaderContextMenu';
 
 const MAX_SEARCH_HITS = 200;
 /** Reading spans shorter than this are noise and are not recorded as sessions. */
 const MIN_SESSION_SECONDS = 5;
 
-type SidebarPanel = 'contents' | 'pages' | 'notes' | 'search';
+type SidebarPanel = 'contents' | 'pages' | 'notes' | 'search' | 'listen';
 const SIDEBAR_TABS: readonly SidebarTab[] = [
   { id: 'contents', label: 'Contents' },
   { id: 'pages', label: 'Pages' },
   { id: 'notes', label: 'Notes' },
   { id: 'search', label: 'Search' },
+  { id: 'listen', label: 'Listen' },
 ];
 const SIDEBAR_PREFS_KEY = 'reader-sidebar';
 
@@ -99,6 +105,11 @@ export default function ReaderView() {
     y: number;
     selection: SelectionInfo;
   } | null>(null);
+  const [lookup, setLookup] = createSignal<{ word: string; x: number; y: number } | null>(null);
+  // One speech controller per reader view; the <ReaderTts> panel is a thin view
+  // over it, so playback survives tab switches that unmount the view.
+  const speech = createSpeech();
+  onCleanup(() => speech.destroy());
   const [pages, setPages] = createSignal<readonly ReaderPage[]>([]);
   const [supportsThumbnails, setSupportsThumbnails] = createSignal(false);
   const initialPrefs = loadSidebarPrefs();
@@ -154,7 +165,7 @@ export default function ReaderView() {
     }
   }
 
-  async function addHighlight(): Promise<void> {
+  async function addHighlight(color = 'yellow'): Promise<void> {
     const selected = selection();
     if (selected === null) return;
     try {
@@ -163,13 +174,23 @@ export default function ReaderView() {
         kind: 'highlight',
         locator: selected.locator,
         textExcerpt: selected.excerpt,
-        color: 'yellow',
+        color,
       });
       void app.persistClockState();
       setSelection(null);
       await reloadAnnotations(params.id ?? '');
     } catch (error) {
       showToast(`Could not add highlight: ${String(error)}`, 'error');
+    }
+  }
+
+  async function recolor(id: string, color: string): Promise<void> {
+    try {
+      await app.annotations.update(id, { color });
+      void app.persistClockState();
+      await reloadAnnotations(params.id ?? '');
+    } catch (error) {
+      showToast(`Could not change highlight colour: ${String(error)}`, 'error');
     }
   }
 
@@ -208,24 +229,27 @@ export default function ReaderView() {
   // the menu clears the live DOM selection (so `selection()` may already be
   // null by the time an item is chosen); re-asserting the captured snapshot
   // lets the existing addHighlight()/copySelection() paths run against it.
-  function menuActionsFor(captured: SelectionInfo): readonly ContextMenuAction[] {
-    return [
-      {
-        label: 'Highlight',
-        onSelect: () => {
-          setSelection(captured);
-          void addHighlight();
-        },
+  function menuActionsFor(
+    captured: SelectionInfo,
+    x: number,
+    y: number,
+  ): readonly ContextMenuAction[] {
+    const actions: ContextMenuAction[] = [];
+    // Offer a dictionary lookup only for a single-word selection.
+    const singleWord = captured.excerpt.trim().split(/\s+/u).length === 1;
+    const term = singleWord ? normalizeLookupTerm(captured.excerpt) : null;
+    if (term !== null) {
+      actions.push({ label: `Define “${term}”`, onSelect: () => setLookup({ word: term, x, y }) });
+    }
+    actions.push({ label: 'Bookmark here', onSelect: () => void addBookmark() });
+    actions.push({
+      label: 'Copy',
+      onSelect: () => {
+        setSelection(captured);
+        void copySelection();
       },
-      { label: 'Bookmark here', onSelect: () => void addBookmark() },
-      {
-        label: 'Copy',
-        onSelect: () => {
-          setSelection(captured);
-          void copySelection();
-        },
-      },
-    ];
+    });
+    return actions;
   }
 
   function openContextMenu(event: MouseEvent): void {
@@ -522,7 +546,7 @@ export default function ReaderView() {
     </div>
   );
   const notesPanel = () => (
-    <div class="reader-notes-panel reader-bookmarks">
+    <div class="reader-notes-panel">
       <div class="reader-bookmarks-actions">
         <button type="button" class="button" disabled={!ready()} onClick={() => void addBookmark()}>
           Bookmark this position
@@ -546,62 +570,20 @@ export default function ReaderView() {
           Export notes
         </button>
       </div>
-      <Show when={canHighlight()}>
-        <p class="note">
-          {selection() === null
-            ? 'Select text in the book to highlight it.'
-            : 'Text selected — use “Highlight selection” to keep it.'}
-        </p>
-      </Show>
-      <Show
-        when={annotations().length > 0}
-        fallback={<p class="note">No bookmarks yet. Use the button above to mark your place.</p>}
-      >
-        <ul class="reader-bookmark-list">
-          <For each={annotations()}>
-            {(annotation) => (
-              <li class="reader-bookmark">
-                <div class="reader-bookmark-row">
-                  <button
-                    type="button"
-                    class="reader-bookmark-go"
-                    onClick={() => session?.renderer.goTo(annotation.locator)}
-                  >
-                    <span class="reader-annotation-kind">
-                      {annotation.kind === 'highlight'
-                        ? 'Highlight'
-                        : annotation.kind === 'note'
-                          ? 'Note'
-                          : 'Bookmark'}
-                    </span>{' '}
-                    {Math.round(annotation.locator.fraction * 100)}%
-                    <Show when={annotation.textExcerpt}>
-                      {(excerpt) => <span class="reader-bookmark-excerpt"> — {excerpt()}</span>}
-                    </Show>
-                  </button>
-                  <button
-                    type="button"
-                    class="button button-danger"
-                    aria-label={`Delete ${annotation.kind}`}
-                    onClick={() => void removeAnnotation(annotation.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-                <input
-                  class="reader-bookmark-note"
-                  type="text"
-                  aria-label="Note"
-                  placeholder="Add a note…"
-                  value={annotation.note ?? ''}
-                  onChange={(event) => void saveNote(annotation.id, event.currentTarget.value)}
-                />
-              </li>
-            )}
-          </For>
-        </ul>
-      </Show>
+      <ReaderAnnotations
+        annotations={annotations()}
+        onSelect={(locator) => session?.renderer.goTo(locator)}
+        onDelete={(id) => void removeAnnotation(id)}
+        onEditNote={(id, note) => void saveNote(id, note)}
+        onRecolor={(id, color) => void recolor(id, color)}
+      />
     </div>
+  );
+  const listenPanel = () => (
+    <ReaderTts
+      controller={speech}
+      getText={() => (session ? session.renderer.getVisibleText() : Promise.resolve(''))}
+    />
   );
   return (
     <section class="reader-shell" classList={{ 'reader-sidebar-open': sidebarOpen() }}>
@@ -636,6 +618,7 @@ export default function ReaderView() {
           </Match>
           <Match when={sidebarPanel() === 'notes'}>{notesPanel()}</Match>
           <Match when={sidebarPanel() === 'search'}>{searchPanel()}</Match>
+          <Match when={sidebarPanel() === 'listen'}>{listenPanel()}</Match>
         </Switch>
       </ReaderSidebar>
       <div class="reader-main">
@@ -742,8 +725,23 @@ export default function ReaderView() {
           <ReaderContextMenu
             x={menu().x}
             y={menu().y}
-            actions={menuActionsFor(menu().selection)}
+            actions={menuActionsFor(menu().selection, menu().x, menu().y)}
+            colors={canHighlight() ? HIGHLIGHT_PALETTE : []}
+            onColor={(token) => {
+              setSelection(menu().selection);
+              void addHighlight(token);
+            }}
             onClose={() => setContextMenu(null)}
+          />
+        )}
+      </Show>
+      <Show when={lookup()}>
+        {(info) => (
+          <WordLookup
+            word={info().word}
+            x={info().x}
+            y={info().y}
+            onClose={() => setLookup(null)}
           />
         )}
       </Show>

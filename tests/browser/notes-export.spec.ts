@@ -17,7 +17,7 @@ test('exports the book notes as a downloadable Markdown file', async ({ page }) 
     'Notes Export',
   );
 
-  const panel = page.locator('.reader-bookmarks');
+  const panel = page.locator('.reader-notes-panel');
   await page.getByRole('tab', { name: 'Notes' }).click();
 
   // Nothing to export until there is at least one annotation.
@@ -25,7 +25,7 @@ test('exports the book notes as a downloadable Markdown file', async ({ page }) 
   await expect(exportButton).toBeDisabled();
 
   await page.getByRole('button', { name: 'Bookmark this position' }).click();
-  await expect(panel.locator('.reader-bookmark-list li')).toHaveCount(1);
+  await expect(panel.locator('.reader-annotation-list li')).toHaveCount(1);
   await expect(exportButton).toBeEnabled();
 
   const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);

@@ -33,7 +33,7 @@ async function openContextMenu(page: Page): Promise<void> {
   await page.locator('.pdf-page .textLayer').dispatchEvent('contextmenu', { bubbles: true });
 }
 
-test('a selection context menu offers Highlight, Bookmark, and Copy', async ({ page }) => {
+test('a selection context menu offers highlight colours, Bookmark, and Copy', async ({ page }) => {
   // PDF import and render is heavy, especially on Firefox and WebKit.
   test.slow();
   await importBook(
@@ -47,7 +47,7 @@ test('a selection context menu offers Highlight, Bookmark, and Copy', async ({ p
   // The Notes panel's Highlight control doubles as a readiness signal: it is
   // only enabled once a selection has reached the reader shell.
   await page.getByRole('tab', { name: 'Notes' }).click();
-  const notesPanel = page.locator('.reader-bookmarks');
+  const notesPanel = page.locator('.reader-notes-panel');
   const highlightReady = page.getByRole('button', { name: 'Highlight selection' });
   await expect(highlightReady).toBeDisabled();
 
@@ -55,7 +55,8 @@ test('a selection context menu offers Highlight, Bookmark, and Copy', async ({ p
   await expect(highlightReady).toBeEnabled();
 
   const menu = page.getByRole('menu', { name: 'Selection actions' });
-  const highlightItem = page.getByRole('menuitem', { name: 'Highlight', exact: true });
+  const yellowSwatch = page.getByRole('menuitem', { name: 'Highlight Yellow' });
+  const greenSwatch = page.getByRole('menuitem', { name: 'Highlight Green' });
   const bookmarkItem = page.getByRole('menuitem', { name: 'Bookmark here' });
   const copyItem = page.getByRole('menuitem', { name: 'Copy' });
 
@@ -63,16 +64,17 @@ test('a selection context menu offers Highlight, Bookmark, and Copy', async ({ p
   await expect(menu).toHaveCount(0);
   await openContextMenu(page);
   await expect(menu).toBeVisible();
-  await expect(highlightItem).toBeVisible();
+  await expect(yellowSwatch).toBeVisible();
+  await expect(greenSwatch).toBeVisible();
   await expect(bookmarkItem).toBeVisible();
   await expect(copyItem).toBeVisible();
 
-  // The first item takes focus; arrows move between items.
-  await expect(highlightItem).toBeFocused();
+  // The first colour swatch takes focus; arrows move between items.
+  await expect(yellowSwatch).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(bookmarkItem).toBeFocused();
+  await expect(greenSwatch).toBeFocused();
   await page.keyboard.press('ArrowUp');
-  await expect(highlightItem).toBeFocused();
+  await expect(yellowSwatch).toBeFocused();
 
   // Escape dismisses it.
   await page.keyboard.press('Escape');
@@ -84,13 +86,13 @@ test('a selection context menu offers Highlight, Bookmark, and Copy', async ({ p
   await page.locator('.reader-toolbar h2').click();
   await expect(menu).toHaveCount(0);
 
-  // Re-select, reopen, and choose Highlight: it stores a highlight and closes.
+  // Re-select, reopen, and choose a colour: it stores a highlight and closes.
   await selectPageText(page);
   await expect(highlightReady).toBeEnabled();
   await openContextMenu(page);
   await expect(menu).toBeVisible();
-  await highlightItem.click();
+  await yellowSwatch.click();
   await expect(menu).toHaveCount(0);
-  await expect(notesPanel.locator('.reader-bookmark-list li')).toHaveCount(1);
+  await expect(notesPanel.locator('.reader-annotation-list li')).toHaveCount(1);
   await expect(notesPanel.locator('.reader-annotation-kind')).toHaveText('Highlight');
 });
