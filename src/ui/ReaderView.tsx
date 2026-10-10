@@ -26,6 +26,7 @@ import { showToast } from './toast';
 import ReaderContents from './ReaderContents';
 import ReaderSidebar, { type SidebarTab } from './ReaderSidebar';
 import ReaderPages from './ReaderPages';
+import ReaderContextMenu, { type ContextMenuAction } from './ReaderContextMenu';
 
 const MAX_SEARCH_HITS = 200;
 /** Reading spans shorter than this are noise and are not recorded as sessions. */
@@ -93,6 +94,11 @@ export default function ReaderView() {
   const [annotations, setAnnotations] = createSignal<readonly Annotation[]>([]);
   const [selection, setSelection] = createSignal<SelectionInfo | null>(null);
   const [canHighlight, setCanHighlight] = createSignal(false);
+  const [contextMenu, setContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    selection: SelectionInfo;
+  } | null>(null);
   const [pages, setPages] = createSignal<readonly ReaderPage[]>([]);
   const [supportsThumbnails, setSupportsThumbnails] = createSignal(false);
   const initialPrefs = loadSidebarPrefs();
@@ -114,6 +120,8 @@ export default function ReaderView() {
   let session: ReaderSession | undefined;
   let searchController: AbortController | undefined;
   let currentLocator: Locator | undefined;
+  let longPressTimer: number | undefined;
+  onCleanup(() => cancelLongPress());
 
   function updateSettings(patch: Partial<ReaderSettings>): void {
     const next = { ...settings(), ...patch };
@@ -178,6 +186,75 @@ export default function ReaderView() {
     } catch (error) {
       showToast(`Could not add bookmark: ${String(error)}`, 'error');
     }
+  }
+
+  async function copySelection(): Promise<void> {
+    const selected = selection();
+    if (selected === null) return;
+    const clipboard = navigator.clipboard as Clipboard | undefined;
+    if (clipboard === undefined) {
+      showToast('Clipboard is not available in this browser.', 'error');
+      return;
+    }
+    try {
+      await clipboard.writeText(selected.excerpt);
+      showToast('Copied selection to clipboard.', 'success');
+    } catch (error) {
+      showToast(`Could not copy selection: ${String(error)}`, 'error');
+    }
+  }
+
+  // The menu acts on the selection captured when it opened. Moving focus into
+  // the menu clears the live DOM selection (so `selection()` may already be
+  // null by the time an item is chosen); re-asserting the captured snapshot
+  // lets the existing addHighlight()/copySelection() paths run against it.
+  function menuActionsFor(captured: SelectionInfo): readonly ContextMenuAction[] {
+    return [
+      {
+        label: 'Highlight',
+        onSelect: () => {
+          setSelection(captured);
+          void addHighlight();
+        },
+      },
+      { label: 'Bookmark here', onSelect: () => void addBookmark() },
+      {
+        label: 'Copy',
+        onSelect: () => {
+          setSelection(captured);
+          void copySelection();
+        },
+      },
+    ];
+  }
+
+  function openContextMenu(event: MouseEvent): void {
+    const selected = selection();
+    if (selected === null) return;
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY, selection: selected });
+  }
+
+  function cancelLongPress(): void {
+    if (longPressTimer !== undefined) {
+      clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    }
+  }
+
+  function onSurfaceTouchStart(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (touch === undefined) return;
+    const x = touch.clientX;
+    const y = touch.clientY;
+    cancelLongPress();
+    // A sustained press over an existing selection opens the same menu on
+    // touch, where there is no right click to catch.
+    longPressTimer = window.setTimeout(() => {
+      longPressTimer = undefined;
+      const selected = selection();
+      if (selected !== null) setContextMenu({ x, y, selection: selected });
+    }, 500);
   }
 
   async function removeAnnotation(id: string): Promise<void> {
@@ -650,11 +727,26 @@ export default function ReaderView() {
         </Show>
         <div
           class="reader-surface"
+          onContextMenu={openContextMenu}
+          onTouchStart={onSurfaceTouchStart}
+          onTouchMove={() => cancelLongPress()}
+          onTouchEnd={() => cancelLongPress()}
+          onTouchCancel={() => cancelLongPress()}
           ref={(element) => {
             host = element;
           }}
         />
       </div>
+      <Show when={contextMenu()}>
+        {(menu) => (
+          <ReaderContextMenu
+            x={menu().x}
+            y={menu().y}
+            actions={menuActionsFor(menu().selection)}
+            onClose={() => setContextMenu(null)}
+          />
+        )}
+      </Show>
     </section>
   );
 }
