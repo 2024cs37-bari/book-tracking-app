@@ -571,7 +571,9 @@ export default function ReaderView() {
           >
             ☰
           </button>
-          <A href={`/book/${params.id}`}>← Close reader</A>
+          <A class="reader-close" href={`/book/${params.id}`}>
+            ← Close reader
+          </A>
           <h2>{title()}</h2>
           <span aria-label="Reading progress">{Math.round(fraction() * 100)}%</span>
           <button class="button" disabled={!ready()} onClick={() => session?.renderer.prev()}>

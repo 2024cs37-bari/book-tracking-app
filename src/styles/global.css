@@ -665,6 +665,19 @@ input[type='file'] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Plain back control — not an accent link; no underline. */
+.reader-close {
+  color: var(--text);
+  text-decoration: none;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.reader-close:hover {
+  background: var(--surface-sunken);
+}
 .reader-settings {
   display: flex;
   flex-wrap: wrap;
