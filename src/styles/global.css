@@ -1152,3 +1152,186 @@ input[type='file'] {
   gap: 0.3rem;
   font-size: 0.85rem;
 }
+
+/* Reader annotations manager panel */
+
+.reader-annotations {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.reader-annotations-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.reader-annotations-title {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.reader-annotations-count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.reader-annotations-empty {
+  margin: 0;
+}
+.reader-annotations-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.reader-annotations-kinds,
+.reader-annotations-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+.reader-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.reader-filter-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.reader-filter-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.reader-filter-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border-radius: 999px;
+  padding: 0 var(--space-1);
+  min-width: 1.3em;
+  text-align: center;
+}
+.reader-filter-chip.active .reader-filter-count {
+  color: var(--accent);
+}
+.reader-colour-chip {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.reader-colour-chip.active {
+  border-color: var(--accent);
+}
+.reader-annotation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.reader-annotation {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.reader-annotation-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.reader-annotation-jump {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  background: transparent;
+  border: none;
+  text-align: start;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.reader-annotation-jump:hover {
+  background: var(--surface-sunken);
+}
+.reader-annotation-pos {
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.reader-annotation-swatch-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.reader-annotation-swatch {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+.reader-annotation-palette {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-1));
+  inset-inline-end: 0;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
+}
+.reader-annotation-delete {
+  font-size: 0.8rem;
+  padding: var(--space-1) var(--space-2);
+}
+.reader-annotation-excerpt {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border);
+  color: var(--text-muted);
+  font-style: italic;
+}
+.reader-annotation-note {
+  width: 100%;
+  resize: vertical;
+  min-height: 2.2rem;
+  font: inherit;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+.reader-link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
