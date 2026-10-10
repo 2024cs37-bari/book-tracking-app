@@ -1,9 +1,12 @@
-import { A } from '@solidjs/router';
+import { A, useLocation } from '@solidjs/router';
 import { Show, type ParentProps } from 'solid-js';
 import { useApp } from '~/app/context';
 
 export default function Layout(props: ParentProps) {
   const app = useApp();
+  const location = useLocation();
+  // The reader fills the screen; every other route is a centered column.
+  const isReader = () => location.pathname.startsWith('/read');
 
   return (
     <div class="app-shell">
@@ -34,7 +37,7 @@ export default function Layout(props: ParentProps) {
         )}
       </Show>
 
-      <main id="main" class="app-main">
+      <main id="main" class="app-main" classList={{ 'app-main-reader': isReader() }}>
         {props.children}
       </main>
 
