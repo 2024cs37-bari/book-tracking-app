@@ -1,5 +1,5 @@
 import { newId } from '~/domain/ids';
-import { createClock } from '~/domain/hlc';
+import { createClock, type Clock } from '~/domain/hlc';
 import { createDatabase, type LibraryDatabase } from '~/data/db';
 import { createMutationContext } from '~/data/mutations';
 import { BookRepository } from '~/data/repositories/book-repository';
@@ -30,6 +30,7 @@ export interface TestHarness {
   readonly files: MemoryBookFileStore;
   readonly imports: ImportService;
   readonly deviceId: string;
+  readonly clock: Clock;
   /** Moves the injected clock forward, e.g. to make timestamps distinguishable. */
   advanceTime(milliseconds: number): void;
   close(): Promise<void>;
@@ -75,6 +76,7 @@ export async function createHarness(options: { startTime?: number } = {}): Promi
     files,
     imports,
     deviceId,
+    clock,
     advanceTime: (milliseconds: number) => {
       currentTime += milliseconds;
     },

@@ -137,6 +137,15 @@ Acceptance criteria: all features work offline, are covered by migration tests, 
 
 **Dependencies:** stable schema, export, local mutation/outbox contracts.
 
+**Status:** In progress. The **client sync engine landed first** (server-free, fully tested — see
+[ADR 0006](decisions/0006-sync-client.md)): `src/sync/` has the push/pull wire protocol with runtime
+validators, a conflict-resolving apply path (LWW by HLC, add/remove-HLC membership merge, session
+dedupe, tombstones) that applies a page and advances the cursor in one transaction and writes no
+outbox echo, and a single-flight `SyncEngine` cycle. A two-device fake-server round-trip proves
+convergence; idempotent push, partial-batch acknowledgement and failed-pull cursor safety are
+covered too. Remaining: the Worker/D1/R2/Access server and real `fetch` transport, progress-
+divergence prompting, per-field book-metadata policy, and bootstrap/cursor-expiry handling.
+
 Deliverables:
 
 - Cloudflare Access + Worker/Hono + D1 migrations.
