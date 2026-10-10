@@ -154,3 +154,10 @@ Required tests include:
 ## 11. Decisions still required before production sync
 
 Choose concrete request/response validators, maximum payload and batch sizes, HLC future-drift bounds, retention/compaction policy, stale-client compatibility window, and exact progress divergence threshold. These values should be based on testing and deployed service limits, not invented as permanent constants in this baseline.
+
+Implemented baselines (tunable, not final):
+
+- **Progress divergence threshold** — `PROGRESS_DIVERGENCE_THRESHOLD = 0.1` (10% of the book) in `src/sync/apply.ts`. A newer remote position from a _different_ device that differs from the local one by at least this fraction is held as a pending `progressConflicts` row (local-only, Dexie v3, never replicated) instead of applied; the local position is left untouched. The reader prompts on open; "Stay here" re-asserts the local position as a fresh mutation (so the choice propagates), "Go to" accepts the remote one as pulled data (no outbox echo), and a later local read dismisses the prompt.
+- **Book metadata** — per-field merge (not whole-row LWW): non-empty extracted/user-edited values are preserved, differing non-empty values resolve by HLC, lifecycle fields follow the HLC winner (`mergeBook` in `src/sync/apply.ts`).
+- **Cursor expiry (§7)** — a `cursor_expired` pull response makes the engine reset the cursor to zero and re-bootstrap once; `SyncResult.bootstrapped` records it so completeness is never falsely claimed.
+

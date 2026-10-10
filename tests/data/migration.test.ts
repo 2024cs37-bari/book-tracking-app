@@ -1,7 +1,7 @@
 import Dexie from 'dexie';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { newId } from '~/domain/ids';
-import { createDatabase, DB_SCHEMA_VERSION, type BookRow } from '~/data/db';
+import { createDatabase, DB_LOCAL_VERSION, type BookRow } from '~/data/db';
 
 let name: string;
 
@@ -41,18 +41,26 @@ async function seedV1(): Promise<BookRow> {
   return book;
 }
 
-it('upgrades a v1 database to v2 without losing existing rows', async () => {
+it('upgrades a v1 database to the current version without losing existing rows', async () => {
   const seeded = await seedV1();
 
   const db = createDatabase(name);
   await db.open();
   try {
-    expect(db.verno).toBe(DB_SCHEMA_VERSION);
+    expect(db.verno).toBe(DB_LOCAL_VERSION);
     const book = await db.books.get(seeded.id);
     expect(book?.title).toBe('Pre-existing Book');
 
-    // The v2 tables exist and are writable on the upgraded database.
-    for (const table of ['annotations', 'shelves', 'shelfBooks', 'tags', 'bookTags', 'sessions']) {
+    // The v2 and v3 tables exist and are writable on the upgraded database.
+    for (const table of [
+      'annotations',
+      'shelves',
+      'shelfBooks',
+      'tags',
+      'bookTags',
+      'sessions',
+      'progressConflicts',
+    ]) {
       expect(db.tables.map((t) => t.name)).toContain(table);
     }
     await db.shelves.add({ id: newId(), name: 'New Shelf', updatedHlc: '1:0:d', deleted: false });
@@ -62,13 +70,14 @@ it('upgrades a v1 database to v2 without losing existing rows', async () => {
   }
 });
 
-it('creates a fresh database directly at v2', async () => {
+it('creates a fresh database directly at the current version', async () => {
   const db = createDatabase(name);
   await db.open();
   try {
-    expect(db.verno).toBe(DB_SCHEMA_VERSION);
+    expect(db.verno).toBe(DB_LOCAL_VERSION);
     expect(await db.sessions.count()).toBe(0);
     expect(await db.annotations.count()).toBe(0);
+    expect(await db.progressConflicts.count()).toBe(0);
   } finally {
     db.close();
   }

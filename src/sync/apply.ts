@@ -13,6 +13,14 @@ import type {
 import type { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
 import type { PullChange } from './protocol';
 
+/**
+ * How far two devices' reading positions must differ (as a fraction of the
+ * book) before a remote update is held for the user to resolve rather than
+ * applied LWW (docs/SYNC.md §6). This is a baseline to be tuned against real
+ * usage, not a permanent constant (§11).
+ */
+export const PROGRESS_DIVERGENCE_THRESHOLD = 0.1;
+
 /** True when `candidate` is strictly newer than `existing` (or there is none). */
 function isNewer(candidate: string | undefined, existing: string | undefined): boolean {
   if (candidate === undefined) return false;
@@ -165,7 +173,29 @@ export async function applyChange(db: LibraryDatabase, change: PullChange): Prom
       const row = payload as unknown as ProgressRow;
       if (typeof row.bookId !== 'string') return;
       const local = await db.progress.get(row.bookId);
-      if (isNewer(row.updatedHlc, local?.updatedHlc)) await db.progress.put(row);
+      // Only a strictly newer remote position is a candidate at all.
+      if (!isNewer(row.updatedHlc, local?.updatedHlc)) return;
+      // Divergence between two different devices beyond the threshold is held
+      // for the user: record both candidates and do NOT overwrite the local
+      // position (§6). Replaying the same change re-records the same pending
+      // conflict, so both candidates are preserved until the user chooses.
+      if (
+        local !== undefined &&
+        row.deviceId !== local.deviceId &&
+        Math.abs(row.fraction - local.fraction) >= PROGRESS_DIVERGENCE_THRESHOLD
+      ) {
+        await db.progressConflicts.put({
+          bookId: row.bookId,
+          remote: row,
+          localFraction: local.fraction,
+          localUpdatedHlc: local.updatedHlc,
+        });
+        return;
+      }
+      // Ordinary update: last-writer-wins, and any now-moot pending prompt for
+      // this book is cleared.
+      await db.progress.put(row);
+      await db.progressConflicts.delete(row.bookId);
       return;
     }
     case 'annotation': {
@@ -257,6 +287,7 @@ export async function applyPullPage(
       db.tags,
       db.bookTags,
       db.sessions,
+      db.progressConflicts,
       db.syncMeta,
     ],
     async () => {

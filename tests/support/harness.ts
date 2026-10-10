@@ -4,6 +4,7 @@ import { createDatabase, type LibraryDatabase } from '~/data/db';
 import { createMutationContext } from '~/data/mutations';
 import { BookRepository } from '~/data/repositories/book-repository';
 import { ProgressRepository } from '~/data/repositories/progress-repository';
+import { ProgressConflictRepository } from '~/data/repositories/progress-conflict-repository';
 import { ChangeRepository } from '~/data/repositories/change-repository';
 import { DeviceStateRepository } from '~/data/repositories/device-state-repository';
 import { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
@@ -20,6 +21,7 @@ export interface TestHarness {
   readonly db: LibraryDatabase;
   readonly books: BookRepository;
   readonly progress: ProgressRepository;
+  readonly progressConflicts: ProgressConflictRepository;
   readonly changes: ChangeRepository;
   readonly deviceState: DeviceStateRepository;
   readonly syncMeta: SyncMetaRepository;
@@ -53,6 +55,7 @@ export async function createHarness(options: { startTime?: number } = {}): Promi
   const files = new MemoryBookFileStore();
   const books = new BookRepository(db, context);
   const progress = new ProgressRepository(db, context);
+  const progressConflicts = new ProgressConflictRepository(db, progress);
   const changes = new ChangeRepository(db);
   const deviceState = new DeviceStateRepository(db);
   const syncMeta = new SyncMetaRepository(db);
@@ -66,6 +69,7 @@ export async function createHarness(options: { startTime?: number } = {}): Promi
     db,
     books,
     progress,
+    progressConflicts,
     changes,
     deviceState,
     syncMeta,

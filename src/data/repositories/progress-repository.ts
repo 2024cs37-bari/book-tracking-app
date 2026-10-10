@@ -70,29 +70,38 @@ export class ProgressRepository {
   async save(input: SaveProgressInput): Promise<Progress> {
     const locator = assertLocator(input.locator);
 
-    return this.db.transaction('rw', this.db.progress, this.db.changes, async () => {
-      const existing = await this.db.progress.get(input.bookId);
-      if (existing === undefined) {
-        throw new AppError('not_found', `No reading state exists for book ${input.bookId}.`);
-      }
+    return this.db.transaction(
+      'rw',
+      this.db.progress,
+      this.db.changes,
+      this.db.progressConflicts,
+      async () => {
+        const existing = await this.db.progress.get(input.bookId);
+        if (existing === undefined) {
+          throw new AppError('not_found', `No reading state exists for book ${input.bookId}.`);
+        }
 
-      const status = input.status ?? suggestStatus(locator.fraction, existing.status);
+        const status = input.status ?? suggestStatus(locator.fraction, existing.status);
 
-      const row: ProgressRow = {
-        bookId: input.bookId,
-        status,
-        locatorKind: locator.kind,
-        locatorValue: locator.value,
-        fraction: locator.fraction,
-        updatedHlc: formatHlc(this.context.clock.next()),
-        deviceId: this.context.deviceId,
-      };
-      await this.db.progress.put(row);
-      await this.db.changes.add(
-        makeChangeRow(this.context, 'progress', input.bookId, 'upsert', row),
-      );
-      return toProgress(row);
-    });
+        const row: ProgressRow = {
+          bookId: input.bookId,
+          status,
+          locatorKind: locator.kind,
+          locatorValue: locator.value,
+          fraction: locator.fraction,
+          updatedHlc: formatHlc(this.context.clock.next()),
+          deviceId: this.context.deviceId,
+        };
+        await this.db.progress.put(row);
+        await this.db.changes.add(
+          makeChangeRow(this.context, 'progress', input.bookId, 'upsert', row),
+        );
+        // Moving the position locally is an implicit "keep reading here" choice,
+        // so any pending divergence prompt for this book is dismissed (§6).
+        await this.db.progressConflicts.delete(input.bookId);
+        return toProgress(row);
+      },
+    );
   }
 
   /** Sets the reading status without moving the position. */

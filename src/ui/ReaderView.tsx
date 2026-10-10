@@ -8,10 +8,13 @@ import {
   onCleanup,
   Show,
   Switch,
+  untrack,
 } from 'solid-js';
 import { useApp } from '~/app/context';
 import type { Locator } from '~/domain/locator';
 import type { Annotation } from '~/domain/annotation';
+import type { ProgressConflictRow } from '~/data/db';
+import { parseHlc } from '~/domain/hlc';
 import type {
   ReaderPage,
   ReaderSettings,
@@ -82,6 +85,17 @@ function saveSidebarPrefs(prefs: SidebarPrefs): void {
   }
 }
 
+/** " on 3/4/2026, 9:12 PM" from an HLC's wall time, or "" when unparseable. */
+function formatHlcTime(hlc: string): string {
+  const parsed = parseHlc(hlc);
+  if (parsed === null) return '';
+  try {
+    return ` on ${new Date(parsed.wallMs).toLocaleString()}`;
+  } catch {
+    return '';
+  }
+}
+
 export default function ReaderView() {
   const app = useApp();
   const params = useParams();
@@ -106,6 +120,7 @@ export default function ReaderView() {
     selection: SelectionInfo;
   } | null>(null);
   const [lookup, setLookup] = createSignal<{ word: string; x: number; y: number } | null>(null);
+  const [conflict, setConflict] = createSignal<ProgressConflictRow | null>(null);
   // One speech controller per reader view; the <ReaderTts> panel is a thin view
   // over it, so playback survives tab switches that unmount the view.
   const speech = createSpeech();
@@ -191,6 +206,33 @@ export default function ReaderView() {
       await reloadAnnotations(params.id ?? '');
     } catch (error) {
       showToast(`Could not change highlight colour: ${String(error)}`, 'error');
+    }
+  }
+
+  // Resolve a pending progress-divergence prompt: 'remote' accepts the other
+  // device's position (and jumps there), 'local' keeps and re-asserts this one.
+  async function resolveConflict(choice: 'local' | 'remote'): Promise<void> {
+    const pending = conflict();
+    if (pending === null) return;
+    const id = params.id ?? '';
+    setConflict(null);
+    try {
+      await app.progressConflicts.resolve(id, choice);
+      void app.persistClockState();
+      const remote = pending.remote;
+      if (
+        choice === 'remote' &&
+        remote.locatorKind !== undefined &&
+        remote.locatorValue !== undefined
+      ) {
+        session?.renderer.goTo({
+          kind: remote.locatorKind,
+          value: remote.locatorValue,
+          fraction: remote.fraction,
+        });
+      }
+    } catch (error) {
+      showToast(`Could not update the reading position: ${String(error)}`, 'error');
     }
   }
 
@@ -373,6 +415,7 @@ export default function ReaderView() {
     setSearchStatus('');
     setAnnotations([]);
     setSelection(null);
+    setConflict(null);
     setCanHighlight(false);
     setPages([]);
     setSupportsThumbnails(false);
@@ -460,7 +503,9 @@ export default function ReaderView() {
         // the event cannot bubble to the surface); PDF leaves this a no-op and
         // is covered by the surface handler below.
         offContextMenu = current.renderer.onContextMenu((point) => {
-          const selected = selection();
+          // Fired on a user right-click/long-press: read the latest selection
+          // without subscribing (this callback is not a tracked scope).
+          const selected = untrack(selection);
           if (selected !== null) {
             setContextMenu({ x: point.x, y: point.y, selection: selected });
           }
@@ -474,6 +519,17 @@ export default function ReaderView() {
             // The Pages view is optional; a failure leaves it empty.
           });
         void reloadAnnotations(id);
+        // Surface a pending progress-divergence prompt for this book, if the
+        // last sync recorded one (SYNC.md §6). The reader opens at the local
+        // position; the prompt offers to jump to the other device's instead.
+        void app.progressConflicts
+          .get(id)
+          .then((pending) => {
+            if (!disposed) setConflict(pending ?? null);
+          })
+          .catch(() => {
+            // The prompt is optional; a load failure must not break reading.
+          });
         // Contents are optional: their parsing must not delay basic reading.
         try {
           const items = await current.renderer.getToc();
@@ -718,6 +774,30 @@ export default function ReaderView() {
           <p class="note" role="status">
             {message()}
           </p>
+        </Show>
+        <Show when={conflict()}>
+          {(pending) => (
+            <div class="reader-conflict" role="alertdialog" aria-label="Reading position differs">
+              <p class="reader-conflict-text">
+                Another device reached{' '}
+                <strong>{Math.round(pending().remote.fraction * 100)}%</strong> of this book
+                {formatHlcTime(pending().remote.updatedHlc)}. You're at{' '}
+                <strong>{Math.round(pending().localFraction * 100)}%</strong> here.
+              </p>
+              <div class="reader-conflict-actions">
+                <button
+                  type="button"
+                  class="button button-primary"
+                  onClick={() => void resolveConflict('remote')}
+                >
+                  Go to {Math.round(pending().remote.fraction * 100)}%
+                </button>
+                <button type="button" class="button" onClick={() => void resolveConflict('local')}>
+                  Stay here
+                </button>
+              </div>
+            </div>
+          )}
         </Show>
         <div
           class="reader-surface"

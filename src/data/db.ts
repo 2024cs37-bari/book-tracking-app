@@ -154,7 +154,33 @@ export interface SessionRow {
   deviceId: string;
 }
 
+/**
+ * A remote reading position that diverged from the local one far enough to need
+ * the user's choice (docs/SYNC.md §6). Local-only: never replicated, never
+ * exported — it is a transient prompt, like {@link DeviceStateRow}. Keyed by
+ * bookId, so a newer diverging candidate simply replaces the pending one.
+ */
+export interface ProgressConflictRow {
+  bookId: string;
+  /** The diverging remote candidate, applied verbatim if the user picks it. */
+  remote: ProgressRow;
+  /** The local position when divergence was detected, shown in the prompt. */
+  localFraction: number;
+  localUpdatedHlc: string;
+}
+
+/**
+ * The REPLICATED (wire) schema version exchanged with the sync server and
+ * written into backups. It tracks only the replicated entities, so a local-only
+ * table bump (e.g. the v3 progressConflicts table) does NOT advance it.
+ */
 export const DB_SCHEMA_VERSION = 2;
+
+/**
+ * The LOCAL IndexedDB (Dexie) schema version. It advances for local-only tables
+ * too, so it can run ahead of the replicated {@link DB_SCHEMA_VERSION}.
+ */
+export const DB_LOCAL_VERSION = 3;
 export const DEFAULT_DB_NAME = 'book-reader';
 
 export class LibraryDatabase extends Dexie {
@@ -170,6 +196,7 @@ export class LibraryDatabase extends Dexie {
   tags!: Table<TagRow, string>;
   bookTags!: Table<BookTagRow, [string, string]>;
   sessions!: Table<SessionRow, string>;
+  progressConflicts!: Table<ProgressConflictRow, string>;
 
   constructor(name: string = DEFAULT_DB_NAME) {
     super(name);
@@ -196,6 +223,13 @@ export class LibraryDatabase extends Dexie {
       bookTags: '[tagId+bookId], tagId, bookId, addedHlc',
       sessions: 'id, bookId, startedAt',
     });
+
+    // v3 adds a local-only table of pending progress-divergence prompts
+    // (SYNC.md §6). It is NOT replicated, so the wire DB_SCHEMA_VERSION stays 2;
+    // only the local IndexedDB version advances. v1/v2 tables are unchanged.
+    this.version(3).stores({
+      progressConflicts: 'bookId',
+    });
   }
 }
 
@@ -215,6 +249,11 @@ export const LOCAL_MIGRATIONS: readonly LocalMigration[] = [
     version: 2,
     description:
       'Phase 2 collections and reading history: annotations, shelves, shelfBooks, tags, bookTags and sessions. v1 tables unchanged.',
+  },
+  {
+    version: 3,
+    description:
+      'Local-only progressConflicts table for progress-divergence prompts (not replicated). v1/v2 tables unchanged.',
   },
 ];
 

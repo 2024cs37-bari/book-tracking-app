@@ -244,6 +244,123 @@ describe('applyPullPage', () => {
     expect(await harness.db.sessions.count()).toBe(1);
   });
 
+  it('progress divergence beyond the threshold preserves both candidates (§6)', async () => {
+    await harness.db.progress.put({
+      bookId: 'b1',
+      status: 'reading',
+      fraction: 0.1,
+      updatedHlc: hlc(100, 0),
+      deviceId: 'local',
+      locatorKind: 'cfi',
+      locatorValue: 'L',
+    });
+    await apply(
+      [
+        change('progress', 'b1', hlc(200, 0), {
+          bookId: 'b1',
+          status: 'reading',
+          fraction: 0.9,
+          updatedHlc: hlc(200, 0),
+          deviceId: 'remote',
+          locatorKind: 'cfi',
+          locatorValue: 'R',
+        }),
+      ],
+      1,
+    );
+    // The local position is left untouched...
+    expect((await harness.db.progress.get('b1'))?.fraction).toBe(0.1);
+    // ...and the remote candidate is held for the user.
+    const pending = await harness.db.progressConflicts.get('b1');
+    expect(pending?.remote.fraction).toBe(0.9);
+    expect(pending?.localFraction).toBe(0.1);
+  });
+
+  it('progress within the threshold applies last-writer-wins', async () => {
+    await harness.db.progress.put({
+      bookId: 'b1',
+      status: 'reading',
+      fraction: 0.5,
+      updatedHlc: hlc(100, 0),
+      deviceId: 'local',
+    });
+    await apply(
+      [
+        change('progress', 'b1', hlc(200, 0), {
+          bookId: 'b1',
+          status: 'reading',
+          fraction: 0.55,
+          updatedHlc: hlc(200, 0),
+          deviceId: 'remote',
+        }),
+      ],
+      1,
+    );
+    expect((await harness.db.progress.get('b1'))?.fraction).toBe(0.55);
+    expect(await harness.db.progressConflicts.get('b1')).toBeUndefined();
+  });
+
+  it('a large progress jump from the same device applies without prompting', async () => {
+    await harness.db.progress.put({
+      bookId: 'b1',
+      status: 'reading',
+      fraction: 0.1,
+      updatedHlc: hlc(100, 0),
+      deviceId: 'dev-x',
+    });
+    await apply(
+      [
+        change('progress', 'b1', hlc(200, 0), {
+          bookId: 'b1',
+          status: 'reading',
+          fraction: 0.9,
+          updatedHlc: hlc(200, 0),
+          deviceId: 'dev-x',
+        }),
+      ],
+      1,
+    );
+    expect((await harness.db.progress.get('b1'))?.fraction).toBe(0.9);
+    expect(await harness.db.progressConflicts.get('b1')).toBeUndefined();
+  });
+
+  it('a newer in-range progress update clears a pending prompt', async () => {
+    await harness.db.progress.put({
+      bookId: 'b1',
+      status: 'reading',
+      fraction: 0.1,
+      updatedHlc: hlc(100, 0),
+      deviceId: 'local',
+    });
+    await apply(
+      [
+        change('progress', 'b1', hlc(200, 0), {
+          bookId: 'b1',
+          status: 'reading',
+          fraction: 0.9,
+          updatedHlc: hlc(200, 0),
+          deviceId: 'remote',
+        }),
+      ],
+      1,
+    );
+    expect(await harness.db.progressConflicts.get('b1')).toBeDefined();
+    await apply(
+      [
+        change('progress', 'b1', hlc(300, 0), {
+          bookId: 'b1',
+          status: 'reading',
+          fraction: 0.12,
+          updatedHlc: hlc(300, 0),
+          deviceId: 'remote',
+        }),
+      ],
+      2,
+    );
+    expect((await harness.db.progress.get('b1'))?.fraction).toBe(0.12);
+    expect(await harness.db.progressConflicts.get('b1')).toBeUndefined();
+  });
+
   it('advances the local clock past applied remote HLCs', async () => {
     await apply([change('book', 'b1', hlc(9_999, 3), bookRow('b1', 'Future', hlc(9_999, 3)))], 1);
     const next = clock.next();
