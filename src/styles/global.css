@@ -504,6 +504,51 @@ input[type='file'] {
   display: block;
   margin: 0 auto;
 }
+.pdf-page {
+  position: relative;
+  width: max-content;
+  margin: 0 auto;
+}
+/* pdf.js text layer: transparent, selectable text aligned over the canvas. */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  caret-color: transparent;
+}
+.textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+.textLayer ::selection {
+  background: rgba(90, 169, 246, 0.4);
+}
+.pdf-highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.pdf-highlight {
+  position: absolute;
+  background: var(--pdf-highlight-color, #f6c744);
+  opacity: 0.35;
+  border-radius: 2px;
+}
 
 .reader-contents nav {
   max-height: 30vh;

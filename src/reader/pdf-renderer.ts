@@ -19,6 +19,16 @@ import {
 export const PDF_MAX_CANVAS_PIXELS = 4_000_000;
 export const PDF_PAGE_CACHE_LIMIT = 1;
 
+/** Minimal structural type for pdf.js's TextLayer, to avoid importing it eagerly. */
+interface PdfTextLayer {
+  render(): Promise<unknown>;
+}
+type PdfTextLayerCtor = new (opts: {
+  textContentSource: ReadableStream;
+  container: HTMLElement;
+  viewport: unknown;
+}) => PdfTextLayer;
+
 /** One visible page at a time: no canvases or decoded resources for hidden pages. */
 export class PdfRenderer implements Renderer {
   private host?: HTMLElement;
@@ -37,6 +47,8 @@ export class PdfRenderer implements Renderer {
   private streamError?: unknown;
   private queue: Promise<void> = Promise.resolve();
   private settings = DEFAULT_READER_SETTINGS;
+  private textLayerCtor?: PdfTextLayerCtor;
+  private pageEl?: HTMLDivElement;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
   private readonly scroll = () => this.emit();
   private resize?: ResizeObserver;
@@ -67,8 +79,9 @@ export class PdfRenderer implements Renderer {
   async open(file: Blob, startAt?: Locator): Promise<void> {
     if (!this.host || this.dead) throw new Error('Reader is not mounted.');
     if (this.loading) throw new Error('Create a new reader session to open another book.');
-    const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
+    const { getDocument, GlobalWorkerOptions, TextLayer } = await import('pdfjs-dist');
     if (this.dead) return;
+    this.textLayerCtor = TextLayer as unknown as PdfTextLayerCtor;
     GlobalWorkerOptions.workerSrc = workerUrl;
     const base = `${import.meta.env.BASE_URL}pdf-assets/`;
     this.loading = getDocument({
@@ -179,7 +192,11 @@ export class PdfRenderer implements Renderer {
         canvas.setAttribute('aria-label', `Page ${target + 1} of ${pdf.numPages}`);
         canvas.dataset.renderState = 'pending';
         this.canvas = canvas;
-        this.scroller!.replaceChildren(canvas);
+        const pageEl = document.createElement('div');
+        pageEl.className = 'pdf-page';
+        pageEl.append(canvas);
+        this.pageEl = pageEl;
+        this.scroller!.replaceChildren(pageEl);
         this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
         const task = page.render({ canvas, viewport });
         this.task = task;
@@ -202,10 +219,38 @@ export class PdfRenderer implements Renderer {
           canvas.dataset.renderState = 'ready';
           this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
           this.emit();
+          // A selectable text layer over the canvas; drawn after the page so it
+          // never delays the first paint. Stale appends are guarded by pageEl.
+          void this.renderTextLayer(page, pageEl, generation);
         }
       });
     this.queue = result;
     return result;
+  }
+  private async renderTextLayer(
+    page: PDFPageProxy,
+    pageEl: HTMLDivElement,
+    generation: number,
+  ): Promise<void> {
+    const ctor = this.textLayerCtor;
+    if (!ctor) return;
+    try {
+      const viewport = page.getViewport({ scale: this.scale });
+      const container = document.createElement('div');
+      container.className = 'textLayer';
+      container.style.setProperty('--scale-factor', String(this.scale));
+      container.style.setProperty('--total-scale-factor', String(this.scale));
+      container.style.width = `${Math.floor(viewport.width)}px`;
+      container.style.height = `${Math.floor(viewport.height)}px`;
+      const layer = new ctor({ textContentSource: page.streamTextContent(), container, viewport });
+      await layer.render();
+      if (generation === this.generation && !this.dead && this.pageEl === pageEl) {
+        pageEl.append(container);
+      }
+    } catch {
+      // The text layer is a selection/accessibility enhancement; a failure must
+      // not break page rendering.
+    }
   }
   private move(index: number, offset = 0): void {
     void this.schedule(index, offset).catch((error: unknown) =>

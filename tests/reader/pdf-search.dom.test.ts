@@ -27,6 +27,11 @@ const engine = vi.hoisted(() => {
 
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: {},
+  TextLayer: class {
+    render() {
+      return Promise.resolve();
+    }
+  },
   getDocument: () => ({
     promise: Promise.resolve({
       numPages: PAGE_ITEMS.length,
