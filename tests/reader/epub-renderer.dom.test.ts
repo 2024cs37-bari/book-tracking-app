@@ -69,6 +69,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/** A pointer event jsdom can dispatch; carries pointerId plus client coords. */
+function pointer(type: string, id: number, x: number, y: number): Event {
+  const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+  Object.defineProperty(event, 'pointerId', { value: id });
+  return event;
+}
+
 async function adapter() {
   // jsdom lacks CSS.escape; these fixtures use simple identifiers/quoted attributes.
   vi.stubGlobal('CSS', {
@@ -143,6 +150,25 @@ it('restores native CFI and reports fraction fallback for an unresolved locator'
   expect(relocated).toHaveBeenLastCalledWith(
     expect.objectContaining({ kind: 'cfi', fraction: 0.5 }),
     0.5,
+  );
+  renderer.destroy();
+});
+
+it('pinch-out reflows at a larger font size once the gesture ends', async () => {
+  const { renderer, host } = await adapter();
+  await renderer.open(new Blob([buildEpubFixture({ chapters: 2 })]));
+  const view = host.querySelector('foliate-view') as TestView;
+  view.renderer.setStyles.mockClear();
+  // Two fingers 100px apart, spread to 150px — a 1.5x pinch off the 18px base.
+  host.dispatchEvent(pointer('pointerdown', 1, 0, 0));
+  host.dispatchEvent(pointer('pointerdown', 2, 100, 0));
+  host.dispatchEvent(pointer('pointermove', 2, 150, 0));
+  // Nothing reflows mid-gesture.
+  expect(view.renderer.setStyles).not.toHaveBeenCalled();
+  host.dispatchEvent(pointer('pointerup', 1, 0, 0));
+  host.dispatchEvent(pointer('pointerup', 2, 150, 0));
+  await vi.waitFor(() =>
+    expect(view.renderer.setStyles).toHaveBeenCalledWith(expect.stringContaining('27px')),
   );
   renderer.destroy();
 });

@@ -4,6 +4,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PdfRenderer, PDF_MAX_CANVAS_PIXELS } from '~/reader/pdf-renderer';
 import { buildPdfFixture } from '../support/fixtures';
 
+/** A pointer event jsdom can dispatch; carries pointerId plus client coords. */
+function pointer(type: string, id: number, x: number, y: number): Event {
+  const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+  Object.defineProperty(event, 'pointerId', { value: id });
+  return event;
+}
+
 const engine = vi.hoisted(() => {
   const cleanupPage = vi.fn();
   const render = vi.fn(() => ({ promise: Promise.resolve(), cancel: vi.fn() }));
@@ -130,6 +137,30 @@ it('reports a rejected render, retains the last successful relocation and can re
   renderer.prev();
   await vi.waitFor(() => expect(relocated).toHaveBeenCalledTimes(2));
   expect(host.querySelector('canvas')?.dataset.renderState).toBe('ready');
+  renderer.destroy();
+  await vi.waitFor(() => expect(engine.destroy).toHaveBeenCalledOnce());
+});
+
+it('pinch-out re-renders the page at a larger, still-bounded scale once the gesture ends', async () => {
+  const renderer = new PdfRenderer();
+  const host = document.createElement('div');
+  document.body.append(host);
+  renderer.mount(host);
+  await renderer.open(new Blob([buildPdfFixture()]));
+  const beforeWidth = host.querySelector('canvas')!.width;
+  // Two fingers 100px apart, then spread to 200px — a 2x pinch.
+  host.dispatchEvent(pointer('pointerdown', 1, 0, 0));
+  host.dispatchEvent(pointer('pointerdown', 2, 100, 0));
+  host.dispatchEvent(pointer('pointermove', 2, 200, 0));
+  // No re-raster happens mid-gesture: still the original canvas.
+  expect(host.querySelector('canvas')!.width).toBe(beforeWidth);
+  host.dispatchEvent(pointer('pointerup', 1, 0, 0));
+  host.dispatchEvent(pointer('pointerup', 2, 200, 0));
+  await vi.waitFor(() => expect(host.querySelector('canvas')!.width).toBeGreaterThan(beforeWidth));
+  const after = host.querySelector('canvas')!;
+  expect(after.width).toBe(beforeWidth * 2);
+  expect(after.width * after.height).toBeLessThanOrEqual(PDF_MAX_CANVAS_PIXELS);
+  expect(host.querySelectorAll('canvas')).toHaveLength(1);
   renderer.destroy();
   await vi.waitFor(() => expect(engine.destroy).toHaveBeenCalledOnce());
 });
