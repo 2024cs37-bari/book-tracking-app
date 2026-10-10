@@ -36,6 +36,13 @@ class TestRenderer implements Renderer {
     return () => {};
   }
   applyHighlights() {}
+  readonly supportsThumbnails = false;
+  async listPages() {
+    return [];
+  }
+  async renderThumbnail() {
+    return null;
+  }
   destroy = vi.fn();
   onRelocate(callback: (locator: Locator, fraction: number) => void) {
     this.callback = callback;

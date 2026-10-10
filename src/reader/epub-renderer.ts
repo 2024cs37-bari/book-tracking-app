@@ -3,6 +3,7 @@ import { assertLocator, createCfiLocator, type Locator } from '~/domain/locator'
 import {
   DEFAULT_READER_SETTINGS,
   type Highlight,
+  type ReaderPage,
   type ReaderSettings,
   type Renderer,
   type SearchHit,
@@ -118,6 +119,7 @@ export class EpubRenderer implements Renderer {
   private searchToken = 0;
   private callbacks = new Set<(locator: Locator, fraction: number) => void>();
   readonly supportsHighlights = true;
+  readonly supportsThumbnails = false;
   private overlayerModule?: OverlayerModule;
   private highlights: readonly Highlight[] = [];
   private currentFraction = 0;
@@ -405,6 +407,34 @@ export class EpubRenderer implements Renderer {
   }
   private emitSelection(selection: SelectionInfo | null): void {
     for (const callback of this.selectionCallbacks) callback(selection);
+  }
+  listPages(): Promise<ReaderPage[]> {
+    const book = this.book;
+    if (book === undefined || this.dead) return Promise.resolve([]);
+    const total = book.sections.length;
+    const pages: ReaderPage[] = [];
+    for (let index = 0; index < total; index += 1) {
+      const cfi = book.sections[index]?.cfi;
+      if (cfi === undefined || cfi.length === 0) continue;
+      try {
+        pages.push({
+          index,
+          label: `Section ${index + 1}`,
+          locator: createCfiLocator(cfi, total > 0 ? index / total : 0),
+        });
+      } catch {
+        // A section whose base CFI is unusable (e.g. over the length cap) is
+        // simply not listed; the rest of the sections still navigate.
+      }
+    }
+    return Promise.resolve(pages);
+  }
+  renderThumbnail(index: number, maxEdgePx: number): Promise<string | null> {
+    void index;
+    void maxEdgePx;
+    // Reflowable EPUB has no fixed pages to raster; the Pages view falls back
+    // to the section list, so there is nothing to render.
+    return Promise.resolve(null);
   }
   async *search(query: string, signal?: AbortSignal): AsyncGenerator<SearchHit> {
     const view = this.view;

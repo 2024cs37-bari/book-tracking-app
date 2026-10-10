@@ -18,6 +18,7 @@ import {
 import {
   DEFAULT_READER_SETTINGS,
   type Highlight,
+  type ReaderPage,
   type ReaderSettings,
   type Renderer,
   type SearchHit,
@@ -35,6 +36,8 @@ const PDF_HIGHLIGHT_COLORS: Record<string, string> = {
 
 export const PDF_MAX_CANVAS_PIXELS = 4_000_000;
 export const PDF_PAGE_CACHE_LIMIT = 1;
+/** Pixel ceiling for a sidebar page thumbnail (small, so cheap to render). */
+export const PDF_THUMBNAIL_MAX_PIXELS = 400_000;
 
 /** Minimal structural type for pdf.js's TextLayer, to avoid importing it eagerly. */
 interface PdfTextLayer {
@@ -69,6 +72,7 @@ export class PdfRenderer implements Renderer {
   private textLayerCtor?: PdfTextLayerCtor;
   private pageEl?: HTMLDivElement;
   readonly supportsHighlights = true;
+  readonly supportsThumbnails = true;
   private highlights: readonly Highlight[] = [];
   private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
   private textLayerEl?: HTMLElement;
@@ -419,6 +423,52 @@ export class PdfRenderer implements Renderer {
   onRelocate(callback: (locator: Locator, fraction: number) => void): () => void {
     this.callbacks.add(callback);
     return () => this.callbacks.delete(callback);
+  }
+  listPages(): Promise<ReaderPage[]> {
+    const pdf = this.document;
+    if (pdf === undefined || this.dead) return Promise.resolve([]);
+    const total = pdf.numPages;
+    const pages: ReaderPage[] = [];
+    for (let index = 0; index < total; index += 1) {
+      pages.push({
+        index,
+        label: String(index + 1),
+        locator: createPdfLocator(index, 0, total > 0 ? index / total : 0),
+      });
+    }
+    return Promise.resolve(pages);
+  }
+  async renderThumbnail(index: number, maxEdgePx: number): Promise<string | null> {
+    const pdf = this.document;
+    if (pdf === undefined || this.dead || index < 0 || index >= pdf.numPages) return null;
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    if (typeof canvas.getContext !== 'function' || typeof canvas.toBlob !== 'function') return null;
+    const page = await pdf.getPage(index + 1);
+    try {
+      const natural = page.getViewport({ scale: 1 });
+      const scale = Math.min(
+        maxEdgePx / Math.max(natural.width, natural.height),
+        Math.sqrt(PDF_THUMBNAIL_MAX_PIXELS / (natural.width * natural.height)),
+      );
+      const viewport = page.getViewport({ scale });
+      canvas.width = Math.max(1, Math.floor(viewport.width));
+      canvas.height = Math.max(1, Math.floor(viewport.height));
+      await page.render({ canvas, viewport }).promise;
+      if (this.dead) return null;
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((result) => resolve(result), 'image/jpeg', 0.72),
+      );
+      return blob === null ? null : URL.createObjectURL(blob);
+    } catch {
+      return null;
+    } finally {
+      try {
+        page.cleanup();
+      } catch {
+        /* already torn down */
+      }
+    }
   }
   async *search(query: string, signal?: AbortSignal): AsyncGenerator<SearchHit> {
     const pdf = this.document;

@@ -233,6 +233,17 @@ it('skips a hit whose CFI exceeds the locator length cap instead of aborting the
   renderer.destroy();
 });
 
+it('lists spine sections as pages for the sidebar, with no thumbnails', async () => {
+  const { renderer } = await adapter();
+  await renderer.open(new Blob([buildEpubFixture({ chapters: 3, paragraphs: 2 })]));
+  expect(renderer.supportsThumbnails).toBe(false);
+  const pages = await renderer.listPages();
+  expect(pages.length).toBeGreaterThan(0);
+  expect(pages[0]!.locator.kind).toBe('cfi');
+  expect(await renderer.renderThumbnail(0, 160)).toBeNull();
+  renderer.destroy();
+});
+
 it('a newer search prevents the superseded one from clearing the view', async () => {
   const { renderer } = await adapter();
   await renderer.open(new Blob([buildEpubFixture({ chapters: 2, paragraphs: 2 })]));

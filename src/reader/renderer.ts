@@ -29,6 +29,16 @@ export interface SelectionInfo {
   readonly excerpt: string;
 }
 
+/**
+ * A navigable unit for the sidebar's Pages view: a PDF page or an EPUB spine
+ * section. `index` is the engine's own 0-based ordinal, used for thumbnails.
+ */
+export interface ReaderPage {
+  readonly index: number;
+  readonly label: string;
+  readonly locator: Locator;
+}
+
 export type ReaderTheme = 'light' | 'sepia' | 'dark';
 
 export interface ReaderSettings {
@@ -69,6 +79,16 @@ export interface Renderer {
   onSelection(callback: (selection: SelectionInfo | null) => void): Unsubscribe;
   /** Draws the given highlights, replacing any previously drawn set. */
   applyHighlights(highlights: readonly Highlight[]): void;
+  /** True when `renderThumbnail` can produce page images (PDF yes, EPUB no). */
+  readonly supportsThumbnails: boolean;
+  /** The book's navigable units — PDF pages or EPUB sections — for the Pages view. */
+  listPages(): Promise<ReaderPage[]>;
+  /**
+   * Renders unit `index` to an image object URL no larger than `maxEdgePx` on
+   * its longest edge, or null when unsupported or unavailable. Callers revoke
+   * the URL when done.
+   */
+  renderThumbnail(index: number, maxEdgePx: number): Promise<string | null>;
   applySettings(settings: ReaderSettings): void;
   destroy(): void;
 }

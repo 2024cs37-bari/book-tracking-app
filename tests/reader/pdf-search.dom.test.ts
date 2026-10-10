@@ -108,6 +108,17 @@ it('yields nothing for a blank query', async () => {
   renderer.destroy();
 });
 
+it('lists every page with a page locator for the sidebar Pages view', async () => {
+  const renderer = await openRenderer();
+  expect(renderer.supportsThumbnails).toBe(true);
+  const pages = await renderer.listPages();
+  expect(pages).toHaveLength(PAGE_ITEMS.length);
+  expect(pages[0]!.label).toBe('1');
+  expect(pages[0]!.locator.value).toBe('0:0');
+  expect(pages.at(-1)!.locator.value).toBe(`${PAGE_ITEMS.length - 1}:0`);
+  renderer.destroy();
+});
+
 it('stops early when the search is aborted', async () => {
   const renderer = await openRenderer();
   const controller = new AbortController();
