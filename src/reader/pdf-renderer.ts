@@ -39,12 +39,13 @@ export const PDF_PAGE_CACHE_LIMIT = 1;
 /** Pixel ceiling for a sidebar page thumbnail (small, so cheap to render). */
 export const PDF_THUMBNAIL_MAX_PIXELS = 400_000;
 /**
- * Minimum width change (CSS px) that re-renders on resize. A tall page toggling
- * its scrollbar, or fractional display scaling, can jitter the measured width by
- * a pixel or two every render; re-rendering on that would loop forever. Only a
- * genuine resize crosses this threshold.
+ * Smallest width change (CSS px) that re-renders on resize. It is deliberately
+ * larger than any desktop scrollbar: a tall page toggling a scrollbar changes
+ * the measured width by ~15px, and re-rendering on that would loop forever
+ * (render → page gets tall → scrollbar appears → width shrinks → render…). A
+ * genuine window resize or sidebar drag always crosses this threshold.
  */
-export const RESIZE_WIDTH_EPSILON = 8;
+export const RESIZE_WIDTH_EPSILON = 24;
 /** Pinch-to-zoom clamps the extra scale factor applied on top of the fit width. */
 export const PDF_MIN_ZOOM = 0.5;
 export const PDF_MAX_ZOOM = 4;
