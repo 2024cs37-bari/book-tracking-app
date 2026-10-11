@@ -6,6 +6,7 @@ import { ProgressRepository } from '~/data/repositories/progress-repository';
 import { ProgressConflictRepository } from '~/data/repositories/progress-conflict-repository';
 import { ChangeRepository } from '~/data/repositories/change-repository';
 import { DeviceStateRepository } from '~/data/repositories/device-state-repository';
+import { FileTransferRepository } from '~/data/repositories/file-transfer-repository';
 import { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
 import { AnnotationRepository } from '~/data/repositories/annotation-repository';
 import { ShelfRepository } from '~/data/repositories/shelf-repository';
@@ -20,6 +21,8 @@ import { RestoreService } from '~/services/restore-service';
 import { ReaderService } from '~/services/reader-service';
 import { SyncEngine } from '~/sync/engine';
 import { createHttpSyncTransport } from '~/sync/http-transport';
+import { FileTransferEngine } from '~/transfer/engine';
+import { createHttpFileTransport } from '~/transfer/http-transport';
 import { EpubRenderer } from '~/reader/epub-renderer';
 import { PdfRenderer } from '~/reader/pdf-renderer';
 
@@ -36,6 +39,7 @@ export interface AppServices {
   readonly progressConflicts: ProgressConflictRepository;
   readonly changes: ChangeRepository;
   readonly deviceState: DeviceStateRepository;
+  readonly fileTransfers: FileTransferRepository;
   readonly syncMeta: SyncMetaRepository;
   readonly annotations: AnnotationRepository;
   readonly shelves: ShelfRepository;
@@ -55,6 +59,12 @@ export interface AppServices {
    * keeps the UI honest and ensures no network work runs without a target.
    */
   readonly sync: SyncEngine | null;
+  /**
+   * The original-file transfer engine, or null when no sync server is
+   * configured (same gate as `sync`). Uploads local books and downloads
+   * remote-only ones through the Worker's R2 endpoints (Phase 4).
+   */
+  readonly fileTransfer: FileTransferEngine | null;
   /** Set when a non-durable or degraded storage adapter is in use. */
   readonly storageWarning: string | null;
   readonly persistentStorage: boolean | null;
@@ -101,6 +111,7 @@ export async function createAppServices(
   const progressConflicts = new ProgressConflictRepository(db, progress);
   const changes = new ChangeRepository(db);
   const deviceState = new DeviceStateRepository(db);
+  const fileTransfers = new FileTransferRepository(db);
   const annotations = new AnnotationRepository(db, context);
   const shelves = new ShelfRepository(db, context);
   const tags = new TagRepository(db, context);
@@ -139,6 +150,17 @@ export async function createAppServices(
         })
       : null;
 
+  const fileTransfer =
+    syncBaseUrl.length > 0
+      ? new FileTransferEngine({
+          transfers: fileTransfers,
+          files: selection.store,
+          books,
+          deviceState,
+          transport: createHttpFileTransport({ baseUrl: syncBaseUrl }),
+        })
+      : null;
+
   return {
     db,
     books,
@@ -146,6 +168,7 @@ export async function createAppServices(
     progressConflicts,
     changes,
     deviceState,
+    fileTransfers,
     syncMeta,
     annotations,
     shelves,
@@ -170,5 +193,6 @@ export async function createAppServices(
     storageWarning: selection.fallbackReason,
     persistentStorage,
     persistClockState,
+    fileTransfer,
   };
 }

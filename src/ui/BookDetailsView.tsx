@@ -22,6 +22,8 @@ import { SupportNote, StatusBadge } from './badges';
 interface DetailsData {
   readonly book: Book | undefined;
   readonly progress: Progress | undefined;
+  /** Whether the original file is stored on this device (STORAGE.md §4). */
+  readonly filePresent: boolean;
 }
 
 interface CollectionsData {
@@ -51,7 +53,8 @@ export default function BookDetailsView() {
     async () => {
       const id = bookId();
       const [book, progress] = await Promise.all([app.books.getById(id), app.progress.get(id)]);
-      return { book, progress };
+      const filePresent = book !== undefined && (await app.files.has(bookFileKey(book.sha256)));
+      return { book, progress, filePresent };
     },
   );
 
@@ -244,6 +247,38 @@ export default function BookDetailsView() {
         ? 'The original file is present in local storage.'
         : 'The original file is missing from local storage in this browser.',
     );
+  }
+
+  // Back up the local original to sync (upload) or fetch a remote-only one
+  // (download), then refresh presence. The engine deduplicates by hash, verifies
+  // a download's SHA-256 before storing it, and leaves a failed job queued.
+  async function transferFile(direction: 'upload' | 'download'): Promise<void> {
+    const book = details()?.book;
+    if (book === undefined || app.fileTransfer === null) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (direction === 'upload') await app.fileTransfers.enqueueUpload(book.sha256);
+      else await app.fileTransfers.enqueueDownload(book.sha256);
+      const result = await app.fileTransfer.run();
+      const present = await app.files.has(bookFileKey(book.sha256));
+      await app.deviceState.setFilePresent(book.id, present);
+      setRefreshToken((token) => token + 1);
+      await refetch();
+      if (direction === 'upload') {
+        setMessage(
+          result.failed > 0 ? 'Back-up failed; it will retry later.' : 'Backed up to sync.',
+        );
+      } else {
+        setMessage(
+          present ? 'Downloaded to this device.' : 'Download failed; it will retry later.',
+        );
+      }
+    } catch (error) {
+      setMessage(`Transfer failed: ${String(error)}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -697,16 +732,56 @@ export default function BookDetailsView() {
                     </div>
                   </Show>
 
-                  <details class="diagnostics">
-                    <summary>Local file</summary>
-                    <p>
-                      Availability is tracked per device. Nothing here deletes the original; see the
-                      data-lifecycle decision record.
+                  <section class="file-availability">
+                    <h3>File</h3>
+                    <p class="note">
+                      {data().filePresent
+                        ? 'The original is available offline on this device.'
+                        : 'The original is not stored on this device.'}
                     </p>
-                    <button type="button" class="button" onClick={() => void checkFilePresence()}>
-                      Check local file
-                    </button>
-                  </details>
+                    <Show
+                      when={app.fileTransfer !== null}
+                      fallback={
+                        <p class="note">
+                          Configure sync to back up the original and download it on your other
+                          devices.
+                        </p>
+                      }
+                    >
+                      <div class="panel-actions">
+                        <Show when={data().filePresent}>
+                          <button
+                            type="button"
+                            class="button"
+                            disabled={busy()}
+                            onClick={() => void transferFile('upload')}
+                          >
+                            Back up to sync
+                          </button>
+                        </Show>
+                        <Show when={!data().filePresent}>
+                          <button
+                            type="button"
+                            class="button button-primary"
+                            disabled={busy()}
+                            onClick={() => void transferFile('download')}
+                          >
+                            Download to this device
+                          </button>
+                        </Show>
+                      </div>
+                    </Show>
+                    <details class="diagnostics">
+                      <summary>Local file</summary>
+                      <p>
+                        Availability is tracked per device. Nothing here deletes the original; see
+                        the data-lifecycle decision record.
+                      </p>
+                      <button type="button" class="button" onClick={() => void checkFilePresence()}>
+                        Check local file
+                      </button>
+                    </details>
+                  </section>
 
                   <Show when={message()}>
                     {(text) => (
