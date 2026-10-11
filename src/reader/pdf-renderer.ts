@@ -96,6 +96,12 @@ export class PdfRenderer implements Renderer {
   private resizeTimer?: ReturnType<typeof setTimeout>;
   /** Extra render-scale factor from pinch-to-zoom, on top of the fit-to-width scale. */
   private zoom = 1;
+  /**
+   * Transient zoom applied as a GPU CSS transform during a pinch/wheel gesture,
+   * relative to the committed `zoom`. The sheet scales instantly and smoothly;
+   * one re-raster at the new resolution runs when the gesture settles.
+   */
+  private liveZoom = 1;
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinchStartDistance = 0;
   private pinchStartZoom = 1;
@@ -241,19 +247,23 @@ export class PdfRenderer implements Renderer {
         // follows (same width) does not trigger a redundant re-render.
         this.lastWidth = hostWidth;
         const width = Math.max(200, hostWidth - 2 * this.settings.marginPx);
-        const requestedScale =
-          ((width / natural.width) * this.settings.fontSizePx * this.zoom) / 18;
+        // The DISPLAY scale drives the on-screen page size (and the text layer),
+        // and grows with zoom without bound. The BITMAP resolution is capped to
+        // protect memory; past the cap the crisp bitmap is simply CSS-stretched
+        // to the display size — like Okular, zoom keeps enlarging the sheet and
+        // only softens at extreme zoom instead of snapping back or exploding
+        // memory. Decoupling them is also what lets a pinch commit land at the
+        // same size the live transform previewed (no jump).
+        const displayScale = ((width / natural.width) * this.settings.fontSizePx * this.zoom) / 18;
+        this.scale = displayScale;
         const pixelRatio = Math.min(globalThis.devicePixelRatio || 1, 2);
-        this.scale = Math.min(
-          requestedScale,
-          Math.sqrt(PDF_MAX_CANVAS_PIXELS / (natural.width * natural.height)) / pixelRatio,
-        );
-        const viewport = page.getViewport({ scale: this.scale * pixelRatio });
-        // The CSS size is the page at `scale` (no pixel-ratio); the text layer
-        // uses this exact same viewport, so the canvas and the selectable text
-        // share one coordinate system and the selection lines up. The bitmap is
-        // rendered at a higher pixel-ratio resolution for sharpness.
-        const cssViewport = page.getViewport({ scale: this.scale });
+        const maxBitmapScale =
+          Math.sqrt(PDF_MAX_CANVAS_PIXELS / (natural.width * natural.height)) / pixelRatio;
+        const renderScale = Math.min(displayScale, maxBitmapScale);
+        // Bitmap at the (capped) render resolution; the text layer and the CSS
+        // box use the full display scale, so selection stays aligned at any zoom.
+        const viewport = page.getViewport({ scale: renderScale * pixelRatio });
+        const cssViewport = page.getViewport({ scale: displayScale });
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
@@ -404,34 +414,56 @@ export class PdfRenderer implements Renderer {
     if (this.pointers.size !== 2 || this.pinchStartDistance === 0) return;
     event.preventDefault();
     const ratio = this.pointerDistance() / this.pinchStartDistance;
-    this.zoom = clampZoom(this.pinchStartZoom * ratio);
+    // Live, GPU-cheap preview: scale the already-rendered sheet; no re-raster.
+    this.liveZoom = clampZoom(this.pinchStartZoom * ratio) / this.zoom;
+    this.applyLiveZoom();
   };
   private readonly onPointerUp = (event: PointerEvent): void => {
     if (!this.pointers.delete(event.pointerId)) return;
     if (this.pointers.size >= 2 || this.pinchStartDistance === 0) return;
-    const changed = this.zoom !== this.pinchStartZoom;
     this.pinchStartDistance = 0;
     if (this.scroller) this.scroller.style.touchAction = '';
-    if (!changed) return;
-    clearTimeout(this.pinchTimer);
-    this.pinchTimer = setTimeout(() => {
-      if (this.document && !this.dead) this.move(this.index, this.offset());
-    }, 150);
+    this.scheduleZoomCommit();
   };
-  // Trackpad pinch / ctrl+wheel: zoom the page content, not the browser. The
-  // live gesture only updates `zoom`; one debounced re-raster runs once it
-  // settles, mirroring the touch-pinch path.
+  // Trackpad pinch / ctrl+wheel: zoom the page content (not the browser). Like
+  // Okular/pdf.js, the gesture only CSS-scales the current bitmap for instant,
+  // smooth feedback; the crisp re-raster at the new resolution happens once,
+  // after the gesture settles.
   private readonly onWheel = (event: WheelEvent): void => {
     if (!event.ctrlKey || this.dead || !this.document) return;
     event.preventDefault();
-    const next = clampZoom(this.zoom * Math.exp(-event.deltaY / 300));
-    if (next === this.zoom) return;
-    this.zoom = next;
-    clearTimeout(this.pinchTimer);
-    this.pinchTimer = setTimeout(() => {
-      if (this.document && !this.dead) this.move(this.index, this.offset());
-    }, 120);
+    const effective = clampZoom(this.zoom * this.liveZoom * Math.exp(-event.deltaY / 300));
+    this.liveZoom = effective / this.zoom;
+    this.applyLiveZoom();
+    this.scheduleZoomCommit();
   };
+  /** Scales the current page element in place (visual only) for the live gesture. */
+  private applyLiveZoom(): void {
+    const pageEl = this.pageEl;
+    if (!pageEl) return;
+    pageEl.style.transformOrigin = '50% 0';
+    pageEl.style.transform = this.liveZoom === 1 ? '' : `scale(${this.liveZoom})`;
+  }
+  private scheduleZoomCommit(): void {
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = setTimeout(() => this.commitZoom(), 160);
+  }
+  /**
+   * Bakes the live zoom into `zoom` and re-rasters once at the new resolution.
+   * The old (scaled) page stays visible until the fresh, crisp page swaps in via
+   * replaceChildren, so the size is continuous and there is no blank flash.
+   */
+  private commitZoom(): void {
+    if (this.dead || !this.document) return;
+    const committed = clampZoom(this.zoom * this.liveZoom);
+    this.liveZoom = 1;
+    if (committed === this.zoom) {
+      this.applyLiveZoom();
+      return;
+    }
+    this.zoom = committed;
+    this.move(this.index, this.offset());
+  }
   private pointerDistance(): number {
     const points = [...this.pointers.values()];
     const a = points[0];
