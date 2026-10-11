@@ -92,6 +92,20 @@ body {
   color: var(--text);
 }
 
+/*
+ * pdf.js appends a hidden measurement canvas to <body> in normal flow; left
+ * alone it adds ~24px below the viewport, so the window scrollbar flickers
+ * on/off as pages render and the whole app (toolbar included) shakes. Pin it out
+ * of flow — its 2D context still measures text; it just no longer affects layout.
+ */
+canvas.hiddenCanvasElement {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 h1,
 h2,
 h3 {
@@ -182,6 +196,12 @@ a {
    inside the surface (and the sidebar) rather than stretching the whole shell. */
 .app-shell:has(.app-main-reader) {
   height: 100vh;
+  overflow: hidden;
+}
+/* Reader route: lock the document itself so no window scrollbar can appear. */
+html.reader-locked,
+html.reader-locked body {
+  height: 100%;
   overflow: hidden;
 }
 .app-main-reader {

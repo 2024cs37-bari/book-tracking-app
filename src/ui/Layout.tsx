@@ -1,5 +1,5 @@
 import { A, useLocation } from '@solidjs/router';
-import { Show, type ParentProps } from 'solid-js';
+import { createEffect, onCleanup, Show, type ParentProps } from 'solid-js';
 import { useApp } from '~/app/context';
 import { Toaster } from './toast';
 
@@ -8,6 +8,13 @@ export default function Layout(props: ParentProps) {
   const location = useLocation();
   // The reader fills the screen; every other route is a centered column.
   const isReader = () => location.pathname.startsWith('/read');
+  // Lock the document scroll in the reader so a stray overflow (e.g. pdf.js's
+  // body-mounted measurement canvas) can never raise a window scrollbar and make
+  // the whole shell shake. Toggled on <html> so it survives the focused shell.
+  createEffect(() => {
+    document.documentElement.classList.toggle('reader-locked', isReader());
+  });
+  onCleanup(() => document.documentElement.classList.remove('reader-locked'));
 
   return (
     <div class="app-shell">
