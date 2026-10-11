@@ -690,85 +690,107 @@ export default function ReaderView() {
       </ReaderSidebar>
       <div class="reader-main">
         <div class="reader-toolbar">
-          <button
-            type="button"
-            class="reader-sidebar-toggle"
-            aria-label="Toggle sidebar"
-            aria-expanded={sidebarOpen()}
-            onClick={() => setSidebarOpen((open) => !open)}
-          >
-            ☰
-          </button>
-          <A class="reader-close" href={`/book/${params.id}`}>
-            ← Close reader
-          </A>
-          <h2>{title()}</h2>
-          <span aria-label="Reading progress">{Math.round(fraction() * 100)}%</span>
-          <button class="button" disabled={!ready()} onClick={() => session?.renderer.prev()}>
-            Previous
-          </button>
-          <button class="button" disabled={!ready()} onClick={() => session?.renderer.next()}>
-            Next
-          </button>
-          <details class="reader-settings-popover">
-            <summary>Reader settings</summary>
-            <div class="reader-settings">
-              <label>
-                Font size / PDF zoom
-                <input
-                  aria-label="Font size / PDF zoom"
-                  type="range"
-                  min="12"
-                  max="36"
-                  value={settings().fontSizePx}
-                  onInput={(event) =>
-                    updateSettings({ fontSizePx: Number(event.currentTarget.value) })
-                  }
-                />
-              </label>
-              <label>
-                Line height
-                <input
-                  aria-label="Line height"
-                  type="range"
-                  min="1"
-                  max="2.5"
-                  step="0.1"
-                  value={settings().lineHeight}
-                  onInput={(event) =>
-                    updateSettings({ lineHeight: Number(event.currentTarget.value) })
-                  }
-                />
-              </label>
-              <label>
-                Margins
-                <input
-                  aria-label="Margins"
-                  type="range"
-                  min="0"
-                  max="80"
-                  value={settings().marginPx}
-                  onInput={(event) =>
-                    updateSettings({ marginPx: Number(event.currentTarget.value) })
-                  }
-                />
-              </label>
-              <label>
-                Theme
-                <select
-                  aria-label="Theme"
-                  value={settings().theme}
-                  onChange={(event) =>
-                    updateSettings({ theme: event.currentTarget.value as ReaderTheme })
-                  }
-                >
-                  <option value="light">Light</option>
-                  <option value="sepia">Sepia</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </label>
+          <div class="reader-toolbar-group">
+            <button
+              type="button"
+              class="reader-icon-button"
+              aria-label="Toggle sidebar"
+              aria-expanded={sidebarOpen()}
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
+              ☰
+            </button>
+            <A class="reader-close" href={`/book/${params.id}`}>
+              ← Close reader
+            </A>
+          </div>
+          <h2 class="reader-title" title={title()}>
+            {title()}
+          </h2>
+          <div class="reader-toolbar-group">
+            <div class="reader-nav" role="group" aria-label="Pages">
+              <button
+                type="button"
+                class="reader-icon-button"
+                aria-label="Previous"
+                disabled={!ready()}
+                onClick={() => session?.renderer.prev()}
+              >
+                ‹
+              </button>
+              <span class="reader-progress" aria-label="Reading progress">
+                {Math.round(fraction() * 100)}%
+              </span>
+              <button
+                type="button"
+                class="reader-icon-button"
+                aria-label="Next"
+                disabled={!ready()}
+                onClick={() => session?.renderer.next()}
+              >
+                ›
+              </button>
             </div>
-          </details>
+            <details class="reader-settings-popover">
+              <summary class="reader-icon-button reader-settings-summary">Reader settings</summary>
+              <div class="reader-settings">
+                <label>
+                  Font size / PDF zoom
+                  <input
+                    aria-label="Font size / PDF zoom"
+                    type="range"
+                    min="12"
+                    max="36"
+                    value={settings().fontSizePx}
+                    onInput={(event) =>
+                      updateSettings({ fontSizePx: Number(event.currentTarget.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  Line height
+                  <input
+                    aria-label="Line height"
+                    type="range"
+                    min="1"
+                    max="2.5"
+                    step="0.1"
+                    value={settings().lineHeight}
+                    onInput={(event) =>
+                      updateSettings({ lineHeight: Number(event.currentTarget.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  Margins
+                  <input
+                    aria-label="Margins"
+                    type="range"
+                    min="0"
+                    max="80"
+                    value={settings().marginPx}
+                    onInput={(event) =>
+                      updateSettings({ marginPx: Number(event.currentTarget.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  Theme
+                  <select
+                    aria-label="Theme"
+                    value={settings().theme}
+                    onChange={(event) =>
+                      updateSettings({ theme: event.currentTarget.value as ReaderTheme })
+                    }
+                  >
+                    <option value="light">Light</option>
+                    <option value="sepia">Sepia</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+          </div>
         </div>
         <Show when={message()}>
           <p class="note" role="status">

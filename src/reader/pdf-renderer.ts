@@ -246,13 +246,16 @@ export class PdfRenderer implements Renderer {
           Math.sqrt(PDF_MAX_CANVAS_PIXELS / (natural.width * natural.height)) / pixelRatio,
         );
         const viewport = page.getViewport({ scale: this.scale * pixelRatio });
+        // The CSS size is the page at `scale` (no pixel-ratio); the text layer
+        // uses this exact same viewport, so the canvas and the selectable text
+        // share one coordinate system and the selection lines up. The bitmap is
+        // rendered at a higher pixel-ratio resolution for sharpness.
+        const cssViewport = page.getViewport({ scale: this.scale });
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        // Integer CSS dimensions keep the max-content page box from landing on a
-        // fractional width that layout would round inconsistently each frame.
-        canvas.style.width = `${Math.round(canvas.width / pixelRatio)}px`;
-        canvas.style.height = `${Math.round(canvas.height / pixelRatio)}px`;
+        canvas.style.width = `${Math.floor(cssViewport.width)}px`;
+        canvas.style.height = `${Math.floor(cssViewport.height)}px`;
         canvas.setAttribute('aria-label', `Page ${target + 1} of ${pdf.numPages}`);
         canvas.dataset.renderState = 'pending';
         this.canvas = canvas;
@@ -493,10 +496,11 @@ export class PdfRenderer implements Renderer {
     if (position) this.move(position.page, position.yOffset);
   }
   prev(): void {
-    this.move(this.index - 1);
+    if (this.index > 0) this.move(this.index - 1);
   }
   next(): void {
-    this.move(this.index + 1);
+    const pdf = this.document;
+    if (pdf !== undefined && this.index < pdf.numPages - 1) this.move(this.index + 1);
   }
   async getToc(): Promise<TocItem[]> {
     const pdf = this.document;

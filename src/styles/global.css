@@ -680,37 +680,121 @@ input[type='file'] {
 }
 .reader-toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
 }
-.reader-toolbar h2 {
-  flex: 1 1 8rem;
+.reader-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+.reader-title {
+  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Square, quiet control used for every toolbar action (toggle, nav, settings). */
+.reader-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.reader-icon-button:hover:not(:disabled),
+.reader-icon-button:focus-visible {
+  background: var(--accent-soft);
+}
+.reader-icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Prev / % / Next grouped into one segmented control. */
+.reader-nav {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.reader-nav .reader-icon-button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.reader-progress {
+  min-width: 3.5ch;
+  padding: 0 var(--space-1);
+  text-align: center;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
 /* Plain back control — not an accent link; no underline. */
 .reader-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2rem;
   color: var(--text);
   text-decoration: none;
-  padding: 0.3rem 0.6rem;
+  padding: 0 0.6rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius, 4px);
+  border-radius: var(--radius);
+  background: var(--surface);
   font-size: 0.9rem;
   white-space: nowrap;
 }
 .reader-close:hover {
-  background: var(--surface-sunken);
+  background: var(--accent-soft);
+}
+.reader-settings-popover {
+  position: relative;
+}
+.reader-settings-popover > summary {
+  list-style: none;
+}
+.reader-settings-popover > summary::-webkit-details-marker {
+  display: none;
+}
+.reader-settings-summary {
+  font-size: 0.9rem;
+  padding: 0 0.7rem;
 }
 .reader-settings {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 1100;
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 15rem;
   padding: 1rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-popover);
 }
 .reader-settings label {
   display: flex;
@@ -815,6 +899,10 @@ input[type='file'] {
   position: relative;
   width: max-content;
   margin: 0 auto;
+}
+/* Block removes the inline-baseline gap so the text layer overlays the glyphs. */
+.pdf-page canvas {
+  display: block;
 }
 /* pdf.js text layer: transparent, selectable text aligned over the canvas. */
 .textLayer {
