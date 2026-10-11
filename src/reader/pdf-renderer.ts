@@ -115,6 +115,9 @@ export class PdfRenderer implements Renderer {
     host.addEventListener('pointermove', this.onPointerMove);
     host.addEventListener('pointerup', this.onPointerUp);
     host.addEventListener('pointercancel', this.onPointerUp);
+    // Trackpad pinch and ctrl+wheel arrive as wheel events with ctrlKey; map
+    // them to the render zoom (and prevent the browser zooming the whole page).
+    host.addEventListener('wheel', this.onWheel, { passive: false });
     this.resize = new ResizeObserver(() => {
       if (!this.document || this.dead) return;
       // Measure width the SAME way move() does (clientWidth), and ignore
@@ -415,6 +418,20 @@ export class PdfRenderer implements Renderer {
       if (this.document && !this.dead) this.move(this.index, this.offset());
     }, 150);
   };
+  // Trackpad pinch / ctrl+wheel: zoom the page content, not the browser. The
+  // live gesture only updates `zoom`; one debounced re-raster runs once it
+  // settles, mirroring the touch-pinch path.
+  private readonly onWheel = (event: WheelEvent): void => {
+    if (!event.ctrlKey || this.dead || !this.document) return;
+    event.preventDefault();
+    const next = clampZoom(this.zoom * Math.exp(-event.deltaY / 300));
+    if (next === this.zoom) return;
+    this.zoom = next;
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = setTimeout(() => {
+      if (this.document && !this.dead) this.move(this.index, this.offset());
+    }, 120);
+  };
   private pointerDistance(): number {
     const points = [...this.pointers.values()];
     const a = points[0];
@@ -664,6 +681,7 @@ export class PdfRenderer implements Renderer {
     this.host?.removeEventListener('pointermove', this.onPointerMove);
     this.host?.removeEventListener('pointerup', this.onPointerUp);
     this.host?.removeEventListener('pointercancel', this.onPointerUp);
+    this.host?.removeEventListener('wheel', this.onWheel);
     this.pointers.clear();
     this.scroller?.removeEventListener('scroll', this.scroll);
     document.removeEventListener('selectionchange', this.onSelectionChange);

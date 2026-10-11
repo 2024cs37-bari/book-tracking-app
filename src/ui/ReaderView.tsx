@@ -4,6 +4,7 @@ import {
   createMemo,
   createSignal,
   For,
+  type JSX,
   Match,
   onCleanup,
   Show,
@@ -654,184 +655,132 @@ export default function ReaderView() {
   );
   return (
     <section class="reader-shell" classList={{ 'reader-sidebar-open': sidebarOpen() }}>
-      <ReaderSidebar
-        open={sidebarOpen()}
-        panel={sidebarPanel()}
-        tabs={SIDEBAR_TABS}
-        width={sidebarWidth()}
-        onPanel={(id) => setSidebarPanel(id as SidebarPanel)}
-        onClose={() => setSidebarOpen(false)}
-        onResize={setSidebarWidth}
-      >
-        <Switch>
-          <Match when={sidebarPanel() === 'contents'}>
-            <ReaderContents
-              items={toc()}
-              loading={tocLoading()}
-              error={tocError()}
-              onSelect={(locator) => session?.renderer.goTo(locator)}
-            />
-          </Match>
-          <Match when={sidebarPanel() === 'pages'}>
-            <ReaderPages
-              supportsThumbnails={supportsThumbnails()}
-              pages={pages()}
-              currentIndex={currentPageIndex()}
-              renderThumbnail={(index, maxEdge) =>
-                session ? session.renderer.renderThumbnail(index, maxEdge) : Promise.resolve(null)
-              }
-              onSelect={(locator) => session?.renderer.goTo(locator)}
-            />
-          </Match>
-          <Match when={sidebarPanel() === 'notes'}>{notesPanel()}</Match>
-          <Match when={sidebarPanel() === 'search'}>{searchPanel()}</Match>
-          <Match when={sidebarPanel() === 'listen'}>{listenPanel()}</Match>
-        </Switch>
-      </ReaderSidebar>
-      <div class="reader-main">
-        <div class="reader-toolbar">
-          <div class="reader-toolbar-group">
+      <div class="reader-toolbar">
+        <div class="reader-toolbar-group">
+          <button
+            type="button"
+            class="reader-icon-button"
+            aria-label="Toggle sidebar"
+            aria-expanded={sidebarOpen()}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            ☰
+          </button>
+          <A class="reader-close" href={`/book/${params.id}`}>
+            ← Close reader
+          </A>
+        </div>
+        <h2 class="reader-title" title={title()}>
+          {title()}
+        </h2>
+        <div class="reader-toolbar-group">
+          <div class="reader-nav" role="group" aria-label="Pages">
             <button
               type="button"
               class="reader-icon-button"
-              aria-label="Toggle sidebar"
-              aria-expanded={sidebarOpen()}
-              onClick={() => setSidebarOpen((open) => !open)}
+              aria-label="Previous"
+              disabled={!ready()}
+              onClick={() => session?.renderer.prev()}
             >
-              ☰
+              ‹
             </button>
-            <A class="reader-close" href={`/book/${params.id}`}>
-              ← Close reader
-            </A>
+            <span class="reader-progress" aria-label="Reading progress">
+              {Math.round(fraction() * 100)}%
+            </span>
+            <button
+              type="button"
+              class="reader-icon-button"
+              aria-label="Next"
+              disabled={!ready()}
+              onClick={() => session?.renderer.next()}
+            >
+              ›
+            </button>
           </div>
-          <h2 class="reader-title" title={title()}>
-            {title()}
-          </h2>
-          <div class="reader-toolbar-group">
-            <div class="reader-nav" role="group" aria-label="Pages">
-              <button
-                type="button"
-                class="reader-icon-button"
-                aria-label="Previous"
-                disabled={!ready()}
-                onClick={() => session?.renderer.prev()}
-              >
-                ‹
-              </button>
-              <span class="reader-progress" aria-label="Reading progress">
-                {Math.round(fraction() * 100)}%
-              </span>
-              <button
-                type="button"
-                class="reader-icon-button"
-                aria-label="Next"
-                disabled={!ready()}
-                onClick={() => session?.renderer.next()}
-              >
-                ›
-              </button>
-            </div>
-            <details class="reader-settings-popover">
-              <summary class="reader-icon-button reader-settings-summary">Reader settings</summary>
-              <div class="reader-settings">
-                <label>
-                  Font size / PDF zoom
-                  <input
-                    aria-label="Font size / PDF zoom"
-                    type="range"
-                    min="12"
-                    max="36"
-                    value={settings().fontSizePx}
-                    onInput={(event) =>
-                      updateSettings({ fontSizePx: Number(event.currentTarget.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Line height
-                  <input
-                    aria-label="Line height"
-                    type="range"
-                    min="1"
-                    max="2.5"
-                    step="0.1"
-                    value={settings().lineHeight}
-                    onInput={(event) =>
-                      updateSettings({ lineHeight: Number(event.currentTarget.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Margins
-                  <input
-                    aria-label="Margins"
-                    type="range"
-                    min="0"
-                    max="80"
-                    value={settings().marginPx}
-                    onInput={(event) =>
-                      updateSettings({ marginPx: Number(event.currentTarget.value) })
-                    }
-                  />
-                </label>
-                <label>
-                  Theme
-                  <select
-                    aria-label="Theme"
-                    value={settings().theme}
-                    onChange={(event) =>
-                      updateSettings({ theme: event.currentTarget.value as ReaderTheme })
-                    }
-                  >
-                    <option value="light">Light</option>
-                    <option value="sepia">Sepia</option>
-                    <option value="dark">Dark</option>
-                  </select>
-                </label>
-              </div>
-            </details>
-          </div>
+          <ReaderSettingsMenu settings={settings()} onChange={updateSettings} />
         </div>
-        <Show when={message()}>
-          <p class="note" role="status">
-            {message()}
-          </p>
-        </Show>
-        <Show when={conflict()}>
-          {(pending) => (
-            <div class="reader-conflict" role="alertdialog" aria-label="Reading position differs">
-              <p class="reader-conflict-text">
-                Another device reached{' '}
-                <strong>{Math.round(pending().remote.fraction * 100)}%</strong> of this book
-                {formatHlcTime(pending().remote.updatedHlc)}. You're at{' '}
-                <strong>{Math.round(pending().localFraction * 100)}%</strong> here.
-              </p>
-              <div class="reader-conflict-actions">
-                <button
-                  type="button"
-                  class="button button-primary"
-                  onClick={() => void resolveConflict('remote')}
-                >
-                  Go to {Math.round(pending().remote.fraction * 100)}%
-                </button>
-                <button type="button" class="button" onClick={() => void resolveConflict('local')}>
-                  Stay here
-                </button>
+      </div>
+      <div class="reader-body">
+        <ReaderSidebar
+          open={sidebarOpen()}
+          panel={sidebarPanel()}
+          tabs={SIDEBAR_TABS}
+          width={sidebarWidth()}
+          onPanel={(id) => setSidebarPanel(id as SidebarPanel)}
+          onClose={() => setSidebarOpen(false)}
+          onResize={setSidebarWidth}
+        >
+          <Switch>
+            <Match when={sidebarPanel() === 'contents'}>
+              <ReaderContents
+                items={toc()}
+                loading={tocLoading()}
+                error={tocError()}
+                onSelect={(locator) => session?.renderer.goTo(locator)}
+              />
+            </Match>
+            <Match when={sidebarPanel() === 'pages'}>
+              <ReaderPages
+                supportsThumbnails={supportsThumbnails()}
+                pages={pages()}
+                currentIndex={currentPageIndex()}
+                renderThumbnail={(index, maxEdge) =>
+                  session ? session.renderer.renderThumbnail(index, maxEdge) : Promise.resolve(null)
+                }
+                onSelect={(locator) => session?.renderer.goTo(locator)}
+              />
+            </Match>
+            <Match when={sidebarPanel() === 'notes'}>{notesPanel()}</Match>
+            <Match when={sidebarPanel() === 'search'}>{searchPanel()}</Match>
+            <Match when={sidebarPanel() === 'listen'}>{listenPanel()}</Match>
+          </Switch>
+        </ReaderSidebar>
+        <div class="reader-main">
+          <Show when={message()}>
+            <p class="note" role="status">
+              {message()}
+            </p>
+          </Show>
+          <Show when={conflict()}>
+            {(pending) => (
+              <div class="reader-conflict" role="alertdialog" aria-label="Reading position differs">
+                <p class="reader-conflict-text">
+                  Another device reached{' '}
+                  <strong>{Math.round(pending().remote.fraction * 100)}%</strong> of this book
+                  {formatHlcTime(pending().remote.updatedHlc)}. You're at{' '}
+                  <strong>{Math.round(pending().localFraction * 100)}%</strong> here.
+                </p>
+                <div class="reader-conflict-actions">
+                  <button
+                    type="button"
+                    class="button button-primary"
+                    onClick={() => void resolveConflict('remote')}
+                  >
+                    Go to {Math.round(pending().remote.fraction * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    class="button"
+                    onClick={() => void resolveConflict('local')}
+                  >
+                    Stay here
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </Show>
-        <div
-          class="reader-surface"
-          onContextMenu={openContextMenu}
-          onTouchStart={onSurfaceTouchStart}
-          onTouchMove={() => cancelLongPress()}
-          onTouchEnd={() => cancelLongPress()}
-          onTouchCancel={() => cancelLongPress()}
-          ref={(element) => {
-            host = element;
-          }}
-        />
+            )}
+          </Show>
+          <div
+            class="reader-surface"
+            onContextMenu={openContextMenu}
+            onTouchStart={onSurfaceTouchStart}
+            onTouchMove={() => cancelLongPress()}
+            onTouchEnd={() => cancelLongPress()}
+            onTouchCancel={() => cancelLongPress()}
+            ref={(element) => {
+              host = element;
+            }}
+          />
+        </div>
       </div>
       <Show when={contextMenu()}>
         {(menu) => (
@@ -859,5 +808,67 @@ export default function ReaderView() {
         )}
       </Show>
     </section>
+  );
+}
+
+/** The reader's appearance controls, shown from the toolbar's gear popover. */
+function ReaderSettingsMenu(props: {
+  settings: ReaderSettings;
+  onChange: (patch: Partial<ReaderSettings>) => void;
+}): JSX.Element {
+  return (
+    <details class="reader-settings-popover">
+      <summary class="reader-icon-button reader-settings-summary">Reader settings</summary>
+      <div class="reader-settings">
+        <label>
+          Font size / PDF zoom
+          <input
+            aria-label="Font size / PDF zoom"
+            type="range"
+            min="12"
+            max="36"
+            value={props.settings.fontSizePx}
+            onInput={(event) => props.onChange({ fontSizePx: Number(event.currentTarget.value) })}
+          />
+        </label>
+        <label>
+          Line height
+          <input
+            aria-label="Line height"
+            type="range"
+            min="1"
+            max="2.5"
+            step="0.1"
+            value={props.settings.lineHeight}
+            onInput={(event) => props.onChange({ lineHeight: Number(event.currentTarget.value) })}
+          />
+        </label>
+        <label>
+          Margins
+          <input
+            aria-label="Margins"
+            type="range"
+            min="0"
+            max="80"
+            value={props.settings.marginPx}
+            onInput={(event) => props.onChange({ marginPx: Number(event.currentTarget.value) })}
+          />
+        </label>
+        <label>
+          Theme
+          <select
+            aria-label="Theme"
+            value={props.settings.theme}
+            onChange={(event) =>
+              props.onChange({ theme: event.currentTarget.value as ReaderTheme })
+            }
+          >
+            <option value="light">Light</option>
+            <option value="sepia">Sepia</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </div>
+    </details>
   );
 }

@@ -186,7 +186,19 @@ export class EpubRenderer implements Renderer {
     host.addEventListener('pointermove', this.onPointerMove);
     host.addEventListener('pointerup', this.onPointerUp);
     host.addEventListener('pointercancel', this.onPointerUp);
+    // Trackpad pinch / ctrl+wheel maps to the reader font size, not browser zoom.
+    host.addEventListener('wheel', this.onWheel, { passive: false });
   }
+  private readonly onWheel = (event: WheelEvent): void => {
+    if (!event.ctrlKey || this.dead) return;
+    event.preventDefault();
+    const next = clampFont(Math.round(this.settings.fontSizePx * Math.exp(-event.deltaY / 400)));
+    if (next === this.settings.fontSizePx) return;
+    clearTimeout(this.pinchTimer);
+    this.pinchTimer = setTimeout(() => {
+      if (!this.dead) this.applySettings({ ...this.settings, fontSizePx: next });
+    }, 120);
+  };
 
   // Two-pointer pinch over the reader surface maps to a font-size change. The
   // live gesture only tracks pointers; a single reflow runs once the gesture
@@ -648,6 +660,7 @@ export class EpubRenderer implements Renderer {
     this.host?.removeEventListener('pointermove', this.onPointerMove);
     this.host?.removeEventListener('pointerup', this.onPointerUp);
     this.host?.removeEventListener('pointercancel', this.onPointerUp);
+    this.host?.removeEventListener('wheel', this.onWheel);
     this.pointers.clear();
     this.selectionCallbacks.clear();
     this.contextMenuCallbacks.clear();

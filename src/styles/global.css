@@ -511,13 +511,24 @@ input[type='file'] {
 }
 :root .reader-shell {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: stretch;
   gap: 0;
   height: 100%;
   min-height: 0;
   position: relative;
-  background: var(--surface);
+  background: var(--surface-sunken);
+}
+/* Full-width toolbar on top; below it a row of [sidebar | reading surface]. */
+.reader-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  gap: var(--space-3);
+  padding: var(--space-3);
 }
 .reader-main {
   display: flex;
@@ -526,7 +537,6 @@ input[type='file'] {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  padding: var(--space-4);
 }
 .reader-main .reader-surface {
   flex: 1 1 auto;
@@ -539,8 +549,8 @@ input[type='file'] {
   flex: 0 0 var(--reader-sidebar-width, 300px);
   width: var(--reader-sidebar-width, 300px);
   min-height: 0;
-  border: 0;
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: var(--surface-raised);
   overflow: hidden;
   position: relative;
@@ -805,6 +815,8 @@ input[type='file'] {
   min-height: 300px;
   overflow: hidden;
   border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 /* Context menu over a text selection in the reader (right click / long press). */
 .reader-context-menu {
@@ -924,6 +936,28 @@ input[type='file'] {
   white-space: pre;
   cursor: text;
   transform-origin: 0 0;
+}
+/*
+ * pdf.js 5.x writes each glyph run's size as the custom properties --font-height
+ * and --scale-x and expects these rules to turn them into the real font-size and
+ * horizontal scale. Without them every span falls back to the inherited 16px
+ * with no scaleX, so the selectable text no longer matches the rendered glyphs
+ * and selection highlights land in the wrong place. Mirrors pdfjs-dist
+ * web/pdf_viewer.css.
+ */
+.textLayer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 .textLayer span.markedContent {
   top: 0;
