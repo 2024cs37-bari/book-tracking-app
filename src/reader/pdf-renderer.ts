@@ -38,6 +38,13 @@ export const PDF_MAX_CANVAS_PIXELS = 4_000_000;
 export const PDF_PAGE_CACHE_LIMIT = 1;
 /** Pixel ceiling for a sidebar page thumbnail (small, so cheap to render). */
 export const PDF_THUMBNAIL_MAX_PIXELS = 400_000;
+/**
+ * Minimum width change (CSS px) that re-renders on resize. A tall page toggling
+ * its scrollbar, or fractional display scaling, can jitter the measured width by
+ * a pixel or two every render; re-rendering on that would loop forever. Only a
+ * genuine resize crosses this threshold.
+ */
+export const RESIZE_WIDTH_EPSILON = 8;
 /** Pinch-to-zoom clamps the extra scale factor applied on top of the fit width. */
 export const PDF_MIN_ZOOM = 0.5;
 export const PDF_MAX_ZOOM = 4;
@@ -107,13 +114,16 @@ export class PdfRenderer implements Renderer {
     host.addEventListener('pointermove', this.onPointerMove);
     host.addEventListener('pointerup', this.onPointerUp);
     host.addEventListener('pointercancel', this.onPointerUp);
-    this.resize = new ResizeObserver((entries) => {
+    this.resize = new ResizeObserver(() => {
       if (!this.document || this.dead) return;
-      // Only a WIDTH change alters the render scale; height-only changes (and
-      // the stream of ticks during a sidebar drag) must not re-raster. Debounce
-      // so one re-render happens after resizing settles, not on every frame.
-      const width = Math.round(entries[0]?.contentRect.width ?? this.host?.clientWidth ?? 0);
-      if (width === 0 || width === this.lastWidth) return;
+      // Measure width the SAME way move() does (clientWidth), and ignore
+      // sub-threshold jitter. A height-only change (sidebar drag ticks) and the
+      // pixel-or-two flutter a scrollbar toggle or fractional display scaling
+      // can introduce must never re-raster — otherwise each render nudges the
+      // measured width and the observer re-renders forever. move() also records
+      // the width it rendered at, so the tick right after a render is a no-op.
+      const width = this.host?.clientWidth ?? 0;
+      if (width === 0 || Math.abs(width - this.lastWidth) < RESIZE_WIDTH_EPSILON) return;
       this.lastWidth = width;
       clearTimeout(this.resizeTimer);
       this.resizeTimer = setTimeout(() => {
@@ -222,7 +232,11 @@ export class PdfRenderer implements Renderer {
         this.page = page;
         const natural = page.getViewport({ scale: 1 });
         this.height = natural.height;
-        const width = Math.max(200, (this.host?.clientWidth ?? 800) - 2 * this.settings.marginPx);
+        const hostWidth = this.host?.clientWidth ?? 800;
+        // Record the width this render used so the ResizeObserver tick that
+        // follows (same width) does not trigger a redundant re-render.
+        this.lastWidth = hostWidth;
+        const width = Math.max(200, hostWidth - 2 * this.settings.marginPx);
         const requestedScale =
           ((width / natural.width) * this.settings.fontSizePx * this.zoom) / 18;
         const pixelRatio = Math.min(globalThis.devicePixelRatio || 1, 2);
@@ -234,8 +248,10 @@ export class PdfRenderer implements Renderer {
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        canvas.style.width = `${canvas.width / pixelRatio}px`;
-        canvas.style.height = `${canvas.height / pixelRatio}px`;
+        // Integer CSS dimensions keep the max-content page box from landing on a
+        // fractional width that layout would round inconsistently each frame.
+        canvas.style.width = `${Math.round(canvas.width / pixelRatio)}px`;
+        canvas.style.height = `${Math.round(canvas.height / pixelRatio)}px`;
         canvas.setAttribute('aria-label', `Page ${target + 1} of ${pdf.numPages}`);
         canvas.dataset.renderState = 'pending';
         this.canvas = canvas;

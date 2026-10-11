@@ -803,6 +803,9 @@ input[type='file'] {
   height: 100%;
   overflow: auto;
   box-sizing: border-box;
+  /* Reserve the scrollbar space so a tall page toggling its scrollbar can never
+     change the usable width (which would re-raster the page in a loop). */
+  scrollbar-gutter: stable;
 }
 .pdf-scroll canvas {
   display: block;
