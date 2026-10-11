@@ -200,8 +200,12 @@ export class PdfRenderer implements Renderer {
     }
   }
 
+  /** The scroller's top padding = where the page sheet starts (min 24 for the desk). */
+  private pagePad(): number {
+    return Math.max(this.settings.marginPx, 24);
+  }
   private offset(): number {
-    return Math.max(0, (this.scroller?.scrollTop ?? 0) - this.settings.marginPx) / this.scale;
+    return Math.max(0, (this.scroller?.scrollTop ?? 0) - this.pagePad()) / this.scale;
   }
   private emit(): void {
     if (
@@ -308,7 +312,7 @@ export class PdfRenderer implements Renderer {
           // zoom gesture may have CSS-scaled) stays visible until this one is
           // ready, so a page turn or a zoom commit never flashes blank.
           this.scroller!.replaceChildren(pageEl);
-          this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
+          this.scroller!.scrollTop = offset > 0 ? this.pagePad() + offset * this.scale : 0;
           // The previous page is now off-screen; free its canvas + pdf resources.
           if (previousCanvas) {
             previousCanvas.width = 0;
@@ -453,8 +457,14 @@ export class PdfRenderer implements Renderer {
   /** Scales the current page element in place (visual only) for the live gesture. */
   private applyLiveZoom(): void {
     const pageEl = this.pageEl;
-    if (!pageEl) return;
-    pageEl.style.transformOrigin = '50% 0';
+    const scroller = this.scroller;
+    if (!pageEl || !scroller) return;
+    // Anchor the scale at the top of what's currently visible (in page coords),
+    // which is exactly where the re-render restores the scroll. So the content
+    // under the viewport top stays put during the gesture and the commit lands
+    // in the same place — no jump/readjust when a tall page is scrolled.
+    const originY = Math.max(0, scroller.scrollTop - pageEl.offsetTop);
+    pageEl.style.transformOrigin = `50% ${originY}px`;
     pageEl.style.transform = this.liveZoom === 1 ? '' : `scale(${this.liveZoom})`;
   }
   private scheduleZoomCommit(): void {
