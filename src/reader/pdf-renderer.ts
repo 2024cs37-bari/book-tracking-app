@@ -280,8 +280,6 @@ export class PdfRenderer implements Renderer {
         // when this page's text layer finishes rendering.
         this.textLayerEl = undefined;
         this.highlightLayerEl = undefined;
-        this.scroller!.replaceChildren(pageEl);
-        this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
         const task = page.render({ canvas, viewport });
         this.task = task;
         try {
@@ -301,6 +299,10 @@ export class PdfRenderer implements Renderer {
           }
           this.renderedIndex = target;
           canvas.dataset.renderState = 'ready';
+          // Swap the fully-painted page in only now — the previous page (which a
+          // zoom gesture may have CSS-scaled) stays visible until this one is
+          // ready, so a page turn or a zoom commit never flashes blank.
+          this.scroller!.replaceChildren(pageEl);
           this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
           this.emit();
           // A selectable text layer over the canvas; drawn after the page so it
@@ -683,8 +685,10 @@ export class PdfRenderer implements Renderer {
     const offset = this.offset();
     this.settings = settings;
     if (this.scroller) {
-      this.scroller.style.padding = `${settings.marginPx}px`;
-      this.scroller.style.background = { light: '#fff', sepia: '#f4ecd8', dark: '#191919' }[
+      this.scroller.style.padding = `${Math.max(settings.marginPx, 24)}px`;
+      // A neutral "desk" behind the page (not the page colour), so the white
+      // sheet reads as a physical page sitting on a surface — like Okular/Chrome.
+      this.scroller.style.background = { light: '#8b9096', sepia: '#b9a888', dark: '#15171a' }[
         settings.theme
       ];
     }
