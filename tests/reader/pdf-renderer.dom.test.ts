@@ -131,7 +131,12 @@ it('reports a rejected render, retains the last successful relocation and can re
   expect((message.mock.calls[0]![0] as CustomEvent<string>).detail).toContain(
     'Image exceeded maximum allowed size',
   );
-  expect(host.querySelectorAll('canvas')).toHaveLength(0);
+  // A rejected render now keeps the last good page on screen instead of
+  // blanking the view (the previous page is only released once a new one is
+  // painted and swapped in).
+  expect(host.querySelectorAll('canvas')).toHaveLength(1);
+  expect(host.querySelector('canvas')?.getAttribute('aria-label')).toBe('Page 1 of 100');
+  expect(host.querySelector('canvas')?.dataset.renderState).toBe('ready');
   expect(relocated).toHaveBeenCalledOnce();
   expect(relocated.mock.calls[0]![0].value).toBe('0:0');
   renderer.prev();

@@ -231,7 +231,12 @@ export class PdfRenderer implements Renderer {
       .catch(() => {})
       .then(async () => {
         if (this.dead || generation !== this.generation) return;
-        this.releasePage();
+        // Keep the current page on screen while the next one renders — releasing
+        // it here would blank the view for the whole render (the flash a zoom
+        // commit or page turn used to show). Its resources are freed after the
+        // new page is painted and swapped in.
+        const previousCanvas = this.canvas;
+        const previousPage = this.page;
         this.streamError = undefined;
         await pdf.cleanup();
         const page = await pdf.getPage(target + 1);
@@ -304,6 +309,12 @@ export class PdfRenderer implements Renderer {
           // ready, so a page turn or a zoom commit never flashes blank.
           this.scroller!.replaceChildren(pageEl);
           this.scroller!.scrollTop = offset > 0 ? this.settings.marginPx + offset * this.scale : 0;
+          // The previous page is now off-screen; free its canvas + pdf resources.
+          if (previousCanvas) {
+            previousCanvas.width = 0;
+            previousCanvas.height = 0;
+          }
+          if (previousPage !== undefined && previousPage !== page) previousPage.cleanup();
           this.emit();
           // A selectable text layer over the canvas; drawn after the page so it
           // never delays the first paint. Stale appends are guarded by pageEl.
