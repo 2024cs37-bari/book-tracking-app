@@ -1,3 +1,4 @@
+import { resolveBookId } from '~/sync/identity';
 import { AppError } from '~/domain/errors';
 import { formatHlc } from '~/domain/hlc';
 import { assertLocator, type Locator } from '~/domain/locator';
@@ -34,7 +35,7 @@ export class ProgressRepository {
   ) {}
 
   async get(bookId: string): Promise<Progress | undefined> {
-    const row = await this.db.progress.get(bookId);
+    const row = await this.db.progress.get(await resolveBookId(this.db, bookId));
     return row === undefined ? undefined : toProgress(row);
   }
 
@@ -75,7 +76,9 @@ export class ProgressRepository {
       this.db.progress,
       this.db.changes,
       this.db.progressConflicts,
+      this.db.syncMeta,
       async () => {
+        input = { ...input, bookId: await resolveBookId(this.db, input.bookId) };
         const existing = await this.db.progress.get(input.bookId);
         if (existing === undefined) {
           throw new AppError('not_found', `No reading state exists for book ${input.bookId}.`);
@@ -106,19 +109,25 @@ export class ProgressRepository {
 
   /** Sets the reading status without moving the position. */
   async setStatus(bookId: string, status: ReadingStatus): Promise<Progress> {
-    return this.db.transaction('rw', this.db.progress, this.db.changes, async () => {
-      const existing = await this.db.progress.get(bookId);
-      if (existing === undefined) {
-        throw new AppError('not_found', `No reading state exists for book ${bookId}.`);
-      }
-      const row: ProgressRow = {
-        ...existing,
-        status,
-        updatedHlc: formatHlc(this.context.clock.next()),
-      };
-      await this.db.progress.put(row);
-      await this.db.changes.add(makeChangeRow(this.context, 'progress', bookId, 'upsert', row));
-      return toProgress(row);
-    });
+    return this.db.transaction(
+      'rw',
+      [this.db.progress, this.db.changes, this.db.syncMeta, this.db.progressConflicts],
+      async () => {
+        bookId = await resolveBookId(this.db, bookId);
+        const existing = await this.db.progress.get(bookId);
+        if (existing === undefined) {
+          throw new AppError('not_found', `No reading state exists for book ${bookId}.`);
+        }
+        const row: ProgressRow = {
+          ...existing,
+          status,
+          updatedHlc: formatHlc(this.context.clock.next()),
+        };
+        await this.db.progress.put(row);
+        await this.db.progressConflicts.delete(bookId);
+        await this.db.changes.add(makeChangeRow(this.context, 'progress', bookId, 'upsert', row));
+        return toProgress(row);
+      },
+    );
   }
 }

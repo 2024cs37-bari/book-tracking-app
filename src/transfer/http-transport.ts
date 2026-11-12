@@ -1,3 +1,4 @@
+import { parseRetryAfter, requestSignal } from '~/sync/network';
 import type { FileTransport, TransferTicket, UploadAuthorization } from './transport';
 
 /**
@@ -13,6 +14,7 @@ export class FileTransferHttpError extends Error {
       readonly status?: number;
       readonly retryable: boolean;
       readonly authExpired?: boolean;
+      readonly retryAfterMs?: number;
     },
   ) {
     super(message);
@@ -25,19 +27,22 @@ export interface HttpFileTransportOptions {
   readonly baseUrl: string;
   /** Injectable fetch for tests; defaults to the global. */
   readonly fetch?: typeof fetch;
+  readonly timeoutMs?: number;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function errorFor(status: number): FileTransferHttpError {
+function errorFor(response: Response): FileTransferHttpError {
+  const status = response.status;
   const authExpired = status === 401 || status === 403;
   const retryable = status === 429 || status >= 500;
   return new FileTransferHttpError(`File transfer failed (${status})`, {
     status,
     retryable,
     authExpired,
+    retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
   });
 }
 
@@ -54,36 +59,59 @@ export function createHttpFileTransport(options: HttpFileTransportOptions): File
   const objectUrl = (sha256: string): string => `${base}/v1/files/${sha256}`;
 
   return {
-    async beginUpload(sha256: string, sizeBytes: number): Promise<UploadAuthorization> {
+    async hasRemoteFile(sha256: string, sizeBytes: number): Promise<boolean> {
+      const response = await doFetch(objectUrl(sha256), {
+        method: 'HEAD',
+        credentials: 'include',
+        signal: requestSignal(30_000),
+      });
+      if (response.status === 404) return false;
+      if (!response.ok) throw errorFor(response);
+      const length = response.headers.get('content-length');
+      return length !== null && Number(length) === sizeBytes;
+    },
+    async beginUpload(
+      sha256: string,
+      sizeBytes: number,
+      signal?: AbortSignal,
+    ): Promise<UploadAuthorization> {
       const response = await doFetch(`${base}/v1/files/begin`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sha256, size: sizeBytes }),
         credentials: 'include',
+        signal: requestSignal(options.timeoutMs ?? 120_000, signal),
       });
-      if (!response.ok) throw errorFor(response.status);
-      const json: unknown = await response.json();
+      if (!response.ok) throw errorFor(response);
+      const json: unknown = await response.json().catch((error: unknown) => {
+        if (error instanceof SyntaxError) return null;
+        throw error;
+      });
+      if (!isObject(json) || typeof json.already_available !== 'boolean')
+        throw new FileTransferHttpError('Malformed upload authorization.', { retryable: false });
       if (isObject(json) && json.already_available === true) return { alreadyAvailable: true };
       return { alreadyAvailable: false, ticket: { url: objectUrl(sha256) } };
     },
 
-    async upload(ticket: TransferTicket, body: Blob): Promise<void> {
+    async upload(ticket: TransferTicket, body: Blob, signal?: AbortSignal): Promise<void> {
       const response = await doFetch(ticket.url, {
         method: 'PUT',
         body,
         credentials: 'include',
+        signal: requestSignal(options.timeoutMs ?? 120_000, signal),
       });
-      if (!response.ok) throw errorFor(response.status);
+      if (!response.ok) throw errorFor(response);
     },
 
-    async finishUpload(sha256: string, sizeBytes: number): Promise<void> {
+    async finishUpload(sha256: string, sizeBytes: number, signal?: AbortSignal): Promise<void> {
       const response = await doFetch(`${base}/v1/files/finish`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ sha256, size: sizeBytes }),
         credentials: 'include',
+        signal: requestSignal(options.timeoutMs ?? 120_000, signal),
       });
-      if (!response.ok) throw errorFor(response.status);
+      if (!response.ok) throw errorFor(response);
     },
 
     beginDownload(sha256: string): Promise<TransferTicket> {
@@ -91,9 +119,13 @@ export function createHttpFileTransport(options: HttpFileTransportOptions): File
       return Promise.resolve({ url: objectUrl(sha256) });
     },
 
-    async download(ticket: TransferTicket): Promise<Blob> {
-      const response = await doFetch(ticket.url, { method: 'GET', credentials: 'include' });
-      if (!response.ok) throw errorFor(response.status);
+    async download(ticket: TransferTicket, signal?: AbortSignal): Promise<Blob> {
+      const response = await doFetch(ticket.url, {
+        method: 'GET',
+        credentials: 'include',
+        signal: requestSignal(options.timeoutMs ?? 120_000, signal),
+      });
+      if (!response.ok) throw errorFor(response);
       return response.blob();
     },
   };

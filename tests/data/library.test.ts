@@ -378,4 +378,32 @@ describe('device identity and sync metadata', () => {
     expect(await harness.deviceState.listPinned()).toHaveLength(1);
     expect((await harness.deviceState.get(bookId))?.filePresent).toBe(true);
   });
+
+  it('late device-state writes follow canonical identity instead of recreating an orphan', async () => {
+    await harness.db.syncMeta.bulkPut([
+      { key: 'book_alias:old-book', value: 'middle-book' },
+      { key: 'book_alias:middle-book', value: 'canonical-book' },
+    ]);
+    await harness.db.deviceState.put({
+      bookId: 'canonical-book',
+      filePresent: false,
+      pinnedOffline: true,
+      lastOpenedAt: 500,
+    });
+    await Promise.all([
+      harness.deviceState.setFilePresent('old-book', true),
+      harness.deviceState.markOpened('middle-book', 100),
+    ]);
+    expect(await harness.deviceState.get('old-book')).toEqual({
+      bookId: 'canonical-book',
+      filePresent: true,
+      pinnedOffline: true,
+      lastOpenedAt: 500,
+    });
+    expect(await harness.db.deviceState.count()).toBe(1);
+    expect(await harness.db.deviceState.get('old-book')).toBeUndefined();
+    expect(await harness.changes.pendingCount()).toBe(0);
+    await harness.deviceState.remove('old-book');
+    expect(await harness.db.deviceState.count()).toBe(0);
+  });
 });

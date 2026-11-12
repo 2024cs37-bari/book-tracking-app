@@ -4,7 +4,12 @@ import App from './App';
 import { AppProvider } from './context';
 import { createAppServices } from './services';
 import { initTheme } from '~/ui/theme';
+import { registerOfflineApp } from './service-worker';
+import { isNativeRuntime } from '~/storage/native-file-store';
+import { installNativeCloseHandling, registerNativeCloseGuard } from './native-lifecycle';
+import { readingActivityQueue } from '~/services/reading-activity';
 import '~/styles/global.css';
+import '~/styles/motion.css';
 
 const root = document.getElementById('root');
 
@@ -43,10 +48,26 @@ async function boot(): Promise<void> {
   try {
     const services = await createAppServices();
 
-    // Persist the clock when the app is hidden so a restart cannot reissue an
-    // HLC that was already used. Deferred to the sync engine to make finer.
+    if (isNativeRuntime()) {
+      registerNativeCloseGuard(async () => {
+        let saved = true;
+        await readingActivityQueue(services.sessions, services.persistClockState).flush((error) => {
+          if (error) saved = false;
+        });
+        await services.persistClockState();
+        return saved;
+      });
+      await installNativeCloseHandling();
+    }
+
+    // Background work starts after local initialization and never blocks rendering.
+    services.background?.start();
+
+    // Extra checkpoint; startup also recovers every committed entity/outbox HLC.
     const persistClock = (): void => {
-      void services.persistClockState();
+      void services.persistClockState().catch(() => {
+        /* Boot recovers committed HLCs. */
+      });
     };
     window.addEventListener('pagehide', persistClock);
     document.addEventListener('visibilitychange', () => {
@@ -71,13 +92,4 @@ async function boot(): Promise<void> {
 
 void boot();
 
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker
-    .register(`${import.meta.env.BASE_URL}sw.js`)
-    .catch((error: unknown) => {
-      const note = document.createElement('p');
-      note.className = 'note note-warning';
-      note.textContent = `Offline app caching failed: ${String(error)}. Local books are still stored.`;
-      document.body.append(note);
-    });
-}
+if (import.meta.env.PROD) void registerOfflineApp();

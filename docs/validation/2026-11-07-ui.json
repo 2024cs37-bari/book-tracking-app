@@ -1,0 +1,1594 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-07T12:01:40.465073+00:00",
+  "date": "2026-11-07",
+  "scope": "Post-redesign browser application and selected-document validation against the frozen final UI; does not certify the whole application for all documents, native platforms or physical mobile devices.",
+  "historicalBaseline": {
+    "path": "2026-11-07-reader.json",
+    "sha256": "8cfb1db32fceddbe576596aab3f38365863a5e8f87781e397e10845fea32d3ae",
+    "relationship": "Preserved pre-redesign validation. This report contains new browser and corpus runs; earlier timings are not measurements of the redesigned reader geometry."
+  },
+  "host": {
+    "platform": "linux",
+    "architecture": "x86_64",
+    "node": "v26.12.1",
+    "hostLoad": "Unmeasured shared desktop. Coordinated native compilation completed before corpus; only low-load UI smoke and documentation work were expected during corpus, and unrelated background workload was possible. Timings are single-run observations, not an isolated benchmark."
+  },
+  "browserVersions": {
+    "chromium": "156.0.8078.4",
+    "firefox": "157.0",
+    "webkit": "27.2"
+  },
+  "validationSuites": {
+    "generatedBrowser": {
+      "command": "PLAYWRIGHT_PORT=4197 npm run test:browser -- --output=/tmp/book-ui-browser-final-results --reporter=line",
+      "passed": 165,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "55 application cases in each of Chromium, Firefox and WebKit; generated fixtures, including mobile appearance dismissal and library filter disclosure",
+      "runnerSummary": "165 passed (6.8m)",
+      "logSha256": "b5afb55874552113724316b2e361ea50804ffbadb9081e18ab29020268233b7a"
+    },
+    "corpus": {
+      "uniqueCaseCount": 27,
+      "finalUniqueCasesPassed": 27,
+      "scope": "Nine cases per engine: eight hash-verified unmodified public originals and one generated 240-page image stress PDF. Final coverage combines 12 fresh reader-measurement cases from the initial full run with all 15 corrected expanded-PDF cases; this is not a single all-green 27-case invocation.",
+      "initialFullRun": {
+        "command": "PLAYWRIGHT_PORT=4197 BOOK_CORPUS_DIR=/tmp/book-tracking-corpus-v1 npm run test:corpus -- --output=/tmp/book-ui-corpus-results --reporter=line",
+        "passed": 24,
+        "failed": 3,
+        "skipped": 0,
+        "scope": "24 passed; all three failures were the same fixed aspect-ratio tolerance on the 8:1 mixed-size PDF second page",
+        "runnerSummary": "24 passed (2.6m)",
+        "logSha256": "2e7f9a2fc234b1064f0ba1936b10e10fc01d4bbc0b178ac5a9bc13ee04733dc4"
+      },
+      "correctedExpandedPdfRun": {
+        "command": "PLAYWRIGHT_PORT=4197 BOOK_CORPUS_DIR=/tmp/book-tracking-corpus-v1 npm run test:corpus -- pdf.spec.ts --output=/tmp/book-ui-corpus-pdf-final-results --reporter=line",
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0,
+        "scope": "All five expanded PDF cases in each engine, including every page using the corrected one-pixel quantization bound",
+        "runnerSummary": "15 passed (1.6m)",
+        "logSha256": "04173b2aa418b3c62853ae2bd6ef330335ed4be357d7c6d7d41200e262f27646"
+      },
+      "testCorrection": {
+        "path": "tests/corpus/pdf.spec.ts",
+        "cause": "An 8:1 source page renders at an ideal 684 by 85.5 pixels in the redesigned reader. Integer canvas height 85 yields ratio 8.0470588, beyond the previous absolute ratio tolerance of 0.03 despite only half-pixel quantization.",
+        "change": "The assertion now bounds absolute width minus expected-ratio times height by max(1, expected-ratio), allowing at most one pixel in either dimension. It also records canvas width and height. Source PDF ratios and application rendering were unchanged.",
+        "independentSourceCheck": "pdfinfo reports source page 2 size 144 by 18 points, rotation 0.",
+        "browserObservation": {
+          "width": 684,
+          "height": 85,
+          "aspectRatio": 8.047058823529412,
+          "cssWidth": 342,
+          "cssHeight": 42
+        },
+        "diagnosticLogSha256": "778cba3b5ec0ea3b9707195c350ac8ddbae9c028b444b777829b9463b6c0a66a"
+      }
+    }
+  },
+  "fingerprints": {
+    "capturedAt": "2026-11-07T11:44:08.752357+00:00",
+    "source": {
+      "algorithm": "SHA-256 of concatenated UTF-8 lines: <file SHA-256><two spaces><repository-relative POSIX path><LF>, sorted lexicographically by path",
+      "includedRoots": ["src", "public", "vendor", "tests", "tooling"],
+      "additionalFiles": [
+        "package.json",
+        "package-lock.json",
+        "vite.config.ts",
+        "playwright.config.ts",
+        "playwright.corpus.config.ts",
+        "playwright.sync.config.ts",
+        "playwright.accessibility.config.ts",
+        "tsconfig.json",
+        "tsconfig.node.json",
+        "tsconfig.test.json"
+      ],
+      "excluded": "Everything outside the named roots/files, including documentation, .env, private books, node_modules, native output, generated builds, downloaded corpus and temporary logs",
+      "fileCount": 253,
+      "sha256": "8316b1caf0ccf4cfa3d9bb166c2cf58775ce6057a24e9923936f4e9141b63f9b",
+      "laterValidationOnlyChanges": [
+        {
+          "path": "tests/corpus/pdf.spec.ts",
+          "atFullBrowserSha256": "c6cfaaae51135634e40e3e37f9d35ac6ea844c31c731899f0493003a17133355",
+          "atCorrectedPdfRunSha256": "f7a7b1a0c07c0fc4d6ab69ffb6de3a8679fa0d369d87a6c5b5e0706afa96a2b7"
+        },
+        {
+          "path": "tests/ui/theme.test.ts",
+          "beforeSha256": "abf4c88555d0ebb7f8f8267ce0f57348ce2e1111024e7e5328989654a6cbbce2",
+          "afterSha256": "14482cd2c05bdd95b04681ff4575b4f4361a6111c3439bdf21dbea75a141358a",
+          "reason": "Update existing preset/custom-accent checks to the redesigned warm light/dark surfaces; no application changes."
+        }
+      ],
+      "laterChangesScope": "Corpus-only raster quantization assertion and unit-test surface palette updates; no application source or compiled browser shell changed.",
+      "afterFinalSuitesSha256": "c41ee8023468ad0a9c551fb05160eb81e6a9e3cb617b30daba27b48123981cde",
+      "afterUnitPaletteUpdateSha256": "6f7ce087d292ba93e34d89aabd32272c66ecc7c7142aac3eb3ff57032768e57b"
+    },
+    "build": {
+      "directory": ".browser-test-dist",
+      "files": [
+        {
+          "path": "index.html",
+          "sha256": "4c57769d2643f5391cb2fe6ee66a46f82fce5fd19de0f20255ecc34dcb0ebc26"
+        },
+        {
+          "path": "sw.js",
+          "sha256": "7b76fb365f944c0d5f3f93aa002147d7d8b133b00cb22590998f0dfe93618f84"
+        }
+      ],
+      "serviceWorkerCache": "reader-shell-df81d8715d9c38a8",
+      "configuration": {
+        "VITE_SYNC_URL": "",
+        "VITE_DICTIONARY_ENABLED": "true",
+        "mode": "production"
+      }
+    },
+    "packageLockSha256": "6c6adee0636db9b84aafc2e1cad42b5255ef53d9a83cbb7d9e0d1ceb409f9c1e",
+    "applicationAndBuildUnchangedAfterValidation": true,
+    "verifiedAt": "2026-11-07T12:01:40.464311+00:00"
+  },
+  "corpusEvidence": {
+    "fileCount": 27,
+    "readerMeasurementFiles": 12,
+    "expandedPdfFiles": 15,
+    "originalBytesIncluded": false,
+    "records": [
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-generated-240-page--2b681--and-page-turn-measurements-chromium",
+        "rawAttachmentSha256": "b2a0be3a219df95fc480e2070c548451832ab4d199e183acd9810a4a42355eec",
+        "evidence": {
+          "sample": "generated 240-page image PDF: mobile-size raster bounds and page-turn measurements",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndFirstRender": 3252,
+            "pageTurnMedian": 92.19999998807907,
+            "pageTurnMax": 161.5
+          },
+          "resources": {
+            "inputBytes": 1276899,
+            "maxCanvasPixels": 605340,
+            "estimatedRgbaCanvasBytes": 2421360,
+            "pages": 240,
+            "cachedCanvases": 1
+          },
+          "input": {
+            "filename": "generated-image-stress.pdf",
+            "sha256": "de45f10cbe5f7fd00c5903a9ba9297a4d110839891792b6548d7f3abee9a7cea"
+          },
+          "metrics": {
+            "longTasksMs": [80, 101, 558, 322, 69],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 14344322,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-generated-240-page--2b681--and-page-turn-measurements-firefox",
+        "rawAttachmentSha256": "98c693b2b41dd5dbc3966e32b8876e89129e92b481d1b614b386f6b0af411dae",
+        "evidence": {
+          "sample": "generated 240-page image PDF: mobile-size raster bounds and page-turn measurements",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndFirstRender": 2795,
+            "pageTurnMedian": 75,
+            "pageTurnMax": 89
+          },
+          "resources": {
+            "inputBytes": 1276899,
+            "maxCanvasPixels": 605340,
+            "estimatedRgbaCanvasBytes": 2421360,
+            "pages": 240,
+            "cachedCanvases": 1
+          },
+          "input": {
+            "filename": "generated-image-stress.pdf",
+            "sha256": "de45f10cbe5f7fd00c5903a9ba9297a4d110839891792b6548d7f3abee9a7cea"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-generated-240-page--2b681--and-page-turn-measurements-webkit",
+        "rawAttachmentSha256": "17679621e9451cdad853a95fb568c6d4499562704398ae29616e3b1b54c4984a",
+        "evidence": {
+          "sample": "generated 240-page image PDF: mobile-size raster bounds and page-turn measurements",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndFirstRender": 1528,
+            "pageTurnMedian": 105,
+            "pageTurnMax": 130
+          },
+          "resources": {
+            "inputBytes": 1276899,
+            "maxCanvasPixels": 605340,
+            "estimatedRgbaCanvasBytes": 2421360,
+            "pages": 240,
+            "cachedCanvases": 1
+          },
+          "input": {
+            "filename": "generated-image-stress.pdf",
+            "sha256": "de45f10cbe5f7fd00c5903a9ba9297a4d110839891792b6548d7f3abee9a7cea"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-moby-dick-3dd27-fline-resume-at-mobile-size-chromium",
+        "rawAttachmentSha256": "161a2232158c757b11d55367b0561fb48bd21d47170d2353824ba7e17d18a9fc",
+        "evidence": {
+          "sample": "real-file moby-dick: metadata, navigation and offline resume at mobile size",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndOpen": 2881,
+            "interactionAndSave": 964
+          },
+          "resources": {
+            "inputBytes": 1628868
+          },
+          "input": {
+            "filename": "moby-dick.epub",
+            "sha256": "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"
+          },
+          "metrics": {
+            "longTasksMs": [228, 69, 348],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 23691372,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-moby-dick-3dd27-fline-resume-at-mobile-size-firefox",
+        "rawAttachmentSha256": "3f3b356dd92c49c194c6de26f552c63291f8b36980b7c99c740af8f2ecbe0b0f",
+        "evidence": {
+          "sample": "real-file moby-dick: metadata, navigation and offline resume at mobile size",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 2682,
+            "interactionAndSave": 950
+          },
+          "resources": {
+            "inputBytes": 1628868
+          },
+          "input": {
+            "filename": "moby-dick.epub",
+            "sha256": "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-moby-dick-3dd27-fline-resume-at-mobile-size-webkit",
+        "rawAttachmentSha256": "0016079e377b58bbd276eafb1e9bc5bf070b9ae34073f342f34adf010df53083",
+        "evidence": {
+          "sample": "real-file moby-dick: metadata, navigation and offline resume at mobile size",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 858,
+            "interactionAndSave": 911
+          },
+          "resources": {
+            "inputBytes": 1628868
+          },
+          "input": {
+            "filename": "moby-dick.epub",
+            "sha256": "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-mozilla-h-243a8-fline-resume-at-mobile-size-chromium",
+        "rawAttachmentSha256": "80d71b547c7e33d3e7b5063be27940bf3adcb2f78fdb0442bd587950a75727a2",
+        "evidence": {
+          "sample": "real-file mozilla-hello: metadata, navigation and offline resume at mobile size",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndOpen": 2116,
+            "interactionAndSave": 1091.7999999970198
+          },
+          "resources": {
+            "inputBytes": 678
+          },
+          "input": {
+            "filename": "helloworld.pdf",
+            "sha256": "c9efcaa374939ff19fc37974131f1db6d457eb942700c02a63fc9dda983e1400"
+          },
+          "metrics": {
+            "longTasksMs": [],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 15633969,
+            "viewport": {
+              "width": 844,
+              "height": 390,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-mozilla-h-243a8-fline-resume-at-mobile-size-firefox",
+        "rawAttachmentSha256": "4708f53ae7d55794a1e98e51080ba3874a73aec1965ac785737658cd13a95737",
+        "evidence": {
+          "sample": "real-file mozilla-hello: metadata, navigation and offline resume at mobile size",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 2549,
+            "interactionAndSave": 984
+          },
+          "resources": {
+            "inputBytes": 678
+          },
+          "input": {
+            "filename": "helloworld.pdf",
+            "sha256": "c9efcaa374939ff19fc37974131f1db6d457eb942700c02a63fc9dda983e1400"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 844,
+              "height": 390,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-mozilla-h-243a8-fline-resume-at-mobile-size-webkit",
+        "rawAttachmentSha256": "a8649eb379dae93653e9498e70d760f0e54535653d7f7af1202443468f0e28cd",
+        "evidence": {
+          "sample": "real-file mozilla-hello: metadata, navigation and offline resume at mobile size",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 798,
+            "interactionAndSave": 1058
+          },
+          "resources": {
+            "inputBytes": 678
+          },
+          "input": {
+            "filename": "helloworld.pdf",
+            "sha256": "c9efcaa374939ff19fc37974131f1db6d457eb942700c02a63fc9dda983e1400"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 844,
+              "height": 390,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-svg-in-sp-0d2a0-fline-resume-at-mobile-size-chromium",
+        "rawAttachmentSha256": "c0f079403ba5dbcee23ea7746af316708c4e1372fc0a98f8568921c897daae2c",
+        "evidence": {
+          "sample": "real-file svg-in-spine: metadata, navigation and offline resume at mobile size",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndOpen": 1714,
+            "interactionAndSave": 1062.5
+          },
+          "resources": {
+            "inputBytes": 687362
+          },
+          "input": {
+            "filename": "svg-in-spine.epub",
+            "sha256": "ed6b1b9e99245ac7747ced1a2f90bad1acab558280cffc7daed3e54ee48e49bb"
+          },
+          "metrics": {
+            "longTasksMs": [105],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 40899894,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-svg-in-sp-0d2a0-fline-resume-at-mobile-size-firefox",
+        "rawAttachmentSha256": "4814871381d0e5368e5fb100f7d317e7d21ddf2a9e53b53706b83f59282038fd",
+        "evidence": {
+          "sample": "real-file svg-in-spine: metadata, navigation and offline resume at mobile size",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 2461,
+            "interactionAndSave": 927
+          },
+          "resources": {
+            "inputBytes": 687362
+          },
+          "input": {
+            "filename": "svg-in-spine.epub",
+            "sha256": "ed6b1b9e99245ac7747ced1a2f90bad1acab558280cffc7daed3e54ee48e49bb"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "reader-measurements",
+        "caseDirectory": "reader-real-file-svg-in-sp-0d2a0-fline-resume-at-mobile-size-webkit",
+        "rawAttachmentSha256": "3c1a352262a5bdfb8d42e06a494879c1658e41487aa386495b1f58b93819ab35",
+        "evidence": {
+          "sample": "real-file svg-in-spine: metadata, navigation and offline resume at mobile size",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 890,
+            "interactionAndSave": 922
+          },
+          "resources": {
+            "inputBytes": 687362
+          },
+          "input": {
+            "filename": "svg-in-spine.epub",
+            "sha256": "ed6b1b9e99245ac7747ced1a2f90bad1acab558280cffc7daed3e54ee48e49bb"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-gnu-make-re-46d28-al-preservation-and-cleanup-chromium",
+        "rawAttachmentSha256": "75afd51adf3511af5f7b92fea9f3e4abc633d1ca5132187f3ef6d61db4388a0d",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "gnu-make",
+          "sha256": "a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3",
+          "actualPages": 229,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 3,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 7,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 8,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 9,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 10,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 11,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 12,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            }
+          ],
+          "scope": "first 12 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-gnu-make-re-46d28-al-preservation-and-cleanup-firefox",
+        "rawAttachmentSha256": "f26f0c4f970abd5271c75cf9d7ce9a6296d81542e891361b0c4903f83158aed5",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "gnu-make",
+          "sha256": "a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3",
+          "actualPages": 229,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 3,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 7,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 8,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 9,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 10,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 11,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 12,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            }
+          ],
+          "scope": "first 12 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-gnu-make-re-46d28-al-preservation-and-cleanup-webkit",
+        "rawAttachmentSha256": "48e4babcb494ba8eb33e671430e9297b221934a25a1ae4790166e33a6e4bea26",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "gnu-make",
+          "sha256": "a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3",
+          "actualPages": 229,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 3,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 7,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 8,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 9,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 10,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 11,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 12,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            }
+          ],
+          "scope": "first 12 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-mozilla-rot-246da-al-preservation-and-cleanup-chromium",
+        "rawAttachmentSha256": "46a5602928e2380fdd58af877a160d5d46b7608c3bc1c2738aa04dd7c315f8ce",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "mozilla-rotated",
+          "sha256": "ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b",
+          "actualPages": 5,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 5 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-mozilla-rot-246da-al-preservation-and-cleanup-firefox",
+        "rawAttachmentSha256": "215b1b0973b90bff4cfbbac22b854ec19aaeabce47404598607ecb624721d738",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "mozilla-rotated",
+          "sha256": "ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b",
+          "actualPages": 5,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 5 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-mozilla-rot-246da-al-preservation-and-cleanup-webkit",
+        "rawAttachmentSha256": "b96793bcf241677f8e550b22a18cc018b3dd1f051f747f654cd9a941a47a7f83",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "mozilla-rotated",
+          "sha256": "ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b",
+          "actualPages": 5,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 5 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-invalid-55508-al-preservation-and-cleanup-chromium",
+        "rawAttachmentSha256": "4ee0c8bb062f28c90bc2659ef3028950f883cb111018cec9d72ab5b3162d7730",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-invalid",
+          "sha256": "60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889",
+          "observations": [
+            {
+              "result": "invalid structure rejected; original retained; no locator/canvas created"
+            }
+          ]
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-invalid-55508-al-preservation-and-cleanup-firefox",
+        "rawAttachmentSha256": "6723688c3e6deab7e667a78a1c691b84bd26b595f5413cbf1165aee37c20194b",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-invalid",
+          "sha256": "60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889",
+          "observations": [
+            {
+              "result": "invalid structure rejected; original retained; no locator/canvas created"
+            }
+          ]
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-invalid-55508-al-preservation-and-cleanup-webkit",
+        "rawAttachmentSha256": "1e73a7af35b5537f53e973be97a03252eb97b5ddccfe8f3cb969a389752fc57c",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-invalid",
+          "sha256": "60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889",
+          "observations": [
+            {
+              "result": "invalid structure rejected; original retained; no locator/canvas created"
+            }
+          ]
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-mixed-r-acbc6-al-preservation-and-cleanup-chromium",
+        "rawAttachmentSha256": "358454ab67e0ae8c9481c4e7d80558e99a5ccff2024e83d48d1d0261d2228d5c",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-mixed",
+          "sha256": "7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840",
+          "actualPages": 3,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 497952,
+              "width": 684,
+              "height": 728,
+              "aspectRatio": 0.9395604395604396,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 58140,
+              "width": 684,
+              "height": 85,
+              "aspectRatio": 8.047058823529412,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            }
+          ],
+          "scope": "first 3 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-mixed-r-acbc6-al-preservation-and-cleanup-firefox",
+        "rawAttachmentSha256": "6af047327f25266380245d62f350080ba48b138403c76bc5e09c20006827be3b",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-mixed",
+          "sha256": "7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840",
+          "actualPages": 3,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 497952,
+              "width": 684,
+              "height": 728,
+              "aspectRatio": 0.9395604395604396,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 58140,
+              "width": 684,
+              "height": 85,
+              "aspectRatio": 8.047058823529412,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            }
+          ],
+          "scope": "first 3 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-mixed-r-acbc6-al-preservation-and-cleanup-webkit",
+        "rawAttachmentSha256": "507439befe6121fd2d720c4f5046ae51f08f969266b36ef83ab867ca2330d6da",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-mixed",
+          "sha256": "7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840",
+          "actualPages": 3,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 497952,
+              "width": 684,
+              "height": 728,
+              "aspectRatio": 0.9395604395604396,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 58140,
+              "width": 684,
+              "height": 85,
+              "aspectRatio": 8.047058823529412,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            }
+          ],
+          "scope": "first 3 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-multipa-c866a-al-preservation-and-cleanup-chromium",
+        "rawAttachmentSha256": "64ed747146e55805cd303687165d9a2f34009c7d39f6fbf74b8c9630fc2c66cd",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-multipage",
+          "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+          "actualPages": 6,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 603972,
+              "width": 684,
+              "height": 883,
+              "aspectRatio": 0.7746319365798414,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            },
+            {
+              "page": 3,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 6 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-multipa-c866a-al-preservation-and-cleanup-firefox",
+        "rawAttachmentSha256": "0cb7d3aec6fd2150dde041890d74f76707221594b55118b20ecdbf0a6f58bfda",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-multipage",
+          "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+          "actualPages": 6,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 603972,
+              "width": 684,
+              "height": 883,
+              "aspectRatio": 0.7746319365798414,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            },
+            {
+              "page": 3,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 6 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "type": "pdf-corpus-evidence",
+        "caseDirectory": "pdf-PDF-corpus-ocr-multipa-c866a-al-preservation-and-cleanup-webkit",
+        "rawAttachmentSha256": "a995ddb44b57a0bc04c0127649c83a3ddd299c0d89f5ca98780a8b2453715851",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-multipage",
+          "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+          "actualPages": 6,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 603972,
+              "width": 684,
+              "height": 883,
+              "aspectRatio": 0.7746319365798414,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            },
+            {
+              "page": 3,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 6 pages checked; remaining pages not claimed; limits retained"
+        }
+      }
+    ]
+  },
+  "readerResizeDiagnostic": {
+    "browser": "chromium",
+    "browserVersion": "156.0.8078.4",
+    "height": 844,
+    "fixture": "Generated EPUB, three chapters with 15 paragraphs each",
+    "method": "Fresh browser context per viewport; native window.error listener and Playwright pageerror capture without suppression. Samples reader-surface bounding rectangle over approximately 1200 ms of animation frames before and after sidebar close; also runs axe on shell between samples. Rectangles are [x,y,width,height] CSS pixels.",
+    "scriptSha256": "ecc5c323004d86972137acd386705aa42613370ceda03ca2afda49f91a6b1bca",
+    "logSha256": "00501c5f09d419d4fd0d29ca3b06cbabaf973971a2fed81d4199a1298b3a359f",
+    "observations": [
+      {
+        "width": 1280,
+        "geometry": {
+          "frames": 74,
+          "unique": ["[320,76,940,710]"]
+        },
+        "geometryAfterClose": {
+          "frames": 74,
+          "unique": ["[20,76,1240,710]"]
+        },
+        "errors": [
+          {
+            "phase": "close-sidebar",
+            "message": "READER_RESIZE_ERROR ResizeObserver loop completed with undelivered notifications.",
+            "time": 1794051871718,
+            "source": "window.error"
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "geometry": {
+          "frames": 74,
+          "unique": ["[0,60,390,732]"]
+        },
+        "geometryAfterClose": {
+          "frames": 74,
+          "unique": ["[0,60,390,732]"]
+        },
+        "errors": []
+      }
+    ],
+    "interpretation": "The desktop width reflow emitted one bounded ResizeObserver notification. Both viewports retained a single stable reader-surface rectangle in each sampling window; no sustained frame-to-frame geometry jitter was observed. The mobile run emitted no notifications. This narrow diagnostic does not measure all content reflow or eliminate all browser notification possibilities.",
+    "upstreamContext": "Foliate paginator ResizeObserver callbacks synchronously expand/render layout. No vendor change or notification suppression was introduced."
+  },
+  "limitations": [
+    "Desktop engines at mobile-sized viewports are not physical Android, iPhone or iPad validation.",
+    "Corpus portrait viewport is 390\u00d7844, DPR 2 and touch enabled; square Hello World uses 844\u00d7390 landscape for genuine nonzero vertical overflow. Chromium core/stress measurement cases use 4\u00d7 CDP CPU throttling; Firefox/WebKit and expanded PDF correctness cases are unthrottled.",
+    "Workflow timings include automation, navigation, DataTransfer construction and progress-save debounce. They are not Core Web Vitals or isolated renderer CPU time, and are not cross-engine/device comparisons.",
+    "JS heap excludes workers, native and GPU allocations; canvas RGBA estimates exclude files, caches and decode buffers. Total process memory is not bounded by the canvas cap.",
+    "GNU Make recognizes 229 pages but tests only the first 12, including intentional blank pages; the remaining 217 are unverified.",
+    "OCR source images of 81,000,000 and 11,456,000 pixels exceed the 4,000,000-pixel decode cap. Tests establish explicit errors, preserved previous canvas/locator and recovery, not successful rendering of oversized images.",
+    "The generated 240-page stress PDF shares one 1200\u00d71600 image; it is not 240 distinct large scanned pages.",
+    "Selected EPUB/PDF results do not establish complete format conformance, physical assistive-technology compatibility, or deployed Cloudflare authentication/network behavior.",
+    "No Git metadata is available; explicit source aggregate, lockfile and compiled shell fingerprints identify this tested snapshot. Documentation is outside the source aggregate to avoid a self-referential report hash.",
+    "The full application browser suite and corpus cover the final UI. Other acceptance results, including configured sync, accessibility and native packaging, are documented separately and are not newly asserted by this report.",
+    "Browser results cover Playwright-managed Chromium, Firefox and WebKit, not Codex in-app browser publication rendering or integration.",
+    "Desktop sidebar reflow produced a bounded ResizeObserver loop completed with undelivered notifications message in the dedicated native-error diagnostic; stable sampled geometry does not establish the absence of every possible layout issue."
+  ]
+}

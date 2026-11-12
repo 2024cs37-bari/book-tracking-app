@@ -38,7 +38,7 @@ async function recordConflict(bookId: string, remoteFraction: number): Promise<v
       bookId,
       status: 'reading',
       locatorKind: 'cfi',
-      locatorValue: 'remote-pos',
+      locatorValue: 'epubcfi(/6/8!/4/2)',
       fraction: remoteFraction,
       updatedHlc: REMOTE_HLC,
       deviceId: 'remote-device',
@@ -55,7 +55,7 @@ describe('ProgressConflictRepository', () => {
     harness.advanceTime(1_000);
     await harness.progress.save({
       bookId,
-      locator: { kind: 'cfi', value: 'local-pos', fraction: 0.1 },
+      locator: { kind: 'cfi', value: 'epubcfi(/6/2!/4/2)', fraction: 0.1 },
     });
     const pendingBefore = await harness.changes.pendingCount();
     await recordConflict(bookId, 0.9);
@@ -64,7 +64,7 @@ describe('ProgressConflictRepository', () => {
 
     const progress = await harness.db.progress.get(bookId);
     expect(progress?.fraction).toBe(0.9);
-    expect(progress?.locatorValue).toBe('remote-pos');
+    expect(progress?.locatorValue).toBe('epubcfi(/6/8!/4/2)');
     // Accepting pulled data must not enqueue a new outbox row.
     expect(await harness.changes.pendingCount()).toBe(pendingBefore);
     expect(await harness.progressConflicts.get(bookId)).toBeUndefined();
@@ -75,7 +75,7 @@ describe('ProgressConflictRepository', () => {
     harness.advanceTime(1_000);
     await harness.progress.save({
       bookId,
-      locator: { kind: 'cfi', value: 'local-pos', fraction: 0.2 },
+      locator: { kind: 'cfi', value: 'epubcfi(/6/2!/4/2)', fraction: 0.2 },
     });
     await recordConflict(bookId, 0.95);
     const pendingBefore = await harness.changes.pendingCount();
@@ -84,7 +84,7 @@ describe('ProgressConflictRepository', () => {
 
     const progress = await harness.db.progress.get(bookId);
     expect(progress?.fraction).toBe(0.2);
-    expect(progress?.locatorValue).toBe('local-pos');
+    expect(progress?.locatorValue).toBe('epubcfi(/6/2!/4/2)');
     // A fresh outbox row carries the choice to other devices, and its HLC now
     // dominates the remote candidate.
     expect(await harness.changes.pendingCount()).toBe(pendingBefore + 1);
@@ -102,7 +102,7 @@ describe('ProgressConflictRepository', () => {
     harness.advanceTime(1_000);
     await harness.progress.save({
       bookId,
-      locator: { kind: 'cfi', value: 'moved-on', fraction: 0.3 },
+      locator: { kind: 'cfi', value: 'epubcfi(/6/4!/4/2)', fraction: 0.3 },
     });
 
     expect(await harness.progressConflicts.get(bookId)).toBeUndefined();

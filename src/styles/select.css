@@ -1,0 +1,169 @@
+.custom-select {
+  min-width: 0;
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-height: 42px;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.select-trigger:hover:not(:disabled),
+.select-trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--surface-sunken) 85%, var(--text) 5%);
+}
+
+.select-trigger:focus-visible {
+  outline: 2px solid var(--accent-ink, var(--accent));
+  outline-offset: 3px;
+}
+
+.select-trigger:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Async labels/checkmarks must not replace the target of an in-flight click. */
+.select-trigger > *,
+.select-option > * {
+  pointer-events: none;
+}
+
+.select-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 240ms var(--ease-out);
+}
+
+.select-trigger[aria-expanded='true'] .select-chevron {
+  transform: rotate(180deg);
+}
+
+.select-menu {
+  position: fixed;
+  z-index: 1400;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow:
+    0 12px 36px color-mix(in srgb, var(--text) 13%, transparent),
+    0 2px 6px color-mix(in srgb, var(--text) 5%, transparent);
+  font: 0.875rem / 1.4 var(--font-sans);
+  transform-origin: top center;
+  animation: select-reveal 200ms var(--ease-out) both;
+  scrollbar-width: thin;
+}
+
+.select-menu[data-side='above'] {
+  transform-origin: bottom center;
+}
+
+.select-menu[data-state='closed'] {
+  pointer-events: none;
+  animation: select-dismiss 140ms ease both;
+}
+
+.select-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+  border-radius: 7px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 100ms ease;
+}
+
+.select-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.select-option > svg {
+  flex-shrink: 0;
+  color: var(--accent-ink, var(--accent));
+}
+
+.select-option[aria-selected='true'] {
+  font-weight: 600;
+}
+
+.select-option[data-active='true'] {
+  background: var(--surface-sunken);
+}
+
+@keyframes select-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes select-dismiss {
+  to {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.985);
+  }
+}
+
+@media (pointer: coarse) {
+  .select-trigger,
+  .select-option {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .select-menu {
+    animation: none;
+  }
+  .select-trigger,
+  .select-chevron,
+  .select-option {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .select-trigger,
+  .select-menu {
+    border-color: ButtonText;
+  }
+  .select-option[data-active='true'] {
+    outline: 1px solid Highlight;
+    outline-offset: -2px;
+  }
+}

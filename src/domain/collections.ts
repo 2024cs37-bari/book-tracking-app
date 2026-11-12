@@ -39,6 +39,8 @@ export interface BookTag {
 }
 
 export const MAX_COLLECTION_NAME_LENGTH = 200;
+// Unicode lowercasing can expand one display character into several code units.
+export const MAX_NORMALIZED_TAG_NAME_LENGTH = MAX_COLLECTION_NAME_LENGTH * 3;
 
 /** A membership is active when it has no removal at or after its latest add. */
 export function isMembershipActive(membership: {
@@ -54,11 +56,24 @@ export function isMembershipActive(membership: {
 }
 
 /**
- * Case-folds a tag name for de-duplication. Unicode-aware lowercasing plus
- * whitespace collapse means "Sci-Fi" and "sci-fi " resolve to one tag.
+ * Produces a locale-independent lookup key. Unicode default lowercasing plus
+ * whitespace collapse means "Sci-Fi" and "sci-fi " resolve to one tag on every
+ * device, including devices whose UI locale has different casing rules.
  */
 export function normalizeTagName(name: string): string {
-  return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** Accept keys written by the pre-v4 ambient-locale normalizer during recovery/sync. */
+export function isCompatibleTagNormalizedName(name: string, normalized: string): boolean {
+  const clean = name.trim().replace(/\s+/g, ' ');
+  // Unicode's locale-sensitive lowercasing rules differ for Turkish/Azeri and
+  // Lithuanian. Explicit locales keep compatibility independent of this device.
+  return (
+    normalizeTagName(name) === normalized ||
+    clean.toLocaleLowerCase('tr') === normalized ||
+    clean.toLocaleLowerCase('lt') === normalized
+  );
 }
 
 export function assertCollectionName(name: string, label: string): string {

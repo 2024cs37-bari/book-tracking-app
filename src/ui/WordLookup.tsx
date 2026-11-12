@@ -10,6 +10,7 @@ import {
   type JSX,
 } from 'solid-js';
 import { lookupWord as defaultLookup, type DictionaryEntry } from '~/services/dictionary';
+import { dictionaryAllowed, setDictionaryAllowed } from '~/services/privacy-preferences';
 
 /** Resolution states the popup renders, one at a time. */
 type LookupState =
@@ -45,11 +46,14 @@ const EDGE_MARGIN = 8;
 export default function WordLookup(props: WordLookupProps): JSX.Element {
   let panelRef: HTMLDivElement | undefined;
   const [state, setState] = createSignal<LookupState>({ kind: 'loading' });
+  const [allowed, setAllowed] = createSignal(dictionaryAllowed());
+  const [consentError, setConsentError] = createSignal('');
 
   // Run a fresh lookup whenever the word changes; the cleanup aborts the
   // in-flight request so a stale response can never overwrite a newer one.
   createEffect(() => {
     const word = props.word;
+    if (!allowed() && props.lookup === undefined) return;
     const lookup = props.lookup ?? defaultLookup;
     const controller = new AbortController();
     setState({ kind: 'loading' });
@@ -140,42 +144,77 @@ export default function WordLookup(props: WordLookupProps): JSX.Element {
         </button>
       </div>
       <div class="word-lookup-body">
-        <Switch>
-          <Match when={state().kind === 'loading'}>
-            <p class="word-lookup-status" aria-live="polite">
-              Looking up “{props.word}”…
-            </p>
-          </Match>
-          <Match when={state().kind === 'empty'}>
-            <p class="word-lookup-status">No definition found for “{props.word}”.</p>
-          </Match>
-          <Match when={state().kind === 'error'}>
-            <p class="word-lookup-status" role="alert">
-              Could not reach the dictionary. Check your connection and try again.
-            </p>
-          </Match>
-          <Match when={state().kind === 'result'}>
-            <For each={(state() as { entry: DictionaryEntry }).entry.meanings}>
-              {(meaning) => (
-                <section class="word-lookup-meaning">
-                  <h3 class="word-lookup-pos">{meaning.partOfSpeech}</h3>
-                  <ol class="word-lookup-defs">
-                    <For each={meaning.definitions}>
-                      {(definition) => (
-                        <li class="word-lookup-def">
-                          <span class="word-lookup-def-text">{definition.definition}</span>
-                          <Show when={definition.example}>
-                            {(example) => <span class="word-lookup-example">“{example()}”</span>}
-                          </Show>
-                        </li>
-                      )}
-                    </For>
-                  </ol>
-                </section>
-              )}
-            </For>
-          </Match>
-        </Switch>
+        <Show
+          when={allowed() || props.lookup !== undefined}
+          fallback={
+            <div class="word-lookup-status">
+              <p>
+                Online English definitions use dictionaryapi.dev. Only the word you choose is sent;
+                your library and notes stay private. This needs an internet connection.
+              </p>
+              <button
+                type="button"
+                class="button"
+                onClick={() => {
+                  try {
+                    setDictionaryAllowed(true);
+                    setAllowed(true);
+                  } catch {
+                    setConsentError(
+                      'Your browser could not save this preference. Enable site storage to continue.',
+                    );
+                  }
+                }}
+              >
+                Allow dictionary lookups
+              </button>
+              <p>You can turn this off in Settings.</p>
+              <Show when={consentError()}>
+                <p role="alert">{consentError()}</p>
+              </Show>
+            </div>
+          }
+        >
+          <Switch>
+            <Match when={state().kind === 'loading'}>
+              <p class="word-lookup-status" aria-live="polite">
+                Looking up “{props.word}”…
+              </p>
+            </Match>
+            <Match when={state().kind === 'empty'}>
+              <p class="word-lookup-status">
+                No definition available for “{props.word}”. The word may be missing, or the
+                dictionary may be offline.
+              </p>
+            </Match>
+            <Match when={state().kind === 'error'}>
+              <p class="word-lookup-status" role="alert">
+                Could not reach the dictionary. Check your connection and try again.
+              </p>
+            </Match>
+            <Match when={state().kind === 'result'}>
+              <For each={(state() as { entry: DictionaryEntry }).entry.meanings}>
+                {(meaning) => (
+                  <section class="word-lookup-meaning">
+                    <h3 class="word-lookup-pos">{meaning.partOfSpeech}</h3>
+                    <ol class="word-lookup-defs">
+                      <For each={meaning.definitions}>
+                        {(definition) => (
+                          <li class="word-lookup-def">
+                            <span class="word-lookup-def-text">{definition.definition}</span>
+                            <Show when={definition.example}>
+                              {(example) => <span class="word-lookup-example">“{example()}”</span>}
+                            </Show>
+                          </li>
+                        )}
+                      </For>
+                    </ol>
+                  </section>
+                )}
+              </For>
+            </Match>
+          </Switch>
+        </Show>
       </div>
     </div>
   );

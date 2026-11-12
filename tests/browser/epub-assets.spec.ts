@@ -1,6 +1,6 @@
 import { expect, test, type Frame, type Page } from '@playwright/test';
 import { buildEpubFixture } from '../support/fixtures';
-import { importBook, position } from './support';
+import { chooseSelect, importBook, position } from './support';
 
 let errors: string[];
 test.beforeEach(({ page }) => {
@@ -82,16 +82,16 @@ for (const version of ['2.0', '3.0'] as const) {
     );
     await verifyAssets(await assetFrame(page, 1));
     await page.getByText('Reader settings', { exact: true }).click();
-    await page.getByLabel('Font size / PDF zoom', { exact: true }).evaluate((element) => {
+    await page.getByLabel('Text size', { exact: true }).evaluate((element) => {
       const input = element as HTMLInputElement;
       input.value = '24';
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await expect((await assetFrame(page, 1)).locator('body')).toHaveCSS('font-size', '24px');
-    await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+    await chooseSelect(page.getByRole('combobox', { name: 'Theme', exact: true }), 'dark');
     await expect((await assetFrame(page, 1)).locator('html')).toHaveCSS(
       'background-color',
-      'rgb(25, 25, 25)',
+      'rgb(25, 27, 24)',
     );
     await page.evaluate(async () => {
       await navigator.serviceWorker.ready;
@@ -126,8 +126,8 @@ test('fixed-layout EPUB preserves page geometry, navigates, blocks scripts and r
     'Fixed-layout EPUB preserves publisher typography',
   );
   await page.getByText('Reader settings', { exact: true }).click();
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark');
-  await expect(page.locator('foliate-view')).toHaveCSS('background-color', 'rgb(25, 25, 25)');
+  await chooseSelect(page.getByRole('combobox', { name: 'Theme', exact: true }), 'dark');
+  await expect(page.locator('foliate-view')).toHaveCSS('background-color', 'rgb(25, 27, 24)');
   expect(
     await first.locator('body').evaluate((body) => ({
       width: body.getBoundingClientRect().width,

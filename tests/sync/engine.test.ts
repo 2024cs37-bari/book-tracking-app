@@ -59,7 +59,7 @@ class FakeServer {
       })),
       next_cursor: nextCursor,
       has_more: this.log.some((entry) => entry.seq > nextCursor),
-      schema_version: 1,
+      schema_version: 2,
     };
   }
 }
@@ -84,9 +84,9 @@ function engineFor(harness: TestHarness, transport: SyncTransport): SyncEngine {
   });
 }
 
-async function seedBook(harness: TestHarness, title: string): Promise<string> {
+async function seedBook(harness: TestHarness, title: string, original?: Blob): Promise<string> {
   const outcome = await harness.imports.importFile({
-    blob: toBlob(buildEpubFixture({ title })),
+    blob: original ?? toBlob(buildEpubFixture({ title })),
     filename: `${title}.epub`,
   });
   if (outcome.status !== 'imported') throw new Error('seed import failed');
@@ -133,7 +133,9 @@ describe('SyncEngine', () => {
     const [first] = await a.changes.listPending(100);
     server.retryable.add(first!.id);
 
-    await engineFor(a, transportFor(server)).sync();
+    await expect(engineFor(a, transportFor(server)).sync()).rejects.toMatchObject({
+      options: { retryable: true },
+    });
 
     const stillPending = await a.changes.listPending(100);
     expect(stillPending.map((row) => row.id)).toContain(first!.id);
@@ -234,6 +236,45 @@ describe('SyncEngine', () => {
       expect(await b.changes.pendingCount()).toBe(0);
     } finally {
       await b.close();
+    }
+  });
+});
+
+describe('independent imports across devices', () => {
+  it('converges identical content and preserves both devices collections through replay', async () => {
+    const b = await createHarness();
+    const c = await createHarness();
+    try {
+      // Share the exact original: rebuilding a ZIP can change its timestamps
+      // across a DOS-time boundary and create two different content hashes.
+      const original = toBlob(buildEpubFixture({ title: 'Same file' }));
+      const aid = await seedBook(a, 'Same file', original);
+      const bid = await seedBook(b, 'Same file', original);
+      expect(aid).not.toBe(bid);
+      const ashelf = await a.shelves.create('A shelf');
+      const bshelf = await b.shelves.create('B shelf');
+      await a.shelves.addBook(ashelf.id, aid);
+      await b.shelves.addBook(bshelf.id, bid);
+      const aengine = engineFor(a, transportFor(server));
+      const bengine = engineFor(b, transportFor(server));
+      await aengine.sync();
+      await bengine.sync();
+      await aengine.sync();
+      await engineFor(c, transportFor(server)).sync();
+      const canonical = [aid, bid].sort()[0]!;
+      for (const harness of [a, b, c]) {
+        expect(await harness.db.books.count()).toBe(1);
+        expect((await harness.db.books.toArray())[0]?.id).toBe(canonical);
+        expect(await harness.shelves.listBookIds(ashelf.id)).toEqual([canonical]);
+        expect(await harness.shelves.listBookIds(bshelf.id)).toEqual([canonical]);
+      }
+      await a.books.updateMetadata(canonical, { title: 'Renamed after convergence' });
+      await aengine.sync();
+      await bengine.sync();
+      expect((await b.books.getById(canonical))?.title).toBe('Renamed after convergence');
+    } finally {
+      await b.close();
+      await c.close();
     }
   });
 });

@@ -71,9 +71,12 @@ export interface PullResponse {
 export const MAX_PAYLOAD_BYTES = 64 * 1024;
 /** Max changes accepted in a single push body. */
 export const MAX_PUSH_BATCH = 500;
+/** Bound the entire push before parsing; accommodates 100 maximum-sized payloads. */
+export const MAX_PUSH_BYTES = 8 * 1024 * 1024;
+export const SCHEMA_VERSION = 2;
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Validates one change's envelope (not its opaque payload semantics). */
@@ -81,22 +84,42 @@ export function validatePushChange(value: unknown): value is PushChange {
   if (!isObject(value)) return false;
   if (typeof value.id !== 'string' || value.id.length === 0 || value.id.length > 128) return false;
   if (!(REPLICATED_ENTITIES as readonly string[]).includes(value.entity as string)) return false;
-  if (typeof value.entity_id !== 'string' || value.entity_id.length === 0) return false;
+  if (
+    typeof value.entity_id !== 'string' ||
+    value.entity_id.length === 0 ||
+    value.entity_id.length > 512
+  )
+    return false;
   if (!(CHANGE_OPS as readonly string[]).includes(value.op as string)) return false;
-  if (typeof value.hlc !== 'string' || !/^\d+:\d+:.+$/.test(value.hlc)) return false;
-  if (!('payload' in value)) return false;
-  if (JSON.stringify(value.payload).length > MAX_PAYLOAD_BYTES) return false;
+  if (typeof value.hlc !== 'string' || value.hlc.length > 512) return false;
+  const clock = /^(\d+):(\d+):(.+)$/.exec(value.hlc);
+  if (!clock || !Number.isSafeInteger(Number(clock[1])) || !Number.isSafeInteger(Number(clock[2])))
+    return false;
+  if (!isObject(value.payload)) return false;
+  try {
+    if (new TextEncoder().encode(JSON.stringify(value.payload)).byteLength > MAX_PAYLOAD_BYTES)
+      return false;
+  } catch {
+    return false;
+  }
   return true;
 }
 
 export type PushRequestError =
-  'not_object' | 'bad_device' | 'bad_schema' | 'bad_changes' | 'too_many';
+  'not_object' | 'bad_device' | 'bad_schema' | 'schema_mismatch' | 'bad_changes' | 'too_many';
 
 /** Validates the push envelope, returning an error code or null when valid. */
 export function validatePushRequest(value: unknown): PushRequestError | null {
   if (!isObject(value)) return 'not_object';
-  if (typeof value.device_id !== 'string' || value.device_id.length === 0) return 'bad_device';
-  if (!Number.isSafeInteger(value.schema_version)) return 'bad_schema';
+  if (
+    typeof value.device_id !== 'string' ||
+    value.device_id.length === 0 ||
+    value.device_id.length > 128
+  )
+    return 'bad_device';
+  if (!Number.isSafeInteger(value.schema_version) || (value.schema_version as number) < 1)
+    return 'bad_schema';
+  if (value.schema_version !== SCHEMA_VERSION) return 'schema_mismatch';
   if (!Array.isArray(value.changes)) return 'bad_changes';
   if (value.changes.length > MAX_PUSH_BATCH) return 'too_many';
   return null;

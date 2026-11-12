@@ -2,6 +2,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { EpubRenderer, BOOK_CSP } from '~/reader/epub-renderer';
+import { DEFAULT_READER_SETTINGS, type AnnotationAnchorStatus } from '~/reader/renderer';
 import { buildEpubFixture } from '../support/fixtures';
 
 interface TestBook {
@@ -127,7 +128,13 @@ it('opens generated EPUB through the custom element, applies CSP before URLs, tr
   const unsubscribe = renderer.onRelocate(vi.fn());
   unsubscribe();
   const view = host.querySelector('foliate-view') as TestView;
-  renderer.applySettings({ fontSizePx: 22, lineHeight: 1.8, marginPx: 32, theme: 'dark' });
+  renderer.applySettings({
+    ...DEFAULT_READER_SETTINGS,
+    fontSizePx: 22,
+    lineHeight: 1.8,
+    marginPx: 32,
+    theme: 'dark',
+  });
   expect(view.renderer.setStyles).toHaveBeenCalledWith(expect.stringContaining('22px'));
   renderer.destroy();
   expect(view.close).toHaveBeenCalled();
@@ -150,6 +157,57 @@ it('restores native CFI and reports fraction fallback for an unresolved locator'
   expect(relocated).toHaveBeenLastCalledWith(
     expect.objectContaining({ kind: 'cfi', fraction: 0.5 }),
     0.5,
+  );
+  renderer.destroy();
+});
+
+it('checks EPUB anchors against loaded chapters without treating unloaded chapters as orphaned', async () => {
+  const { renderer, host } = await adapter();
+  await renderer.open(new Blob([buildEpubFixture({ chapters: 2 })]));
+  const view = host.querySelector('foliate-view') as TestView;
+  const first = await view.book.sections[0]!.createDocument();
+  const second = await view.book.sections[1]!.createDocument();
+  let contents = [{ index: 0, doc: first }];
+  Object.assign(view.renderer, { getContents: () => contents });
+  const parseFirst = vi.spyOn(view.book.sections[0]!, 'createDocument');
+  const parseSecond = vi.spyOn(view.book.sections[1]!, 'createDocument');
+  const text = first.querySelector('p')!.firstChild!;
+  const range = first.createRange();
+  range.setStart(text, 0);
+  range.setEnd(text, 5);
+  const valid = view.getCFI(0, range);
+  const invalid = valid.replace(':0', ':999999');
+  const offscreen = view.getCFI(1, range).replace(':0', ':999999');
+  let statuses: readonly AnnotationAnchorStatus[] = [];
+  renderer.onAnnotationStatus((value) => {
+    statuses = value;
+  });
+  renderer.setAnnotationAnchors([
+    { id: 'valid', kind: 'highlight', locator: { kind: 'cfi', value: valid, fraction: 0 } },
+    { id: 'invalid', kind: 'highlight', locator: { kind: 'cfi', value: invalid, fraction: 0 } },
+    {
+      id: 'offscreen',
+      kind: 'highlight',
+      locator: { kind: 'cfi', value: offscreen, fraction: 0.5 },
+    },
+    {
+      id: 'absent-chapter',
+      kind: 'bookmark',
+      locator: { kind: 'cfi', value: 'epubcfi(/6/99998!/4/2:0)', fraction: 1 },
+    },
+  ]);
+  expect(Object.fromEntries(statuses.map((status) => [status.id, status.state]))).toEqual({
+    valid: 'resolved',
+    invalid: 'unresolved',
+    offscreen: 'unchecked',
+    'absent-chapter': 'unresolved',
+  });
+  expect(parseFirst).not.toHaveBeenCalled();
+  expect(parseSecond).not.toHaveBeenCalled();
+  contents = [{ index: 1, doc: second }];
+  view.dispatchEvent(new CustomEvent('create-overlay', { detail: { index: 1 } }));
+  await vi.waitFor(() =>
+    expect(statuses.find((status) => status.id === 'offscreen')?.state).toBe('unresolved'),
   );
   renderer.destroy();
 });

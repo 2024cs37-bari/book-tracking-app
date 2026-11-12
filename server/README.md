@@ -1,63 +1,119 @@
-# Sync server
+# Private sync Worker
 
-Cloudflare Worker backend for cross-device sync (Phase 3). It is a durable,
-ordered, idempotent change log over D1, gated by Cloudflare Access. It stores
-the client's canonical change payloads verbatim and never interprets them —
-conflict resolution is the client's job (see [ADR 0006](../docs/decisions/0006-sync-client.md)
-and [docs/SYNC.md](../docs/SYNC.md)).
+The backend stores an ordered, idempotent metadata change log in Cloudflare D1
+and original book files in private R2. Cloudflare Access gates every data route
+and scopes records by verified user identity. The frontend works without this
+server; configuring `VITE_SYNC_URL` enables cross-device features.
 
-## Layout
+The maintained [API contract](../docs/API.md) covers request shapes, limits,
+retries, authentication, and file lifecycle. [SYNC.md](../docs/SYNC.md) describes
+client conflict resolution. No remote resources or credentials are included.
 
-- `src/protocol.ts` — wire contract + request validation (untrusted input).
-- `src/sync-core.ts` — pure push/pull logic, tested against an in-memory store.
-- `src/storage.ts` / `src/d1-storage.ts` — the `ChangeStore` interface and its D1 implementation.
-- `src/access.ts` — Cloudflare Access JWT verification (JWKS, audience, issuer).
-- `src/worker.ts` — the Hono app wiring Access + routes + D1.
-- `migrations/` — D1 schema.
+## Local development
 
-## Endpoints
-
-- `POST /api/v1/sync/push` — append a batch; per-change `accepted`/`duplicate`/`rejected` with server seq.
-- `GET /api/v1/sync/pull?since=<seq>&limit=<n>` — a page of changes after the cursor.
-
-Both require a valid Access identity, which also scopes the change log per user.
-
-## Develop and test
+Use the same supported Node version as the root project (Node 20.19+; a current
+LTS version is recommended). Work in `server/`:
 
 ```sh
-npm install
+npm ci
 npm run typecheck
-npm test            # pure sync-core logic
+npm test
+npm run migrate:local
 ```
 
-## Deploy (one-time setup)
+Create `server/.dev.vars` locally:
 
-The repo ships placeholders only; real resource ids and Access values are set at
-deploy time and are not committed.
+```dotenv
+DEV_USER=local-reader
+CLIENT_ORIGIN=http://127.0.0.1:5173
+```
+
+Run `npm run dev`, which binds Wrangler to `127.0.0.1:8787`. In a second terminal
+at the repository root run:
 
 ```sh
-# 1. Create the D1 database and paste its id into wrangler.toml (database_id).
-npx wrangler d1 create book_reader_sync
-
-# 2. Apply the schema.
-npm run migrate            # remote; use migrate:local for local dev
-
-# 3. Set the Cloudflare Access application audience and team domain.
-#    Put an Access policy in front of the Worker route, then set:
-#    ACCESS_AUD           = the Access application AUD tag
-#    ACCESS_TEAM_DOMAIN   = <team>.cloudflareaccess.com
-#    (as wrangler vars or dashboard environment variables)
-
-# 4. Deploy.
-npm run deploy
+VITE_SYNC_URL=http://127.0.0.1:8787/api npm run dev -- --host 127.0.0.1
 ```
 
-Then point the client at the Worker: construct `createHttpSyncTransport({ baseUrl })`
-and a `SyncEngine`, and wire them into the app's services. The client is already
-built and tested against this contract; see `src/sync/` in the root project.
+Use the frontend at `http://127.0.0.1:5173`; `localhost` is a different origin.
+The bypass is allowed only for loopback request URLs and must never be configured
+in a remote environment. `.dev.vars` is local only and Wrangler does not upload
+it. Local D1/R2 state is under `.wrangler/`; deleting it deletes your development
+server data.
 
-## Not yet implemented
+`npm test` includes pure validation tests, real JOSE signature checks with local
+keys, and the bundled Worker running in local workerd with D1/R2. It requires no
+Cloudflare account or network service. Miniflare and esbuild are explicit test
+dependencies; its version matches the Wrangler runtime. Do not replace these
+checks with an in-memory API mock when changing storage behavior.
 
-- R2 file transfer (Phase 4).
-- Snapshot/bootstrap and history compaction (docs/SYNC.md §7) — ordinary pagination first.
-- Concrete batch/payload size limits and retention policy (docs/SYNC.md §11) — set from measured behaviour.
+## Deployment checklist
+
+Prefer one HTTPS host: a static frontend with `/api/*` routed to this Worker.
+This avoids cross-site Access cookie restrictions and simplifies CSP. Choose the
+host and Access policy before provisioning resources.
+
+1. Authenticate Wrangler using your own Cloudflare account. Do not place tokens
+   in the frontend, `.env` values beginning with `VITE_`, logs, or committed files.
+2. Create the resources using `npx wrangler d1 create book_reader_sync` and
+   `npx wrangler r2 bucket create book-reader-files`. Keep R2 public access off.
+   Replace `database_id` in `wrangler.toml` with the resulting D1 ID. If you use
+   different resource names, update bindings and migration scripts together.
+3. Add the real Worker route for `your-reader-host.example/api/*` in
+   `wrangler.toml` or your deployment-specific configuration. The checked-in
+   configuration disables `workers.dev` and preview URLs and has no production
+   route. It intentionally does not create an alternative public endpoint.
+4. Create a Cloudflare Access application covering the chosen host/routes and
+   allow only the intended owner. Set `ACCESS_AUD` to its audience tag and
+   `ACCESS_TEAM_DOMAIN` to `<team>.cloudflareaccess.com` in the deployment config.
+   These two identifiers are public configuration, not authentication secrets.
+   Never set `DEV_USER` remotely. Empty Access values fail closed.
+5. Set `CLIENT_ORIGIN` to the exact HTTPS frontend origin, such as
+   `https://reader.example.test`, with no path or trailing slash. Same-origin
+   requests work when it is unset. A separate frontend/API domain additionally
+   requires Access to let preflight reach the Worker and browsers to send the
+   API's Access cookie; test this explicitly.
+6. Apply the schema: `npm run migrate` targets remote D1. First review the SQL
+   and keep a backup when upgrading an existing deployment. `migrate:local`
+   never updates the remote database.
+7. Run `npm run typecheck`, `npm test`, and
+   `npm run deploy -- --dry-run` to validate the bundle and bindings. Then run
+   `npm run deploy` when you are ready to publish your configured Worker.
+8. Build the frontend with
+   `VITE_SYNC_URL=https://reader.example.test/api npm run build` at the root and
+   deploy `dist/` to the frontend host. The API origin is added to application
+   CSP at build time. Changing it requires rebuilding the frontend.
+9. Verify unauthorized API calls fail, sign in through Access in a browser,
+   import a disposable book, sync it, then download/verify it on a second device.
+   Confirm protected originals have no public R2 URL and that a second
+   unauthorized identity cannot access metadata or files.
+
+The deployment commands create billable Cloudflare resources or publish code;
+they are setup instructions, not actions performed by tests. Resource IDs,
+Access policy, real host, and credentials remain operator responsibilities.
+
+## Maintenance and recovery
+
+- Back up D1 and original R2 files separately; the client's JSON backup does not
+  include book bytes. See [operations](../docs/OPERATIONS.md).
+- Keep immutable change IDs across retries. D1 enforces uniqueness per user and
+  rejects reuse with different content. Clients must retain/surface rejected
+  changes instead of silently dropping them.
+- Original PUT streams are limited to 100,000,000 bytes and checksum-verified by
+  R2 before publication. Downloads stream back and are verified by the client.
+  Legacy objects without recorded checksums remain recoverable by GET but must
+  be re-uploaded before they can justify evicting a local copy.
+- Keep the Worker and client schema compatible (currently version 2). A mismatch
+  pauses useful sync until versions are aligned; changing storage schema needs
+  an explicit migration/recovery design.
+- Run `npm audit` and tests when updating tooling. Wrangler's workerd/Miniflare
+  packages must stay compatible; do not force an old audit-recommended major
+  downgrade without checking its platform support.
+- Never expose exception messages, change payloads, book contents, cookies, or
+  Access assertions through telemetry. API errors use stable public codes.
+
+History compaction/snapshot bootstrap, server-side account quotas, per-user
+rate limiting, multipart uploads, and authenticated remote deletion/retention
+are future work. The current log is append-only and remote originals remain
+until the operator removes them. Monitor resource usage and keep the Access
+policy restricted for the personal deployment.

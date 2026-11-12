@@ -1,7 +1,13 @@
 import Dexie from 'dexie';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { newId } from '~/domain/ids';
-import { createDatabase, DB_LOCAL_VERSION, type BookRow } from '~/data/db';
+import {
+  createDatabase,
+  DB_LOCAL_VERSION,
+  type BookRow,
+  type TagRow,
+  type ChangeRow,
+} from '~/data/db';
 
 let name: string;
 
@@ -78,6 +84,77 @@ it('creates a fresh database directly at the current version', async () => {
     expect(await db.sessions.count()).toBe(0);
     expect(await db.annotations.count()).toBe(0);
     expect(await db.progressConflicts.count()).toBe(0);
+  } finally {
+    db.close();
+  }
+});
+
+it('upgrades v3 tag lookup keys without changing identities, memberships, clocks or outbox bytes', async () => {
+  const book = await seedV1();
+  const legacy = new Dexie(name);
+  legacy.version(3).stores({
+    books: 'id, &sha256, title, format, lifecycle, addedAt',
+    progress: 'bookId, status, updatedHlc',
+    changes: 'id, entity, entityId, pushedAt, createdAt',
+    syncMeta: 'key',
+    deviceState: 'bookId, lastOpenedAt, pinnedOffline',
+    fileTransfers: 'id, sha256, direction, state, updatedAt',
+    annotations: 'id, bookId, createdHlc, updatedHlc',
+    shelves: 'id, name, updatedHlc',
+    shelfBooks: '[shelfId+bookId], shelfId, bookId, addedHlc',
+    tags: 'id, normalizedName, updatedHlc',
+    bookTags: '[tagId+bookId], tagId, bookId, addedHlc',
+    sessions: 'id, bookId, startedAt',
+    progressConflicts: 'bookId',
+  });
+  await legacy.open();
+  const stamp = '1700000000000:0:device';
+  const tags: TagRow[] = [
+    { id: 'turkish', name: 'I', normalizedName: 'ı', updatedHlc: stamp, deleted: false },
+    { id: 'default', name: 'I', normalizedName: 'i', updatedHlc: stamp, deleted: false },
+    {
+      id: 'lithuanian',
+      name: 'Ì',
+      normalizedName: 'i\u0307\u0300',
+      updatedHlc: stamp,
+      deleted: true,
+    },
+  ];
+  const memberships = tags.map((tag) => ({ tagId: tag.id, bookId: book.id, addedHlc: stamp }));
+  const changes: ChangeRow[] = tags.map((tag, index) => ({
+    id: `change-${index}`,
+    entity: 'tag',
+    entityId: tag.id,
+    op: tag.deleted ? 'delete' : 'upsert',
+    payload: JSON.stringify(tag),
+    hlc: stamp,
+    deviceId: 'device',
+    createdAt: 1700000000000,
+    pushedAt: index === 0 ? 0 : 1700000000001,
+  }));
+  await legacy.table('tags').bulkAdd(tags);
+  await legacy.table('bookTags').bulkAdd(memberships);
+  await legacy.table('changes').bulkAdd(changes);
+  legacy.close();
+
+  const db = createDatabase(name);
+  await db.open();
+  try {
+    expect(db.verno).toBe(4);
+    for (const tag of tags) {
+      expect(await db.tags.get(tag.id)).toEqual({ ...tag, normalizedName: tag.name.toLowerCase() });
+    }
+    expect(await db.tags.where('normalizedName').equals('i').count()).toBe(2);
+    expect(await db.tags.count()).toBe(3);
+    expect(await db.bookTags.toArray()).toEqual(
+      [...memberships].sort((a, b) => a.tagId.localeCompare(b.tagId)),
+    );
+    expect(await db.changes.toArray()).toEqual(changes);
+    expect(await db.books.get(book.id)).toEqual(book);
+    db.close();
+    await db.open();
+    expect(await db.tags.count()).toBe(3);
+    expect(await db.changes.toArray()).toEqual(changes);
   } finally {
     db.close();
   }

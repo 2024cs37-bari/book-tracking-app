@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import type { Annotation } from '~/domain/annotation';
+import type { AnnotationAnchorStatus } from '~/reader/renderer';
 import { formatPercent, type Locator } from '~/domain/locator';
 import {
   type ColourFilter,
@@ -26,6 +27,7 @@ export type { ColourFilter, HighlightColour, KindFilter };
 
 export interface ReaderAnnotationsProps {
   readonly annotations: readonly Annotation[];
+  readonly anchorStatuses?: readonly AnnotationAnchorStatus[];
   readonly onSelect: (locator: Locator) => void;
   readonly onDelete: (id: string) => void;
   readonly onEditNote: (id: string, note: string) => void;
@@ -47,6 +49,14 @@ export default function ReaderAnnotations(props: ReaderAnnotationsProps): JSX.El
   const ordered = createMemo(() => sortByFraction(props.annotations));
   const visible = createMemo(() => filterAnnotations(ordered(), kind(), colour()));
   const isFiltered = createMemo(() => kind() !== 'all' || colour() !== 'all');
+  const unresolved = createMemo(
+    () =>
+      new Map(
+        (props.anchorStatuses ?? [])
+          .filter((status) => status.state === 'unresolved')
+          .map((status) => [status.id, status]),
+      ),
+  );
 
   // Per-kind counts over the full (non-deleted) set, shown on the filter chips.
   const kindCounts = createMemo(() => {
@@ -249,6 +259,14 @@ export default function ReaderAnnotations(props: ReaderAnnotationsProps): JSX.El
                       Delete
                     </button>
                   </div>
+                  <Show when={unresolved().get(annotation.id)}>
+                    {(status) => (
+                      <p class="note reader-annotation-unresolved" role="status">
+                        <strong>Anchor unavailable.</strong> {status().reason} You can still edit or
+                        export it.
+                      </p>
+                    )}
+                  </Show>
                   <Show when={annotation.textExcerpt}>
                     {(excerpt) => (
                       <blockquote class="reader-annotation-excerpt">{excerpt()}</blockquote>

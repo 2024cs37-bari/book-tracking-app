@@ -1,0 +1,9 @@
+[[permission]]
+identifier = "book-file-store"
+description = "Read, stage, verify and atomically commit validated book/cover keys only within the app-owned original-file directory."
+commands.allow = ["native_store_info", "native_store_begin", "native_store_append", "native_store_commit", "native_store_abort", "native_store_read", "native_store_stat", "native_store_remove", "native_store_keys"]
+
+[[permission]]
+identifier = "book-export"
+description = "Save checked export bytes only to a destination explicitly chosen in the native save dialog; no raw filesystem paths are accepted or returned."
+commands.allow = ["native_export_begin", "native_export_append", "native_export_commit", "native_export_abort", "native_confirm_close"]

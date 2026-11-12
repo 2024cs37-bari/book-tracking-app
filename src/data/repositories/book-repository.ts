@@ -1,3 +1,5 @@
+import { resolveBookId } from '~/sync/identity';
+import { bookMetadataClocks } from '~/sync/book-merge';
 import { AppError } from '~/domain/errors';
 import { formatHlc } from '~/domain/hlc';
 import type { Book, BookLifecycle } from '~/domain/book';
@@ -50,7 +52,7 @@ export class BookRepository {
   }
 
   async getById(id: string): Promise<Book | undefined> {
-    const row = await this.db.books.get(id);
+    const row = await this.db.books.get(await resolveBookId(this.db, id));
     return row === undefined ? undefined : toBook(row);
   }
 
@@ -101,6 +103,7 @@ export class BookRepository {
       updatedHlc: formatHlc(this.context.clock.next()),
     };
 
+    row.metadataHlcs = bookMetadataClocks(row);
     await this.db.transaction('rw', this.db.books, this.db.changes, async () => {
       await this.db.books.add(row);
       await this.db.changes.add(makeChangeRow(this.context, 'book', row.id, 'upsert', row));
@@ -116,7 +119,8 @@ export class BookRepository {
    * (see docs/decisions/0002-data-lifecycle.md).
    */
   async setLifecycle(id: string, lifecycle: BookLifecycle): Promise<Book> {
-    return this.db.transaction('rw', this.db.books, this.db.changes, async () => {
+    return this.db.transaction('rw', this.db.books, this.db.changes, this.db.syncMeta, async () => {
+      id = await resolveBookId(this.db, id);
       const row = await this.db.books.get(id);
       if (row === undefined) {
         throw new AppError('not_found', `Book ${id} is not in the library.`);
@@ -124,6 +128,8 @@ export class BookRepository {
 
       const now = Date.now();
       const next: BookRow = { ...row, lifecycle, updatedHlc: formatHlc(this.context.clock.next()) };
+
+      next.metadataHlcs = { ...bookMetadataClocks(row), lifecycle: next.updatedHlc };
 
       // Timestamps are indexed, so they must be removed rather than set to
       // null when a book returns to the active state.
@@ -146,7 +152,8 @@ export class BookRepository {
 
   async updateMetadata(id: string, patch: BookMetadataPatch): Promise<Book> {
     assertMetadataPatch(patch);
-    return this.db.transaction('rw', this.db.books, this.db.changes, async () => {
+    return this.db.transaction('rw', this.db.books, this.db.changes, this.db.syncMeta, async () => {
+      id = await resolveBookId(this.db, id);
       const row = await this.db.books.get(id);
       if (row === undefined) {
         throw new AppError('not_found', `Book ${id} is not in the library.`);
@@ -157,6 +164,12 @@ export class BookRepository {
         ...patch,
         updatedHlc: formatHlc(this.context.clock.next()),
       };
+      next.metadataHlcs = bookMetadataClocks(row);
+      for (const field of Object.keys(patch) as (keyof BookMetadataPatch)[]) {
+        // UI forms often submit untouched fields too. Their clocks must stay
+        // unchanged or one device's author edit can overwrite another's title.
+        if (row[field] !== next[field]) next.metadataHlcs[field] = next.updatedHlc;
+      }
       await this.db.books.put(next);
       await this.db.changes.add(makeChangeRow(this.context, 'book', id, 'upsert', next));
       return toBook(next);

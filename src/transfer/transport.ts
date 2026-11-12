@@ -28,20 +28,25 @@ export interface UploadAuthorization {
 }
 
 export interface FileTransport {
+  hasRemoteFile?(sha256: string, sizeBytes: number): Promise<boolean>;
   /**
    * Declares an upload (hash + size) and gets authorization. The server may
    * report the object already exists, in which case no bytes are sent.
    */
-  beginUpload(sha256: string, sizeBytes: number): Promise<UploadAuthorization>;
+  beginUpload(
+    sha256: string,
+    sizeBytes: number,
+    signal?: AbortSignal,
+  ): Promise<UploadAuthorization>;
   /** Sends the whole object to private storage using the ticket. */
-  upload(ticket: TransferTicket, body: Blob): Promise<void>;
+  upload(ticket: TransferTicket, body: Blob, signal?: AbortSignal): Promise<void>;
   /**
    * Confirms the upload: the server verifies object existence/size (and
    * checksum where supported) and only then publishes availability.
    */
-  finishUpload(sha256: string, sizeBytes: number): Promise<void>;
+  finishUpload(sha256: string, sizeBytes: number, signal?: AbortSignal): Promise<void>;
   /** Authorizes a download of an existing object, returning a fetch ticket. */
-  beginDownload(sha256: string): Promise<TransferTicket>;
+  beginDownload(sha256: string, signal?: AbortSignal): Promise<TransferTicket>;
   /** Fetches the object bytes using the ticket. */
-  download(ticket: TransferTicket): Promise<Blob>;
+  download(ticket: TransferTicket, signal?: AbortSignal): Promise<Blob>;
 }

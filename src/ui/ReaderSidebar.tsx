@@ -1,4 +1,5 @@
-import { For, Show, type JSX } from 'solid-js';
+import { For, Show, createUniqueId, type JSX } from 'solid-js';
+import Icon from './Icon';
 
 export interface SidebarTab {
   readonly id: string;
@@ -23,6 +24,39 @@ export default function ReaderSidebar(props: {
   children: JSX.Element;
 }) {
   let aside: HTMLElement | undefined;
+  const prefix = createUniqueId();
+  const panelId = `${prefix}-panel`;
+  const tabId = (id: string) => `${prefix}-tab-${id}`;
+  function close(): void {
+    props.onClose();
+    document.getElementById('reader-sidebar-toggle')?.focus();
+  }
+  function tabKey(event: KeyboardEvent, current: string): void {
+    const index = props.tabs.findIndex((tab) => tab.id === current);
+    let next: number;
+    if (event.key === 'ArrowRight') next = (index + 1) % props.tabs.length;
+    else if (event.key === 'ArrowLeft') next = (index + props.tabs.length - 1) % props.tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = props.tabs.length - 1;
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+    const tab = props.tabs[next];
+    if (!tab) return;
+    props.onPanel(tab.id);
+    document.getElementById(tabId(tab.id))?.focus();
+  }
+  function resizeKey(event: KeyboardEvent): void {
+    let width = props.width;
+    if (event.key === 'ArrowRight') width += 20;
+    else if (event.key === 'ArrowLeft') width -= 20;
+    else if (event.key === 'Home') width = 220;
+    else if (event.key === 'End') width = 520;
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onResize(Math.max(220, Math.min(520, width)));
+  }
 
   function startResize(event: PointerEvent): void {
     event.preventDefault();
@@ -44,40 +78,57 @@ export default function ReaderSidebar(props: {
 
   return (
     <Show when={props.open}>
-      <div class="reader-scrim" role="presentation" onClick={() => props.onClose()} />
+      <div class="reader-scrim" role="presentation" onClick={close} />
       <aside
         class="reader-sidebar"
+        id="reader-sidebar"
         aria-label="Reader navigation"
         style={{ '--reader-sidebar-width': `${props.width}px` }}
         ref={(element) => {
           aside = element;
         }}
       >
-        <div class="reader-sidebar-tabs" role="tablist" aria-label="Reader panels">
-          <For each={props.tabs}>
-            {(tab) => (
-              <button
-                type="button"
-                role="tab"
-                class="reader-tab"
-                classList={{ active: props.panel === tab.id }}
-                aria-selected={props.panel === tab.id}
-                onClick={() => props.onPanel(tab.id)}
-              >
-                {tab.label}
-              </button>
-            )}
-          </For>
+        <div class="reader-sidebar-heading">
+          <span>In this book</span>
           <button
             type="button"
             class="reader-sidebar-close"
             aria-label="Close sidebar"
-            onClick={() => props.onClose()}
+            title="Close sidebar"
+            onClick={close}
           >
-            ×
+            <Icon name="close" size={18} />
           </button>
         </div>
-        <div class="reader-sidebar-body" role="tabpanel">
+        <div class="reader-sidebar-tabs">
+          <div role="tablist" aria-label="Reader panels" style={{ display: 'contents' }}>
+            <For each={props.tabs}>
+              {(tab) => (
+                <button
+                  type="button"
+                  role="tab"
+                  class="reader-tab"
+                  classList={{ active: props.panel === tab.id }}
+                  id={tabId(tab.id)}
+                  aria-controls={panelId}
+                  tabIndex={props.panel === tab.id ? 0 : -1}
+                  aria-selected={props.panel === tab.id}
+                  onKeyDown={(event) => tabKey(event, tab.id)}
+                  onClick={() => props.onPanel(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+        <div
+          class="reader-sidebar-body"
+          role="tabpanel"
+          id={panelId}
+          aria-labelledby={tabId(props.panel)}
+          tabIndex={0}
+        >
           {props.children}
         </div>
         <div
@@ -85,6 +136,12 @@ export default function ReaderSidebar(props: {
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize sidebar"
+          tabIndex={0}
+          aria-valuemin={220}
+          aria-valuemax={520}
+          aria-valuenow={props.width}
+          aria-valuetext={`${props.width} pixels`}
+          onKeyDown={resizeKey}
           onPointerDown={startResize}
         />
       </aside>

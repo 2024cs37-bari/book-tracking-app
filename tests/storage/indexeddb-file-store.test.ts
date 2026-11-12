@@ -7,6 +7,7 @@ const names: string[] = [];
 afterEach(async () => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   for (const store of stores.splice(0)) await store.close();
   for (const name of names.splice(0))
     await new Promise<void>((resolve, reject) => {
@@ -58,6 +59,48 @@ it('an unanswered persistence permission request has a bounded wait', async () =
   const request = requestPersistentStorage();
   await vi.advanceTimersByTimeAsync(1500);
   expect(await request).toBeNull();
+});
+
+it('concurrent startups cannot remove each other’s durable-storage probe', async () => {
+  vi.stubGlobal('navigator', {});
+  names.push('book-reader-files');
+  const originalGet = IndexedDbBookFileStore.prototype.get;
+  const originalRemove = IndexedDbBookFileStore.prototype.remove;
+  let signalBothReads: () => void;
+  let signalRemoved: () => void;
+  const bothReads = new Promise<void>((resolve) => {
+    signalBothReads = resolve;
+  });
+  const firstRemoved = new Promise<void>((resolve) => {
+    signalRemoved = resolve;
+  });
+  let reads = 0;
+  vi.spyOn(IndexedDbBookFileStore.prototype, 'get').mockImplementation(async function (
+    this: IndexedDbBookFileStore,
+    key,
+  ) {
+    reads += 1;
+    if (reads === 1) await bothReads;
+    else {
+      signalBothReads();
+      await firstRemoved;
+    }
+    return originalGet.call(this, key);
+  });
+  vi.spyOn(IndexedDbBookFileStore.prototype, 'remove').mockImplementation(async function (
+    this: IndexedDbBookFileStore,
+    key,
+  ) {
+    await originalRemove.call(this, key);
+    signalRemoved();
+  });
+  const selections = await Promise.all([selectBookFileStore(), selectBookFileStore()]);
+  for (const selection of selections) {
+    if (selection.store.kind === 'indexeddb')
+      stores.push(selection.store as IndexedDbBookFileStore);
+    expect(selection.store.kind).toBe('indexeddb');
+    expect(await selection.store.keys()).toEqual([]);
+  }
 });
 
 it('upgrades binary v1 without editing its schema or deleting originals, converting Blob rows lazily', async () => {

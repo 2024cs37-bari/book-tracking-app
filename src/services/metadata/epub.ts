@@ -1,4 +1,5 @@
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8 } from 'fflate';
+import { MAX_EPUB_BYTES, openEpubArchive } from '~/reader/epub-archive';
 import {
   allElementTexts,
   directoryOf,
@@ -15,7 +16,10 @@ import { contentTypeForPath } from '~/storage/mime';
  * Guards against loading a huge archive into memory just to read metadata.
  * Above this the extractor reports a warning and the book is still imported.
  */
-export const MAX_EPUB_EXTRACTION_BYTES = 256 * 1024 * 1024;
+export const MAX_EPUB_EXTRACTION_BYTES = MAX_EPUB_BYTES;
+const MAX_CONTAINER_BYTES = 64 * 1024;
+const MAX_PACKAGE_BYTES = 1024 * 1024;
+const MAX_COVER_BYTES = 8 * 1024 * 1024;
 
 const CONTAINER_PATH = 'META-INF/container.xml';
 const COVER_META_NAMES = ['calibre:cover', 'cover'] as const;
@@ -92,12 +96,12 @@ function findCoverHref(
 }
 
 function readCover(
-  archive: Record<string, Uint8Array>,
+  archive: ReturnType<typeof openEpubArchive>,
   opfDirectory: string,
   coverHref: string,
 ): ExtractedCover | undefined {
   const coverPath = resolveArchivePath(opfDirectory, coverHref);
-  const bytes = archive[coverPath];
+  const bytes = archive.read(coverPath, MAX_COVER_BYTES);
   if (bytes === undefined) return undefined;
   const contentType = contentTypeForPath(coverPath) ?? 'application/octet-stream';
   const extension = /\.([a-z0-9]+)$/i.exec(coverPath)?.[1]?.toLowerCase() ?? 'bin';
@@ -125,9 +129,9 @@ export const epubMetadataExtractor: MetadataExtractor = {
       };
     }
 
-    let archive: Record<string, Uint8Array>;
+    let archive: ReturnType<typeof openEpubArchive>;
     try {
-      archive = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+      archive = openEpubArchive(new Uint8Array(await blob.arrayBuffer()));
     } catch (error) {
       return {
         warnings: [
@@ -136,7 +140,7 @@ export const epubMetadataExtractor: MetadataExtractor = {
       };
     }
 
-    const containerBytes = archive[CONTAINER_PATH];
+    const containerBytes = archive.read(CONTAINER_PATH, MAX_CONTAINER_BYTES);
     if (containerBytes === undefined) {
       return { warnings: ['The EPUB is missing META-INF/container.xml.'] };
     }
@@ -146,7 +150,7 @@ export const epubMetadataExtractor: MetadataExtractor = {
       return { warnings: ['The EPUB container does not name a package document.'] };
     }
 
-    const opfBytes = archive[rootfilePath];
+    const opfBytes = archive.read(rootfilePath, MAX_PACKAGE_BYTES);
     if (opfBytes === undefined) {
       return { warnings: [`The EPUB package document "${rootfilePath}" is missing.`] };
     }
@@ -159,7 +163,12 @@ export const epubMetadataExtractor: MetadataExtractor = {
     const isbn = pickIsbn(allElementTexts(metadataBlock, ['dc:identifier', 'identifier']));
 
     const coverHref = findCoverHref(metadataBlock, manifest);
-    const cover = coverHref === undefined ? undefined : readCover(archive, opfDirectory, coverHref);
+    let cover: ExtractedCover | undefined;
+    try {
+      cover = coverHref === undefined ? undefined : readCover(archive, opfDirectory, coverHref);
+    } catch {
+      warnings.push('The cover could not be extracted within the 8 MiB safety limit.');
+    }
     if (coverHref !== undefined && cover === undefined) {
       warnings.push(`The declared cover image "${coverHref}" is not present in the archive.`);
     }

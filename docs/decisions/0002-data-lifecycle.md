@@ -1,5 +1,7 @@
 # ADR 0002: Data lifecycle and recoverability
 
+> Implementation update (2026-11-07): original export, validated portable recovery, pins and conservative verified-remote cache cleanup are implemented. Remote purge and history compaction remain deferred. See [Storage](../STORAGE.md) and [Backup](../BACKUP.md) for current behavior.
+
 - **Status:** Accepted
 - **Date:** 2026-10-07
 - **Decision owners:** Project maintainer

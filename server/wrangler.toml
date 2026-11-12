@@ -2,6 +2,9 @@ name = "book-reader-sync"
 main = "src/worker.ts"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
+# Add an explicit protected /api/* route for your chosen host before deployment.
+workers_dev = false
+preview_urls = false
 
 # The authoritative change log and accepted rows (docs/DATA-MODEL.md §1).
 [[d1_databases]]
@@ -14,9 +17,11 @@ migrations_dir = "migrations"
 
 [vars]
 # Cloudflare Access application audience (AUD) tag and team domain. Set real
-# values with `wrangler secret`/dashboard vars before deploy; see docs/BACKEND.md.
+# identifiers in your deployment config before deploy; see server/README.md.
 ACCESS_AUD = ""
 ACCESS_TEAM_DOMAIN = ""
+# Exact HTTPS frontend origin, with no path or trailing slash; empty is same-origin only.
+CLIENT_ORIGIN = ""
 
 # Private R2 bucket for original book files (Phase 4; see docs/STORAGE.md §7).
 # Create it before first deploy: `wrangler r2 bucket create book-reader-files`.

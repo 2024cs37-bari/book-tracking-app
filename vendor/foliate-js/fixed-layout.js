@@ -30,7 +30,7 @@ const getViewport = (doc, viewport) => {
 }
 
 export class FixedLayout extends HTMLElement {
-    static observedAttributes = ['zoom']
+    static observedAttributes = ['zoom', 'page-mode']
     #root = this.attachShadow({ mode: 'closed' })
     #observer = new ResizeObserver(() => this.#render())
     #spreads
@@ -61,6 +61,9 @@ export class FixedLayout extends HTMLElement {
     }
     attributeChangedCallback(name, _, value) {
         switch (name) {
+            case 'page-mode':
+                this.#render()
+                break
             case 'zoom':
                 this.#zoom = value !== 'fit-width' && value !== 'fit-page'
                     ? parseFloat(value) : value
@@ -109,8 +112,10 @@ export class FixedLayout extends HTMLElement {
         const right = this.#center ?? this.#right ?? {}
         const target = side === 'left' ? left : right
         const { width, height } = this.getBoundingClientRect()
-        const portrait = this.spread !== 'both' && this.spread !== 'portrait'
-            && height > width
+        const pageMode = this.getAttribute('page-mode')
+        const portrait = pageMode === 'single' || (pageMode === 'double'
+            ? width < 700
+            : this.spread !== 'both' && this.spread !== 'portrait' && height > width)
         this.#portrait = portrait
         const blankWidth = left.width ?? right.width ?? 0
         const blankHeight = left.height ?? right.height ?? 0

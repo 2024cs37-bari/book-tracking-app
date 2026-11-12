@@ -1,0 +1,275 @@
+/* Reader controls are grouped by intent; original pages keep their own typography. */
+.reader-shell .reader-settings-advanced {
+  width: 356px;
+  gap: 22px;
+  padding: 24px;
+}
+.reader-settings-kicker {
+  margin: 0 0 5px;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.reader-control-label {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.reader-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 5px;
+  border-radius: 12px;
+  background: var(--surface-sunken);
+}
+.reader-mode-options button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 3px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.71rem;
+  cursor: pointer;
+  transition:
+    background-color 160ms,
+    color 160ms;
+}
+.reader-mode-options button[aria-pressed='true'] {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: 0 2px 5px #00000008;
+}
+.reader-mode-options button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.reader-mode-options button:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.reader-setting-hint {
+  font-size: 0.71rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 10px 0 0;
+}
+.reader-settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 12px;
+}
+.reader-rotate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 65px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  cursor: pointer;
+}
+.reader-shell .reader-check-setting {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.77rem;
+  line-height: 1.5;
+}
+.reader-check-setting input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.reader-shell .reader-advanced-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.reader-shell .reader-advanced-fields label + label {
+  margin-top: 0;
+}
+.reader-reset-settings {
+  border: 0;
+  border-top: 1px solid var(--border);
+  padding: 16px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.reader-reset-settings:hover {
+  color: var(--text);
+}
+.reader-page-jump {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 6px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.reader-page-jump input {
+  width: 3.5rem;
+  padding: 6px 4px;
+  text-align: center;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.8rem;
+  appearance: textfield;
+}
+.reader-page-jump input::-webkit-inner-spin-button {
+  appearance: none;
+}
+.reader-shell .reader-page-jump button {
+  min-width: 28px;
+  width: 28px;
+  padding: 0;
+}
+.reader-shell.reader-focus .reader-toolbar,
+.reader-shell.reader-focus .reader-footer {
+  display: none;
+}
+.reader-shell.reader-focus .reader-main {
+  padding: 0;
+}
+.reader-focus-exit {
+  position: absolute;
+  z-index: 35;
+  right: 16px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-popover);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.reader-focus-exit kbd {
+  font-size: 0.65rem;
+}
+.reader-shell:fullscreen {
+  background: var(--surface-sunken);
+  width: 100vw;
+  height: 100dvh;
+}
+.pdf-spread {
+  display: flex;
+  align-items: start;
+  gap: 24px;
+  width: max-content;
+  min-width: 100%;
+}
+.pdf-spread .pdf-page {
+  margin: 0;
+  flex-shrink: 0;
+}
+.pdf-spread .pdf-page:first-child {
+  margin-inline-start: auto;
+}
+.pdf-spread .pdf-page:last-child {
+  margin-inline-end: auto;
+}
+.pdf-flow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  min-width: 100%;
+  width: max-content;
+  overflow-anchor: none;
+}
+.pdf-slot {
+  position: relative;
+  flex-shrink: 0;
+  background: #ffffff30;
+  display: grid;
+  place-items: center;
+}
+.pdf-slot .pdf-page {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+.pdf-page-placeholder {
+  color: #fff;
+  background: #30342f;
+  border-radius: 20px;
+  padding: 7px 12px;
+  font: 12px system-ui;
+}
+.pdf-page-error {
+  max-width: 30rem;
+  padding: 18px;
+  background: #fff9ec;
+  color: #6a321b;
+  font: 14px/1.5 system-ui;
+}
+.pdf-scroll {
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+}
+@media (max-width: 700px) {
+  .reader-shell .reader-toolbar {
+    gap: 8px;
+    padding-inline: 10px;
+  }
+  .reader-shell .reader-toolbar-group {
+    gap: 2px;
+  }
+  .reader-shell .reader-title {
+    font-size: 0.87rem;
+  }
+  .reader-shell .reader-settings-summary span {
+    display: none;
+  }
+  .reader-shell .reader-settings-advanced {
+    position: fixed;
+    top: 62px;
+    right: 10px;
+    max-height: calc(100dvh - 76px);
+    padding: 20px;
+  }
+  .reader-shell .reader-footer {
+    display: flex;
+    justify-content: space-between;
+    padding-inline: 10px;
+    gap: 6px;
+  }
+  .reader-page-jump {
+    gap: 4px;
+    font-size: 0.66rem;
+  }
+  .reader-page-jump input {
+    width: 2.4rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reader-mode-options button {
+    transition: none;
+  }
+}

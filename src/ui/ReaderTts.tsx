@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import {
   SPEECH_RATE_MAX,
   SPEECH_RATE_MIN,
@@ -6,6 +6,8 @@ import {
   type SpeechState,
   type SpeechVoice,
 } from '~/reader/tts';
+import Icon from './Icon';
+import Select from './Select';
 
 export interface ReaderTtsProps {
   /** The read-aloud controller, e.g. from `createSpeech()`. */
@@ -117,22 +119,12 @@ export default function ReaderTts(props: ReaderTtsProps) {
         </p>
       }
     >
-      <section
-        class="reader-tts"
-        aria-label={props.label ?? 'Read aloud'}
-        style={{
-          display: 'flex',
-          'flex-direction': 'column',
-          gap: '0.5rem',
-          padding: '0.75rem',
-          background: 'var(--surface-raised)',
-          border: '1px solid var(--border)',
-          'border-radius': '8px',
-          'box-shadow': 'var(--shadow-popover)',
-          color: 'var(--text)',
-        }}
-      >
-        <div style={{ display: 'flex', 'align-items': 'center', gap: '0.5rem' }}>
+      <section class="reader-tts" aria-label={props.label ?? 'Read aloud'}>
+        <div class="reader-panel-intro">
+          <h3>Listen to this page</h3>
+          <p>Choose a voice and a comfortable pace.</p>
+        </div>
+        <div class="reader-tts-controls">
           <button
             type="button"
             class="button button-primary"
@@ -152,21 +144,21 @@ export default function ReaderTts(props: ReaderTtsProps) {
           </button>
           <button
             type="button"
-            class="button"
+            class="reader-icon-button"
             aria-label="Previous sentence"
             disabled={!active()}
             onClick={() => props.controller.previous()}
           >
-            ‹
+            <Icon name="arrow-left" size={17} />
           </button>
           <button
             type="button"
-            class="button"
+            class="reader-icon-button"
             aria-label="Next sentence"
             disabled={!active()}
             onClick={() => props.controller.next()}
           >
-            ›
+            <Icon name="arrow-right" size={17} />
           </button>
           <Show when={progress().total > 0}>
             <span class="note mono" aria-hidden="true">
@@ -175,10 +167,7 @@ export default function ReaderTts(props: ReaderTtsProps) {
           </Show>
         </div>
 
-        <label
-          class="field"
-          style={{ display: 'flex', 'align-items': 'center', gap: '0.5rem', margin: 0 }}
-        >
+        <label class="field reader-tts-speed">
           <span style={{ 'white-space': 'nowrap' }}>Speed</span>
           <input
             type="range"
@@ -196,26 +185,20 @@ export default function ReaderTts(props: ReaderTtsProps) {
         </label>
 
         <Show when={voices().length > 0}>
-          <label
-            class="field"
-            style={{ display: 'flex', 'align-items': 'center', gap: '0.5rem', margin: 0 }}
-          >
+          <label class="field reader-tts-voice">
             <span style={{ 'white-space': 'nowrap' }}>Voice</span>
-            <select
+            <Select
               value={voice()}
-              aria-label="Voice"
-              onChange={(event) => changeVoice(event.currentTarget.value)}
-              style={{ flex: '1' }}
-            >
-              <option value="">Default</option>
-              <For each={voices()}>
-                {(item) => (
-                  <option value={item.name}>
-                    {item.name} ({item.lang})
-                  </option>
-                )}
-              </For>
-            </select>
+              ariaLabel="Voice"
+              onChange={changeVoice}
+              options={[
+                { value: '', label: 'Default' },
+                ...voices().map((item) => ({
+                  value: item.name,
+                  label: `${item.name} (${item.lang})`,
+                })),
+              ]}
+            />
           </label>
         </Show>
 

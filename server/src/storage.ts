@@ -28,7 +28,8 @@ export interface IncomingChange {
 export interface AppendResult {
   readonly changeId: string;
   /** 'accepted' with a fresh seq, or 'duplicate' when the id was already stored. */
-  readonly status: 'accepted' | 'duplicate';
+  readonly status: 'accepted' | 'duplicate' | 'rejected';
+  readonly code?: 'id_conflict';
   readonly seq?: number;
 }
 

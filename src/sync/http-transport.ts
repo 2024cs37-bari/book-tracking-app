@@ -8,6 +8,7 @@ import {
   type PushResponse,
 } from './protocol';
 import type { SyncTransport } from './transport';
+import { parseRetryAfter, requestSignal } from './network';
 
 /**
  * A sync transport error. `retryable` tells the engine whether a later cycle
@@ -37,13 +38,7 @@ export interface HttpSyncTransportOptions {
   readonly baseUrl: string;
   /** Injectable fetch for tests; defaults to the global. */
   readonly fetch?: typeof fetch;
-}
-
-function retryAfterMs(headers: Headers): number | undefined {
-  const value = headers.get('retry-after');
-  if (value === null) return undefined;
-  const seconds = Number(value);
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+  readonly timeoutMs?: number;
 }
 
 async function errorFor(response: Response): Promise<SyncHttpError> {
@@ -71,7 +66,7 @@ async function errorFor(response: Response): Promise<SyncHttpError> {
     authExpired,
     cursorExpired,
     code,
-    retryAfterMs: retryAfterMs(response.headers),
+    retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
   });
 }
 
@@ -91,9 +86,16 @@ export function createHttpSyncTransport(options: HttpSyncTransportOptions): Sync
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(request),
         credentials: 'include',
+        signal: requestSignal(options.timeoutMs ?? 30_000),
       });
       if (!response.ok) throw await errorFor(response);
-      const json: unknown = await response.json();
+      const json: unknown = await response.json().catch((error: unknown) => {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new SyncHttpError('Malformed JSON response', {
+          retryable: false,
+          code: 'bad_response',
+        });
+      });
       if (!isPushResponse(json)) {
         throw new SyncHttpError('Malformed push response', {
           retryable: false,
@@ -105,9 +107,19 @@ export function createHttpSyncTransport(options: HttpSyncTransportOptions): Sync
 
     async pull(since: number, limit: number): Promise<PullResponse> {
       const url = `${base}/${SYNC_API_VERSION}/sync/pull?since=${since}&limit=${limit}`;
-      const response = await doFetch(url, { method: 'GET', credentials: 'include' });
+      const response = await doFetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        signal: requestSignal(options.timeoutMs ?? 30_000),
+      });
       if (!response.ok) throw await errorFor(response);
-      const json: unknown = await response.json();
+      const json: unknown = await response.json().catch((error: unknown) => {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new SyncHttpError('Malformed JSON response', {
+          retryable: false,
+          code: 'bad_response',
+        });
+      });
       if (!isPullResponse(json)) {
         throw new SyncHttpError('Malformed pull response', {
           retryable: false,

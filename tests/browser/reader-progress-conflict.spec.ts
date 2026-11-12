@@ -32,11 +32,11 @@ async function seedConflict(page: Page, remoteFraction: number): Promise<void> {
           locatorKind: 'cfi',
           locatorValue: 'epubcfi(/6/4!/4/2/2)',
           fraction,
-          updatedHlc: '4000000000000:0:other-device',
+          updatedHlc: `${Date.now() + 1000}:0:other-device`,
           deviceId: 'other-device',
         },
         localFraction: 0,
-        localUpdatedHlc: '1700000000000:0:this-device',
+        localUpdatedHlc: `${Date.now() - 1000}:0:this-device`,
       });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);

@@ -60,11 +60,21 @@ export function decodeXmlEntities(value: string): string {
   return value.replace(XML_ENTITY_PATTERN, (entity) => {
     if (entity.startsWith('&#x') || entity.startsWith('&#X')) {
       const codePoint = Number.parseInt(entity.slice(3, -1), 16);
-      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
+      return Number.isSafeInteger(codePoint) &&
+        codePoint >= 0 &&
+        codePoint <= 0x10ffff &&
+        !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ? String.fromCodePoint(codePoint)
+        : entity;
     }
     if (entity.startsWith('&#')) {
       const codePoint = Number.parseInt(entity.slice(2, -1), 10);
-      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
+      return Number.isSafeInteger(codePoint) &&
+        codePoint >= 0 &&
+        codePoint <= 0x10ffff &&
+        !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ? String.fromCodePoint(codePoint)
+        : entity;
     }
     return NAMED_ENTITIES[entity.slice(1, -1).toLowerCase()] ?? entity;
   });
@@ -77,7 +87,7 @@ export function stripMarkup(value: string): string {
 export function normalizeMetadataText(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   const cleaned = decodeXmlEntities(stripMarkup(value)).replace(/\s+/g, ' ').trim();
-  return cleaned.length > 0 ? cleaned : undefined;
+  return cleaned.length > 0 ? cleaned.slice(0, 1024) : undefined;
 }
 
 /**
@@ -128,12 +138,12 @@ export interface XmlTagAttributes {
 }
 
 export function parseTagAttributes(attributes: string): XmlTagAttributes {
-  const parsed: Record<string, string> = {};
-  const pattern = /([A-Za-z_][\w.:-]*)\s*=\s*"([^"]*)"/g;
+  const parsed: Record<string, string> = Object.create(null);
+  const pattern = /([A-Za-z_][\w.:-]*)\s*=\s*(["'])(.*?)\2/g;
   let match = pattern.exec(attributes);
   while (match !== null) {
     const name = match[1];
-    const value = match[2];
+    const value = match[3];
     if (name !== undefined && value !== undefined) {
       parsed[name.toLowerCase()] = decodeXmlEntities(value);
     }

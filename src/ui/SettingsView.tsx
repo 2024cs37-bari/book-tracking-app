@@ -1,10 +1,23 @@
+import '~/styles/settings-refinement.css';
+import Icon from './Icon';
+import Select from './Select';
+import { isNativeRuntime } from '~/storage/native-file-store';
+import { useLibraryRevision } from './use-library-revision';
 import { createResource, createSignal, For, Show } from 'solid-js';
-import { LOCAL_MIGRATIONS, DB_SCHEMA_VERSION } from '~/data/db';
+import { LOCAL_MIGRATIONS, DB_SCHEMA_VERSION, DB_LOCAL_VERSION } from '~/data/db';
 import { SYNC_META_KEYS } from '~/data/repositories/sync-meta-repository';
-import { inspectStorage, removeStoredFiles, type OrphanReport } from '~/storage/maintenance';
-import type { Shelf, Tag } from '~/domain/collections';
+import { inspectStorage, cleanOrphanFiles, type OrphanReport } from '~/storage/maintenance';
+import { MAX_COLLECTION_NAME_LENGTH, type Shelf, type Tag } from '~/domain/collections';
 import { useApp } from '~/app/context';
 import { showToast } from './toast';
+import { SyncPanel } from './SyncPanel';
+import { BackupPanel } from './BackupPanel';
+import { OfflineStoragePanel } from './OfflineStoragePanel';
+import {
+  dictionaryAllowed,
+  dictionaryAvailable,
+  setDictionaryAllowed,
+} from '~/services/privacy-preferences';
 import {
   ACCENT_PRESETS,
   applyAccent,
@@ -33,7 +46,12 @@ interface Diagnostics {
 
 export default function SettingsView() {
   const app = useApp();
+  const revision = useLibraryRevision();
   const [busy, setBusy] = createSignal(false);
+  const [renaming, setRenaming] = createSignal<{ kind: 'shelf' | 'tag'; id: string } | null>(null);
+  const [collectionName, setCollectionName] = createSignal('');
+  let renameInput: HTMLInputElement | undefined;
+  const [dictionaryEnabled, setDictionaryEnabled] = createSignal(dictionaryAllowed());
   // Status/error notifications surface as auto-dismissing toasts rather than a
   // lingering inline line; errors stay until the user dismisses them.
   function setMessage(text: string | null, kind: 'error' | 'success' = 'success'): void {
@@ -53,126 +71,55 @@ export default function SettingsView() {
     applyAccent(next);
   }
 
-  const [diagnostics, { refetch }] = createResource<Diagnostics, number>(
-    () => Date.now(),
-    async () => {
-      const [
-        lifecycle,
-        pendingChanges,
-        totalChanges,
-        oldestPending,
-        pullCursor,
-        referencedBytes,
-        orphans,
-        storage,
-        shelves,
-        tags,
-      ] = await Promise.all([
-        app.books.countByLifecycle(),
-        app.changes.pendingCount(),
-        app.changes.totalCount(),
-        app.changes.oldestPendingCreatedAt(),
-        app.syncMeta.getPullCursor(),
-        app.books.referencedBytes(),
-        inspectStorage(app.db, app.files),
-        app.files.estimate(),
-        app.shelves.list(),
-        app.tags.list(),
-      ]);
-      return {
-        lifecycle,
-        pendingChanges,
-        totalChanges,
-        oldestPending,
-        pullCursor,
-        referencedBytes,
-        orphans,
-        shelves,
-        tags,
-        storage,
-      };
-    },
-  );
+  const [diagnostics, { refetch }] = createResource<Diagnostics, number>(revision, async () => {
+    const [
+      lifecycle,
+      pendingChanges,
+      totalChanges,
+      oldestPending,
+      pullCursor,
+      referencedBytes,
+      orphans,
+      storage,
+      shelves,
+      tags,
+    ] = await Promise.all([
+      app.books.countByLifecycle(),
+      app.changes.pendingCount(),
+      app.changes.totalCount(),
+      app.changes.oldestPendingCreatedAt(),
+      app.syncMeta.getPullCursor(),
+      app.books.referencedBytes(),
+      inspectStorage(app.db, app.files),
+      app.files.estimate(),
+      app.shelves.list(),
+      app.tags.list(),
+    ]);
+    return {
+      lifecycle,
+      pendingChanges,
+      totalChanges,
+      oldestPending,
+      pullCursor,
+      referencedBytes,
+      orphans,
+      shelves,
+      tags,
+      storage,
+    };
+  });
 
-  async function runExport(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const summary = await app.exports.download();
-      setMessage(
-        `Exported ${summary.bookCount} books and ${summary.progressCount} reading-state rows to ${summary.filename}.`,
-      );
-    } catch (error) {
-      setMessage(
-        `Export failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-        'error',
-      );
-    } finally {
-      setBusy(false);
-    }
+  async function refreshDiagnostics(): Promise<void> {
+    await refetch();
   }
 
-  async function restoreFromFile(input: HTMLInputElement): Promise<void> {
-    const file = input.files?.[0];
-    if (file === undefined) return;
-    if (
-      !window.confirm(
-        'Restore from this backup? Books and reading data in the file are added to this ' +
-          'library, and any item with the same id is overwritten. Items that exist only on ' +
-          'this device are kept.',
-      )
-    ) {
-      return;
-    }
+  async function exportDiagnostics(): Promise<void> {
     setBusy(true);
-    setMessage(null);
     try {
-      const summary = await app.restores.restore(await file.text());
-      setMessage(
-        `Restored ${summary.books} books, ${summary.progress} reading-state rows, ` +
-          `${summary.shelves} shelves, ${summary.tags} tags, ${summary.annotations} annotations ` +
-          `and ${summary.sessions} reading sessions from the backup.`,
-      );
-      await refetch();
-    } catch (error) {
-      setMessage(
-        `Restore failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-        'error',
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Created on demand rather than via a hidden ref so the picker matches the
-  // export button's programmatic-DOM approach and leaves no element behind.
-  function pickBackup(): void {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json,.json';
-    input.addEventListener('change', () => void restoreFromFile(input));
-    input.click();
-  }
-
-  async function runSync(): Promise<void> {
-    if (app.sync === null) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      const result = await app.sync.sync();
-      setMessage(
-        `Synced: pushed ${result.pushed} change${result.pushed === 1 ? '' : 's'}, applied ` +
-          `${result.applied} from other devices${result.caughtUp ? ', now up to date' : ', more to pull'}.` +
-          (result.bootstrapped
-            ? ' (re-synced from scratch after the server history was compacted.)'
-            : ''),
-      );
-      await refetch();
-    } catch (error) {
-      setMessage(
-        `Sync failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-        'error',
-      );
+      await app.diagnostics.download();
+      setMessage('Diagnostics saved. No book content or account identifiers are included.');
+    } catch {
+      setMessage('Diagnostics could not be saved. Try again while this page is open.', 'error');
     } finally {
       setBusy(false);
     }
@@ -188,8 +135,10 @@ export default function SettingsView() {
     }
     setBusy(true);
     try {
-      const removed = await removeStoredFiles(app.files, report.orphanKeys);
-      setMessage(`Removed ${removed} unreferenced file(s).`);
+      const removed = await cleanOrphanFiles(app.db, app.files);
+      setMessage(
+        `Removed ${removed} unreferenced original(s). Referenced, open and unknown files were kept.`,
+      );
       await refetch();
     } catch (error) {
       setMessage(`Could not remove unreferenced files: ${String(error)}`, 'error');
@@ -198,16 +147,33 @@ export default function SettingsView() {
     }
   }
 
-  async function renameShelf(id: string, currentName: string): Promise<void> {
-    const next = window.prompt('Rename shelf', currentName);
-    if (next === null || next.trim() === '' || next.trim() === currentName) return;
+  function beginRename(kind: 'shelf' | 'tag', id: string, name: string): void {
+    setCollectionName(name);
+    setRenaming({ kind, id });
+    queueMicrotask(() => renameInput?.focus());
+  }
+
+  function finishRename(): void {
+    const target = renaming();
+    setRenaming(null);
+    if (target !== null) {
+      queueMicrotask(() => document.getElementById(`rename-${target.kind}-${target.id}`)?.focus());
+    }
+  }
+
+  async function saveCollectionName(): Promise<void> {
+    const target = renaming();
+    if (target === null || busy()) return;
     setBusy(true);
     try {
-      await app.shelves.rename(id, next);
+      if (target.kind === 'tag') await app.tags.rename(target.id, collectionName());
+      else await app.shelves.rename(target.id, collectionName());
       void app.persistClockState();
       await refetch();
+      finishRename();
+      setMessage(`${target.kind === 'tag' ? 'Tag' : 'Shelf'} renamed. Book memberships are kept.`);
     } catch (error) {
-      setMessage(`Could not rename shelf: ${String(error)}`, 'error');
+      setMessage(`Could not rename ${target.kind}: ${String(error)}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -242,330 +208,439 @@ export default function SettingsView() {
   }
 
   return (
-    <section class="settings">
-      <h2>Settings and diagnostics</h2>
-      <p class="note">
-        These values describe this device only. They are not synchronized and are safe to share when
-        reporting a problem.
-      </p>
-
-      <section class="panel">
-        <h3>Appearance</h3>
-        <p class="note">
-          Theme and accent are stored on this device only and apply across the whole app
-          immediately.
-        </p>
-        <div class="field">
-          <label for="app-theme">Theme</label>
-          <select
-            id="app-theme"
-            value={theme()}
-            onChange={(event) => changeTheme(event.currentTarget.value as AppTheme)}
+    <section class="settings settings-refined" aria-labelledby="settings-title">
+      <header class="settings-header">
+        <p class="settings-eyebrow">Your reading space</p>
+        <h1 id="settings-title">Settings</h1>
+        <p>Make yourself at home. These preferences belong to this device.</p>
+      </header>
+      <div class="settings-layout">
+        <nav class="settings-navigation" aria-label="Settings sections">
+          <span class="settings-navigation-label">On this page</span>
+          <a href="#settings-appearance">Appearance &amp; privacy</a>
+          <a href="#settings-collections">Collections</a>
+          <a href="#settings-backups">Backups &amp; sync</a>
+          <a href="#settings-storage">Storage</a>
+          <a href="#settings-advanced">Advanced</a>
+        </nav>
+        <div class="settings-content">
+          <section
+            class="settings-section"
+            id="settings-appearance"
+            aria-labelledby="appearance-heading"
           >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
-        <div class="field">
-          <span id="accent-label">Accent colour</span>
-          <div class="accent-swatches" role="group" aria-labelledby="accent-label">
-            <For each={ACCENT_PRESETS}>
-              {(preset) => (
-                <button
-                  type="button"
-                  class="accent-swatch"
-                  classList={{ active: accent() === preset.value }}
-                  style={preset.value === '' ? undefined : { background: preset.value }}
-                  aria-label={preset.name}
-                  aria-pressed={accent() === preset.value}
-                  onClick={() => changeAccent(preset.value)}
-                >
-                  {preset.value === '' ? 'Default' : ''}
-                </button>
-              )}
-            </For>
-            <label class="accent-custom">
-              Custom
-              <input
-                type="color"
-                aria-label="Custom accent colour"
-                value={accent() === '' ? '#2f5bd7' : accent()}
-                onInput={(event) => changeAccent(event.currentTarget.value)}
+            <h2 id="appearance-heading">Appearance</h2>
+            <p class="settings-description">Set the mood for your library.</p>
+            <div class="settings-control-row">
+              <div class="settings-control-copy">
+                <label for="app-theme">Theme</label>
+                <p>Follow your device, or choose your own.</p>
+              </div>
+              <Select<AppTheme>
+                id="app-theme"
+                value={theme()}
+                onChange={changeTheme}
+                options={[
+                  { value: 'system', label: 'System' },
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' },
+                ]}
               />
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <Show when={diagnostics.error}>
-        <p class="note note-error" role="alert">
-          Diagnostics could not be collected: {String(diagnostics.error)}
-        </p>
-      </Show>
-
-      <Show when={diagnostics()} fallback={<p class="note">Collecting diagnostics…</p>}>
-        {(data) => (
-          <>
-            <section class="panel">
-              <h3>Library</h3>
-              <dl class="details-list">
-                <dt>Active books</dt>
-                <dd>{data().lifecycle.active ?? 0}</dd>
-                <dt>Archived</dt>
-                <dd>{data().lifecycle.archived ?? 0}</dd>
-                <dt>Deleted (tombstoned)</dt>
-                <dd>{data().lifecycle.deleted ?? 0}</dd>
-                <dt>Total book rows</dt>
-                <dd>{data().lifecycle.total ?? 0}</dd>
-                <dt>Referenced file bytes</dt>
-                <dd>{data().referencedBytes.toLocaleString()}</dd>
-              </dl>
-            </section>
-
-            <section class="panel">
-              <h3>Sync readiness</h3>
-              <p class="note">
-                Changes are queued locally. Nothing is uploaded: the server side is a later
-                milestone, so a growing queue is expected and not a fault.
-              </p>
-              <dl class="details-list">
-                <dt>Pending changes</dt>
-                <dd>{data().pendingChanges}</dd>
-                <dt>Oldest pending change</dt>
-                <dd>
-                  <Show when={data().oldestPending} fallback={<span>None</span>}>
-                    {(oldest) => <span>{new Date(oldest()).toLocaleString()}</span>}
-                  </Show>
-                </dd>
-                <dt>Total change-log rows</dt>
-                <dd>{data().totalChanges}</dd>
-                <dt>Pull cursor</dt>
-                <dd>
-                  {data().pullCursor === 0 ? 'Not started (no server yet)' : data().pullCursor}
-                </dd>
-                <dt>Device id</dt>
-                <dd class="mono">{app.deviceId}</dd>
-              </dl>
-            </section>
-
-            <section class="panel">
-              <h3>Storage</h3>
-              <dl class="details-list">
-                <dt>File store</dt>
-                <dd>
-                  {app.files.kind}
-                  {app.files.durable ? ' (durable)' : ' (not durable)'}
-                </dd>
-                <dt>Persistent storage granted</dt>
-                <dd>
-                  {app.persistentStorage === null
-                    ? 'Not requested'
-                    : app.persistentStorage
-                      ? 'Yes'
-                      : 'No — the browser may clear this data'}
-                </dd>
-                <Show when={data().storage}>
-                  {(storage) => (
-                    <>
-                      <dt>Browser-reported usage</dt>
-                      <dd>
-                        <Show when={storage().usageBytes} fallback={<span>Unavailable</span>}>
-                          {(usage) => <span>{formatBytes(usage())}</span>}
-                        </Show>
-                      </dd>
-                      <dt>Browser-reported quota</dt>
-                      <dd>
-                        <Show when={storage().quotaBytes} fallback={<span>Unavailable</span>}>
-                          {(quota) => <span>{formatBytes(quota())}</span>}
-                        </Show>
-                      </dd>
-                    </>
-                  )}
-                </Show>
-                <dt>Unreferenced files</dt>
-                <dd>{data().orphans.orphanKeys.length}</dd>
-                <dt>Books missing a local file</dt>
-                <dd>{data().orphans.unreachableBooks.length}</dd>
-              </dl>
-
-              <Show when={data().orphans.orphanKeys.length > 0}>
-                <div class="panel-actions">
-                  <button
-                    type="button"
-                    class="button"
-                    disabled={busy()}
-                    onClick={() => void cleanOrphans()}
-                  >
-                    Remove unreferenced files
-                  </button>
-                </div>
-              </Show>
-            </section>
-
-            <section class="panel">
-              <h3>Reader support</h3>
-              <p class="note">
-                Formats are registered as renderer adapters are implemented. EPUB and PDF are
-                supported (experimental); other formats import but are not yet readable.
-              </p>
-              <dl class="details-list">
-                <dt>Registered renderers</dt>
-                <dd>
-                  <Show
-                    when={app.renderers.list().length > 0}
-                    fallback={<span>None yet — reading is not implemented</span>}
-                  >
-                    <span>
-                      {app.renderers
-                        .list()
-                        .map((factory) => factory.engine)
-                        .join(', ')}
-                    </span>
-                  </Show>
-                </dd>
-              </dl>
-            </section>
-
-            <section class="panel">
-              <h3>Collections</h3>
-              <div class="collections-group">
-                <h4>Shelves ({data().shelves.length})</h4>
-                <Show
-                  when={data().shelves.length > 0}
-                  fallback={
-                    <p class="note">No shelves yet. Add books to shelves from a book's page.</p>
-                  }
-                >
-                  <ul class="manage-list">
-                    <For each={data().shelves}>
-                      {(shelf) => (
-                        <li class="manage-row">
-                          <span>{shelf.name}</span>
-                          <span class="manage-actions">
-                            <button
-                              type="button"
-                              class="button"
-                              disabled={busy()}
-                              onClick={() => void renameShelf(shelf.id, shelf.name)}
-                            >
-                              Rename
-                            </button>
-                            <button
-                              type="button"
-                              class="button button-danger"
-                              disabled={busy()}
-                              onClick={() => void deleteShelf(shelf.id, shelf.name)}
-                            >
-                              Delete
-                            </button>
-                          </span>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </Show>
+            </div>
+            <div class="settings-control-row">
+              <div class="settings-control-copy">
+                <span id="accent-label">Accent colour</span>
+                <p>A small personal touch.</p>
               </div>
-              <div class="collections-group">
-                <h4>Tags ({data().tags.length})</h4>
-                <Show
-                  when={data().tags.length > 0}
-                  fallback={<p class="note">No tags yet. Add tags from a book's page.</p>}
-                >
-                  <ul class="chip-list">
-                    <For each={data().tags}>
-                      {(tag) => (
-                        <li>
-                          <span class="chip chip-active">
-                            {tag.name}
-                            <button
-                              type="button"
-                              class="chip-remove"
-                              aria-label={`Delete tag ${tag.name}`}
-                              disabled={busy()}
-                              onClick={() => void deleteTag(tag.id, tag.name)}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </Show>
-              </div>
-            </section>
-
-            <section class="panel">
-              <h3>Sync</h3>
-              <Show
-                when={app.sync !== null}
-                fallback={
-                  <p class="note">
-                    Sync is not configured for this build. Changes are queued locally and will
-                    upload once a sync server is set.
-                  </p>
-                }
-              >
-                <p class="note">
-                  Push changes queued on this device and pull updates from your other devices.
-                </p>
-                <div class="panel-actions">
-                  <button
-                    type="button"
-                    class="button button-primary"
-                    disabled={busy()}
-                    onClick={() => void runSync()}
-                  >
-                    Sync now
-                  </button>
-                </div>
-              </Show>
-            </section>
-
-            <section class="panel">
-              <h3>Data</h3>
-              <p class="note">
-                Export is generated locally and never contacts a server. It includes books, reading
-                progress, shelves, tags, annotations and reading sessions. Restore reads an export
-                file back into this library.
-              </p>
-              <div class="panel-actions">
-                <button
-                  type="button"
-                  class="button button-primary"
-                  disabled={busy()}
-                  onClick={() => void runExport()}
-                >
-                  Export library as JSON
-                </button>
-                <button type="button" class="button" disabled={busy()} onClick={() => pickBackup()}>
-                  Restore from backup…
-                </button>
-              </div>
-            </section>
-
-            <section class="panel">
-              <h3>Local schema</h3>
-              <dl class="details-list">
-                <dt>Current version</dt>
-                <dd>{DB_SCHEMA_VERSION}</dd>
-                <dt>Clock state key</dt>
-                <dd class="mono">{SYNC_META_KEYS.clockState}</dd>
-              </dl>
-              <ol class="migration-list">
-                <For each={LOCAL_MIGRATIONS}>
-                  {(migration) => (
-                    <li>
-                      <strong>v{migration.version}</strong> — {migration.description}
-                    </li>
+              <div class="accent-swatches" role="group" aria-labelledby="accent-label">
+                <For each={ACCENT_PRESETS}>
+                  {(preset) => (
+                    <button
+                      type="button"
+                      class="accent-swatch"
+                      classList={{ active: accent() === preset.value }}
+                      style={preset.value === '' ? undefined : { background: preset.value }}
+                      aria-label={preset.name}
+                      aria-pressed={accent() === preset.value}
+                      onClick={() => changeAccent(preset.value)}
+                    >
+                      <Show when={preset.value === '' && accent() === ''}>
+                        <Icon name="check" size={14} />
+                      </Show>
+                    </button>
                   )}
                 </For>
-              </ol>
-            </section>
-          </>
-        )}
-      </Show>
+                <label class="accent-custom">
+                  Custom
+                  <input
+                    type="color"
+                    aria-label="Custom accent colour"
+                    value={accent() === '' ? '#536343' : accent()}
+                    onInput={(event) => changeAccent(event.currentTarget.value)}
+                  />
+                </label>
+              </div>
+            </div>
+            <div class="settings-privacy">
+              <h3>Privacy</h3>
+              <label class="settings-toggle-row">
+                <span>
+                  <span class="settings-toggle-title">Allow online dictionary lookups</span>
+                  <span class="settings-toggle-description">
+                    Sends only your selected word to dictionaryapi.dev. Reading and annotations work
+                    offline.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  aria-label="Allow online dictionary lookups"
+                  checked={dictionaryEnabled()}
+                  disabled={!dictionaryAvailable}
+                  onChange={(event) => {
+                    try {
+                      setDictionaryAllowed(event.currentTarget.checked);
+                      setDictionaryEnabled(event.currentTarget.checked);
+                    } catch {
+                      setMessage('The dictionary preference could not be saved.', 'error');
+                    }
+                  }}
+                />
+              </label>
+              <Show when={!dictionaryAvailable}>
+                <p class="note">Dictionary access is disabled for this build.</p>
+              </Show>
+            </div>
+          </section>
+          <Show when={diagnostics.error}>
+            <p class="note note-error" role="alert">
+              Library details could not be collected: {String(diagnostics.error)}
+            </p>
+          </Show>
+          <Show
+            when={diagnostics()}
+            fallback={
+              <Show when={!diagnostics.error}>
+                <p class="note">Loading collections…</p>
+              </Show>
+            }
+          >
+            {(data) => (
+              <section
+                class="settings-section"
+                id="settings-collections"
+                aria-labelledby="collections-heading"
+              >
+                <h2 id="collections-heading">Collections</h2>
+                <p class="settings-description">A little order for your shelves and tags.</p>
+                <Show when={renaming()}>
+                  {(target) => (
+                    <form
+                      class="settings-rename-form"
+                      aria-label={`Rename ${target().kind}`}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void saveCollectionName();
+                      }}
+                    >
+                      <div class="field">
+                        <label for="collection-name">New {target().kind} name</label>
+                        <input
+                          id="collection-name"
+                          type="text"
+                          ref={(element) => {
+                            renameInput = element;
+                          }}
+                          value={collectionName()}
+                          maxLength={MAX_COLLECTION_NAME_LENGTH}
+                          required
+                          disabled={busy()}
+                          onInput={(event) => setCollectionName(event.currentTarget.value)}
+                        />
+                      </div>
+                      <div class="panel-actions">
+                        <button type="submit" class="button button-primary" disabled={busy()}>
+                          Save name
+                        </button>
+                        <button
+                          type="button"
+                          class="button"
+                          disabled={busy()}
+                          onClick={finishRename}
+                        >
+                          Cancel rename
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </Show>
+                <div class="collections-group">
+                  <h3>Shelves ({data().shelves.length})</h3>
+                  <Show
+                    when={data().shelves.length > 0}
+                    fallback={
+                      <p class="note">No shelves yet. Add books to shelves from a book's page.</p>
+                    }
+                  >
+                    <ul class="manage-list">
+                      <For each={data().shelves}>
+                        {(shelf) => (
+                          <li class="manage-row">
+                            <span>{shelf.name}</span>
+                            <span class="manage-actions">
+                              <button
+                                type="button"
+                                class="button"
+                                disabled={busy()}
+                                id={`rename-shelf-${shelf.id}`}
+                                aria-label={`Rename shelf ${shelf.name}`}
+                                onClick={() => beginRename('shelf', shelf.id, shelf.name)}
+                              >
+                                Rename
+                              </button>
+                              <button
+                                type="button"
+                                class="button button-danger"
+                                disabled={busy()}
+                                aria-label={`Delete shelf ${shelf.name}`}
+                                onClick={() => void deleteShelf(shelf.id, shelf.name)}
+                              >
+                                Delete
+                              </button>
+                            </span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
+                </div>
+                <div class="collections-group">
+                  <h3>Tags ({data().tags.length})</h3>
+                  <Show
+                    when={data().tags.length > 0}
+                    fallback={<p class="note">No tags yet. Add tags from a book's page.</p>}
+                  >
+                    <ul class="manage-list">
+                      <For each={data().tags}>
+                        {(tag) => (
+                          <li class="manage-row">
+                            <span>{tag.name}</span>
+                            <span class="manage-actions">
+                              <button
+                                type="button"
+                                class="button"
+                                id={`rename-tag-${tag.id}`}
+                                aria-label={`Rename tag ${tag.name}`}
+                                disabled={busy()}
+                                onClick={() => beginRename('tag', tag.id, tag.name)}
+                              >
+                                Rename
+                              </button>
+                              <button
+                                type="button"
+                                class="button button-danger"
+                                aria-label={`Delete tag ${tag.name}`}
+                                disabled={busy()}
+                                onClick={() => void deleteTag(tag.id, tag.name)}
+                              >
+                                Delete
+                              </button>
+                            </span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
+                </div>
+              </section>
+            )}
+          </Show>
+          <div id="settings-backups" class="settings-anchor">
+            <BackupPanel disabled={busy()} onRestored={refreshDiagnostics} />
+            <SyncPanel />
+          </div>
+          <div id="settings-storage" class="settings-anchor">
+            <OfflineStoragePanel onChanged={refreshDiagnostics} />
+          </div>
+          <details class="settings-disclosure settings-advanced" id="settings-advanced">
+            <summary>
+              <span>
+                <span class="settings-summary-heading" role="heading" aria-level="2">
+                  Advanced diagnostics
+                </span>
+                <span class="settings-summary-description">
+                  Device details, storage maintenance and troubleshooting
+                </span>
+              </span>
+              <Icon name="chevron-down" size={18} />
+            </summary>
+            <div class="settings-disclosure-content">
+              <p class="note">
+                A diagnostic report can help investigate a problem. It excludes book content,
+                filenames, account identifiers and server addresses.
+              </p>
+              <button
+                type="button"
+                class="button"
+                disabled={busy()}
+                onClick={() => void exportDiagnostics()}
+              >
+                <Icon name="download" size={16} /> Download diagnostics
+              </button>
+              <Show when={diagnostics()} fallback={<p class="note">Collecting diagnostics…</p>}>
+                {(data) => (
+                  <div class="settings-diagnostics-grid">
+                    <section class="settings-diagnostic-section">
+                      <h3>Library</h3>
+                      <dl class="details-list">
+                        <dt>Active books</dt>
+                        <dd>{data().lifecycle.active ?? 0}</dd>
+                        <dt>Archived</dt>
+                        <dd>{data().lifecycle.archived ?? 0}</dd>
+                        <dt>Deleted (tombstoned)</dt>
+                        <dd>{data().lifecycle.deleted ?? 0}</dd>
+                        <dt>Total book rows</dt>
+                        <dd>{data().lifecycle.total ?? 0}</dd>
+                        <dt>Referenced file bytes</dt>
+                        <dd>{data().referencedBytes.toLocaleString()}</dd>
+                      </dl>
+                    </section>
+
+                    <section class="settings-diagnostic-section">
+                      <h3>Sync readiness</h3>
+                      <p class="note">
+                        {isNativeRuntime()
+                          ? 'This desktop build stores changes locally. Native sign-in and synchronization are not yet available; keep portable backups outside this device.'
+                          : 'Changes are saved locally before sync. When a sync server is configured, queued changes are sent to your private library there.'}
+                      </p>
+                      <dl class="details-list">
+                        <dt>Pending changes</dt>
+                        <dd>{data().pendingChanges}</dd>
+                        <dt>Oldest pending change</dt>
+                        <dd>
+                          <Show when={data().oldestPending} fallback={<span>None</span>}>
+                            {(oldest) => <span>{new Date(oldest()).toLocaleString()}</span>}
+                          </Show>
+                        </dd>
+                        <dt>Total change-log rows</dt>
+                        <dd>{data().totalChanges}</dd>
+                        <dt>Pull cursor</dt>
+                        <dd>{data().pullCursor === 0 ? 'Not started' : data().pullCursor}</dd>
+                        <dt>Device id</dt>
+                        <dd class="mono">{app.deviceId}</dd>
+                      </dl>
+                    </section>
+
+                    <section class="settings-diagnostic-section">
+                      <h3>Storage</h3>
+                      <dl class="details-list">
+                        <dt>File store</dt>
+                        <dd>
+                          {app.files.kind}
+                          {app.files.durable ? ' (durable)' : ' (not durable)'}
+                        </dd>
+                        <dt>Persistent storage granted</dt>
+                        <dd>
+                          {app.persistentStorage === null
+                            ? 'Unknown or unavailable'
+                            : app.persistentStorage
+                              ? 'Yes'
+                              : 'No — the browser may clear this data'}
+                        </dd>
+                        <Show when={data().storage}>
+                          {(storage) => (
+                            <>
+                              <dt>Browser-reported usage</dt>
+                              <dd>
+                                <Show
+                                  when={storage().usageBytes}
+                                  fallback={<span>Unavailable</span>}
+                                >
+                                  {(usage) => <span>{formatBytes(usage())}</span>}
+                                </Show>
+                              </dd>
+                              <dt>Browser-reported quota</dt>
+                              <dd>
+                                <Show
+                                  when={storage().quotaBytes}
+                                  fallback={<span>Unavailable</span>}
+                                >
+                                  {(quota) => <span>{formatBytes(quota())}</span>}
+                                </Show>
+                              </dd>
+                            </>
+                          )}
+                        </Show>
+                        <dt>Unreferenced files</dt>
+                        <dd>{data().orphans.orphanKeys.length}</dd>
+                        <dt>Books missing a local file</dt>
+                        <dd>{data().orphans.unreachableBooks.length}</dd>
+                      </dl>
+
+                      <Show when={data().orphans.orphanKeys.length > 0}>
+                        <div class="panel-actions">
+                          <button
+                            type="button"
+                            class="button"
+                            disabled={busy()}
+                            onClick={() => void cleanOrphans()}
+                          >
+                            Remove unreferenced originals
+                          </button>
+                        </div>
+                      </Show>
+                    </section>
+
+                    <section class="settings-diagnostic-section">
+                      <h3>Reader support</h3>
+                      <p class="note">
+                        Formats are registered as renderer adapters are implemented. EPUB and PDF
+                        are supported (experimental); other formats import but are not yet readable.
+                      </p>
+                      <dl class="details-list">
+                        <dt>Registered renderers</dt>
+                        <dd>
+                          <Show
+                            when={app.renderers.list().length > 0}
+                            fallback={<span>None yet — reading is not implemented</span>}
+                          >
+                            <span>
+                              {app.renderers
+                                .list()
+                                .map((factory) => factory.engine)
+                                .join(', ')}
+                            </span>
+                          </Show>
+                        </dd>
+                      </dl>
+                    </section>
+
+                    <section class="settings-diagnostic-section">
+                      <h3>Local schema</h3>
+                      <dl class="details-list">
+                        <dt>Local database version</dt>
+                        <dd>{DB_LOCAL_VERSION}</dd>
+                        <dt>Sync and export schema</dt>
+                        <dd>{DB_SCHEMA_VERSION}</dd>
+                        <dt>Clock state key</dt>
+                        <dd class="mono">{SYNC_META_KEYS.clockState}</dd>
+                      </dl>
+                      <ol class="migration-list">
+                        <For each={LOCAL_MIGRATIONS}>
+                          {(migration) => (
+                            <li>
+                              <strong>v{migration.version}</strong> — {migration.description}
+                            </li>
+                          )}
+                        </For>
+                      </ol>
+                    </section>
+                  </div>
+                )}
+              </Show>
+            </div>
+          </details>
+        </div>
+      </div>
     </section>
   );
 }

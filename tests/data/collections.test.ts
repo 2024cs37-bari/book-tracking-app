@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, type TestHarness } from '../support/harness';
 import { buildEpubFixture, toBlob } from '../support/fixtures';
 import { EXPORT_FORMAT, ExportService } from '~/services/export-service';
+import { applyPullPage } from '~/sync/apply';
 
 let harness: TestHarness;
 
@@ -76,6 +77,81 @@ describe('shelves', () => {
 });
 
 describe('tags', () => {
+  it('renames one stable tag, retains memberships, and replicates the name without echo', async () => {
+    const bookId = await importBook('Renamed tag');
+    const tag = await harness.tags.ensure('Draft');
+    await harness.tags.tagBook(tag.id, bookId);
+    const membership = await harness.db.bookTags.get([tag.id, bookId]);
+    const originalChanges = await harness.changes.listPending();
+    const renamed = await harness.tags.rename(tag.id, '  Finished   Notes  ');
+    expect(renamed).toMatchObject({
+      id: tag.id,
+      name: 'Finished Notes',
+      normalizedName: 'finished notes',
+    });
+    expect(await harness.db.bookTags.get([tag.id, bookId])).toEqual(membership);
+    expect(await harness.tags.ensure('FINISHED notes')).toEqual(renamed);
+    const changes = await harness.changes.listPending();
+    expect(changes).toHaveLength(originalChanges.length + 1);
+    for (const original of originalChanges)
+      expect(changes.find((row) => row.id === original.id)).toEqual(original);
+
+    const other = await createHarness();
+    try {
+      await applyPullPage(
+        other.db,
+        other.syncMeta,
+        other.clock,
+        changes.map((change, index) => ({
+          seq: index + 1,
+          change_id: change.id,
+          entity: change.entity,
+          entity_id: change.entityId,
+          hlc: change.hlc,
+          payload: JSON.parse(change.payload),
+        })),
+        changes.length,
+      );
+      expect(await other.tags.list()).toEqual([renamed]);
+      expect(await other.tags.listBookIds(tag.id)).toEqual([bookId]);
+      expect(await other.changes.pendingCount()).toBe(0);
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('rejects occupied names and invalid/deleted targets without changing rows or outbox', async () => {
+    const tag = await harness.tags.ensure('Original');
+    await harness.tags.ensure('Taken name');
+    const deleted = await harness.tags.ensure('Deleted');
+    await harness.tags.remove(deleted.id);
+    const before = await harness.changes.listPending();
+    await expect(harness.tags.rename(tag.id, ' TAKEN   name ')).rejects.toThrow(/already uses/);
+    await expect(harness.tags.rename(tag.id, '  ')).rejects.toThrow(/must not be empty/);
+    await expect(harness.tags.rename(tag.id, 'x'.repeat(201))).rejects.toThrow(/200/);
+    await expect(harness.tags.rename(deleted.id, 'Back')).rejects.toThrow(/no longer exists/);
+    await expect(harness.tags.rename('missing', 'Back')).rejects.toThrow(/no longer exists/);
+    expect(await harness.tags.rename(tag.id, ' Original ')).toEqual(tag);
+    expect(await harness.changes.listPending()).toEqual(before);
+    expect(await harness.tags.rename(tag.id, 'Deleted')).toMatchObject({
+      id: tag.id,
+      name: 'Deleted',
+    });
+  });
+
+  it('serializes competing renames so only one tag takes an available name', async () => {
+    const first = await harness.tags.ensure('First');
+    const second = await harness.tags.ensure('Second');
+    const results = await Promise.allSettled([
+      harness.tags.rename(first.id, 'Shared'),
+      harness.tags.rename(second.id, 'SHARED'),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(
+      (await harness.tags.list()).filter((tag) => tag.normalizedName === 'shared'),
+    ).toHaveLength(1);
+  });
+
   it('de-duplicates by case-folded name', async () => {
     const first = await harness.tags.ensure('Sci-Fi');
     const again = await harness.tags.ensure('  sci-fi ');

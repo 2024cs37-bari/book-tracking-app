@@ -1,8 +1,10 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { CORE_CORPUS } from '../../tooling/corpus-manifest';
 import { readCorpusSample } from '../../tooling/corpus-files';
 import { importBook, position } from '../browser/support';
 import { buildImageHeavyPdfFixture } from '../support/fixtures';
+import { attachEvidence } from './evidence';
 
 test.beforeEach(async ({ page, browserName }) => {
   if (browserName === 'chromium') {
@@ -27,7 +29,8 @@ async function report(
   page: Page,
   info: TestInfo,
   timings: Record<string, number>,
-  resources: Record<string, number> = {},
+  resources: Record<string, number>,
+  input: { filename: string; sha256: string },
 ) {
   const browser = page.context().browser()!;
   const metrics = await page.evaluate(() => {
@@ -50,6 +53,7 @@ async function report(
     cpuThrottleRate: info.project.name === 'chromium' ? 4 : null,
     timingsMs: timings,
     resources,
+    input,
     metrics,
     environment: 'desktop runner, mobile-sized viewport; not physical mobile hardware',
     timingScope:
@@ -57,10 +61,7 @@ async function report(
     memoryScope:
       'JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only',
   };
-  await info.attach('reader-measurements', {
-    body: JSON.stringify(result, null, 2),
-    contentType: 'application/json',
-  });
+  await attachEvidence(info, 'reader-measurements', result);
   console.info(`READER_MEASUREMENTS ${JSON.stringify(result)}`);
 }
 
@@ -82,11 +83,15 @@ for (const sample of CORE_CORPUS) {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     const bytes = await readCorpusSample(sample);
+    // The upstream Hello World page is square. At portrait phone height its
+    // maximum saved zoom still fits vertically; landscape creates genuine
+    // overflow so the saved vertical-offset assertion exercises real scrolling.
+    if (sample.id === 'mozilla-hello') await page.setViewportSize({ width: 844, height: 390 });
     const start = Date.now();
     await importBook(page, bytes, sample.filename, sample.title);
     const importAndOpenMs = Date.now() - start;
     if (sample.id === 'moby-dick') {
-      await page.getByText('Table of contents', { exact: true }).click();
+      await page.getByRole('tab', { name: 'Contents', exact: true }).click();
       const contents = page.getByRole('navigation', { name: 'Book contents' });
       await expect(contents.getByRole('button').first()).toBeEnabled();
       const chapter = contents.getByRole('button', { name: /Loomings/i }).first();
@@ -145,13 +150,29 @@ for (const sample of CORE_CORPUS) {
         .poll(async () => (await position(page)).locatorValue)
         .not.toBe(before.locatorValue);
     } else {
+      const canvas = page.locator('.pdf-scroll canvas[data-render-state="ready"]');
+      const initialCanvasWidth = await canvas.evaluate(
+        (element) => (element as HTMLCanvasElement).width,
+      );
       await page.getByText('Reader settings', { exact: true }).click();
-      await page.getByLabel('Font size / PDF zoom', { exact: true }).evaluate((element) => {
+      await page.getByLabel('PDF zoom', { exact: true }).evaluate((element) => {
         const input = element as HTMLInputElement;
-        input.value = '36';
+        input.value = '200';
         input.dispatchEvent(new Event('input', { bubbles: true }));
       });
-      await expect(page.locator('.pdf-scroll canvas[data-render-state="ready"]')).toHaveCount(1);
+      // The old good canvas deliberately stays visible while a new zoom renders.
+      // Wait for the enlarged replacement before scrolling so that its restored
+      // offset cannot overwrite the scroll action issued against the old page.
+      await expect
+        .poll(() => canvas.evaluate((element) => (element as HTMLCanvasElement).width))
+        .toBeGreaterThan(initialCanvasWidth);
+      await expect
+        .poll(() =>
+          page
+            .locator('.pdf-scroll')
+            .evaluate((element) => element.scrollHeight - element.clientHeight),
+        )
+        .toBeGreaterThan(100);
       await page.locator('.pdf-scroll').evaluate((element) => {
         element.scrollTop = 100;
         element.dispatchEvent(new Event('scroll'));
@@ -179,6 +200,7 @@ for (const sample of CORE_CORPUS) {
       info,
       { importAndOpen: importAndOpenMs, interactionAndSave: navigationMs },
       { inputBytes: bytes.length },
+      { filename: sample.filename, sha256: sample.sha256 },
     );
   });
 }
@@ -232,6 +254,10 @@ test('generated 240-page image PDF: mobile-size raster bounds and page-turn meas
       estimatedRgbaCanvasBytes: maxPixels * 4,
       pages: 240,
       cachedCanvases: 1,
+    },
+    {
+      filename: 'generated-image-stress.pdf',
+      sha256: createHash('sha256').update(bytes).digest('hex'),
     },
   );
 });

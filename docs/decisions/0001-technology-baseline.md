@@ -1,5 +1,7 @@
 # ADR 0001: Technology baseline
 
+> Implementation update (2026-11-07): the client, optional Worker backend and regression suites now exist. The context below records the pre-implementation decision. See [Architecture](../ARCHITECTURE.md) and [Development](../DEVELOPMENT.md) for current capabilities and evidence.
+
 - **Status:** Accepted as initial implementation baseline; all third-party capabilities remain subject to validation.
 - **Reader refinement:** [ADR 0003](0003-reader-engines.md) pins engine provenance and the CSP boundary.
 - **Date:** 2026-10-07

@@ -1,216 +1,113 @@
-# Local runbook
+# Local development runbook
 
-Practical, copy-paste instructions for running, testing and troubleshooting this repository on a
-developer machine. For product/architecture context see [README](../README.md); for CI and release
-process see [Operations](OPERATIONS.md); for corpus provenance and measurement scope see
-[Reader validation](READER-VALIDATION.md).
+## Setup
 
-Nothing here requires Cloudflare credentials. There is no server, sync or account in the current
-codebase.
-
-## 1. Prerequisites
-
-- Node.js **20.19+** (CI pins Node 22). Check with `node --version`.
-- npm (ships with Node).
-- A Chromium/Firefox/WebKit-capable host for browser checks. On Debian/Ubuntu, install browser
-  system libraries with `--with-deps`.
-
-## 2. First-time setup
+Use Node.js 20.19+ (current Node LTS recommended; CI uses Node 22).
 
 ```bash
-npm ci                        # reproducible install from the lockfile
-npm run check                 # typecheck + lint + format + tests + production build
+npm ci
+npm ci --prefix server
+npm run check:all
 npx playwright install chromium firefox webkit
-# On supported Linux hosts add --with-deps to install native libraries:
-# npx playwright install --with-deps chromium firefox webkit
+npm run dev
 ```
 
-`npm run check` must be green on a clean checkout. It does **not** touch the network beyond
-the npm registry.
+On supported Debian/Ubuntu hosts, browser installation can use `--with-deps`. Other distributions
+may need equivalent native libraries. Do not delete the lockfile to repair an interrupted install;
+rerun `npm ci` to reproduce the committed dependency tree.
 
-## 3. Everyday commands
+The default frontend needs no account/server. Import original files through the Library picker.
+Generated fixtures live in `tests/support/fixtures.ts`; never add personal books or secrets to Git.
 
-| Command                           | Purpose                                                       |
-| --------------------------------- | ------------------------------------------------------------- |
-| `npm run dev`                     | Dev server with HMR (no service worker, no offline precache). |
-| `npm run build`                   | Production build into `dist/`.                                |
-| `npm run preview`                 | Serve the production build (service worker active).           |
-| `npm run typecheck`               | Type-check all three TypeScript projects.                     |
-| `npm run lint` / `lint:fix`       | ESLint including Solid reactivity rules.                      |
-| `npm run format` / `format:check` | Prettier write / verify.                                      |
-| `npm test` / `test:watch`         | Vitest unit + jsdom adapter suites.                           |
-| `npm run test:browser`            | Playwright production checks (13 cases × 3 engines).          |
-| `npm run corpus:fetch`            | Download + hash-verify the external corpus (network).         |
-| `npm run test:corpus`             | Real-file and mobile-sized checks (9 cases × 3 engines).      |
-| `npm run check`                   | Full local gate; run before pushing.                          |
+## Verification commands
 
-### Target a single test
+| Command                                      | Purpose                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| `npm run docs:check`                         | Check local Markdown link targets without network access         |
+| `npm run check`                              | Client typecheck, lint, formatting, tests and production build   |
+| `npm run check:server`                       | Server typecheck and unit/local Worker integration tests         |
+| `npm run check:all`                          | Both checks; install both packages first                         |
+| `npm run test:sync-browser`                  | Three isolated clients with actual local Worker/D1/R2            |
+| `npm run test:browser`                       | Production browser regressions                                   |
+| `npm run test:browser -- --project=chromium` | One browser engine                                               |
+| `npm run corpus:fetch`                       | Explicit network fetch/hash check of external licensed originals |
+| `npm run test:corpus`                        | Real-file checks and mobile-sized desktop measurements           |
 
-```bash
-npm test -- --run tests/reader/epub-renderer.dom.test.ts
-npm run test:browser -- --project=chromium --grep "fixed-layout"
-npm run test:browser -- --project=webkit
-```
+For focused tests, pass filenames: `npm test -- tests/services/offline-storage.test.ts`.
+Use an unused `PLAYWRIGHT_PORT` if a development preview already occupies the default port.
+Browser tests should run against the matching build, not an old reused server.
 
-### Local sync testing (Phase 3)
-
-The sync server (`server/`) runs locally against a local D1 with no Cloudflare
-Access in front, so the whole client↔server flow is testable offline. `.dev.vars`
-(copied from `.dev.vars.example`) supplies a dev identity; the client points at
-the local Worker with the `VITE_SYNC_URL` build variable, passed inline so it never leaks into the
-production or test build. `.dev.vars` is git-ignored.
-
-```bash
-# One-time: install server deps and create the local D1 schema.
-cd server && npm install && cp .dev.vars.example .dev.vars
-npm run migrate:local
-
-# Terminal 1 — the sync Worker (binds 127.0.0.1; localhost resolves to ::1 on
-# some hosts, which workerd cannot bind).
-cd server && npm run dev            # http://127.0.0.1:8787
-
-# Terminal 2 — the client, pointed at the local Worker. Pass VITE_SYNC_URL inline
-# (do not use .env.local — Vite would bake it into the test build too).
-VITE_SYNC_URL=http://127.0.0.1:8787/api npm run dev -- --host 127.0.0.1   # http://127.0.0.1:5173
-```
-
-Then open `http://127.0.0.1:5173`, import a book or make changes, and use
-**Settings → Sync → "Sync now"**. Verify the Worker directly with:
-
-```bash
-curl -s "http://127.0.0.1:8787/api/v1/sync/pull?since=0&limit=10"
-```
-
-To converge two "devices", open the app in a second browser profile (both share
-the one local server) and sync each. Reset the local log with
-`cd server && npx wrangler d1 execute book_reader_sync --local --command "DELETE FROM changes"`.
-Production deploy (real D1 + Access) is in `server/README.md`.
-
-## 4. Manual smoke test (reader)
-
-1. `npm run dev` and open the printed URL (default `http://localhost:5173`).
-2. Import a real EPUB and PDF through the "Import books" control.
-3. Open a book → **Read**. Verify previous/next, the contents panel, and the settings panel.
-4. Change font size, margins and theme; step away and back with **Next/Previous**.
-5. Close the reader and reopen — it resumes at the saved position.
-6. Confirm the browser console has no page errors.
-
-### Phase 1 feature checks
-
-- **PDF outline:** open a PDF that has a table of contents; the contents panel lists its outline and
-  selecting an entry jumps to that page. Entries with an unresolved destination are shown disabled.
-- **In-book search:** open the **Search in book** panel, enter a word/phrase, and confirm results
-  appear incrementally for both an EPUB and a PDF. Click a result to jump to it; press **Stop** mid
-  search and confirm it halts. Each EPUB result shows a non-empty excerpt.
-- **PDF cover:** after importing a PDF, its library card and detail page show a generated cover
-  thumbnail (first page), not just the format placeholder.
-- **Manual metadata editing:** on a book's detail page use **Edit details**, change the title/author/
-  publisher/language/ISBN/pages, **Save**, and confirm the values persist after a reload. Blanking
-  the title is rejected; a non-numeric page count is rejected.
-- **Library filters:** use the **Shelf** selector (Active / Archived / All) and the **Reading status**
-  filter. Archive a book and confirm it leaves the Active shelf and appears under Archived/All.
-  Mark a book deleted and confirm it is absent from both Active and All.
-
-### Offline check (production only)
-
-Offline resume requires the service worker, which exists only in a production build:
+## Offline smoke test
 
 ```bash
 npm run build
 npm run preview
 ```
 
-Open the preview URL, import a book, open it once, then use DevTools → Network → **Offline** and
-reload. The reader should reopen and resume. Development mode (`npm run dev`) has **no** service
-worker, so offline reload will not work there.
+1. Open the preview while online and wait for offline caching to report ready.
+2. Import/open an EPUB and a PDF, turn pages, add a bookmark/highlight and close/reopen.
+3. Disable networking, reload and verify contents, navigation and the saved position.
+4. Re-enable networking. If a new version is waiting, close all app tabs/windows and reopen.
 
-## 5. Corpus checks
+Vite development has no production precache. Pinned files cannot survive manual clearing of site
+data. [Offline app](OFFLINE-APP.md) explains update/cache behavior.
 
-The corpus stores unmodified upstream originals **outside the repository**. Never commit book files.
+## Local sync
 
-```bash
-export BOOK_CORPUS_DIR=/var/tmp/opencode/reader-corpus   # must be outside the repo
-npm run corpus:fetch
-npm run test:corpus                       # all three engines
-npm run test:corpus -- --project=chromium
-```
-
-- Default cache: `book-tracking-corpus-v1` under the OS temp directory.
-- Every fetch and read verifies SHA-256; tampered or oversized files fail.
-- Files with decode-limit pages (large scans) are verified to fail **visibly**, not to render blank.
-
-## 6. Troubleshooting
-
-### `node_modules` looks corrupted after an interrupted install
+The server supports loopback-only development identity and local D1/R2. No production credentials
+are needed. Follow the exact current setup in [server README](../server/README.md). Typical separate
+terminals use a Worker on 127.0.0.1:8787 and a frontend on 127.0.0.1:5173. Configure the Worker
+`CLIENT_ORIGIN` to the exact frontend origin and supply its documented local dev identity.
 
 ```bash
-rm -rf node_modules package-lock.json
-npm install
+# Frontend terminal; do not persist this in .env.local where test builds would inherit it.
+VITE_SYNC_URL=http://127.0.0.1:8787/api npm run dev -- --host 127.0.0.1
 ```
 
-### Browser tests can't launch / "Executable doesn't exist"
+The API base ends in `/api`. Cross-origin requests require the build's configured origin in CSP and
+an exact server CORS origin. Use two separate browser profiles/contexts to test separate devices.
+Settings shows background status/queues and allows pause/retry. Import on one device, observe
+metadata on the other, then explicitly download the original and read it.
 
-Reinstall browser binaries; add `--with-deps` on Linux:
+Do not test local migrations against production, upload personal books in test runs, or set
+`DEV_USER` on a deployed route. A deployed Access login must be separately verified.
 
-```bash
-npx playwright install --with-deps chromium firefox webkit
-```
+## Recovery exercise
 
-### Browser tests hit a stale server
+1. In Settings, download a portable backup while all originals are local and within its limits.
+2. Open a fresh browser profile, select that backup and inspect the validated recovery preview.
+3. Apply missing data and verify metadata, collections, annotations and actual reading.
+4. Repeat with a JSON-only export and verify the UI honestly reports originals missing until
+   re-import/download. Re-import must preserve edited metadata and restore local availability.
+5. Keep an external original/metadata copy; deleting a browser profile must not delete the backup.
 
-Playwright reuses a server on the configured port when not in CI. Stop any stray
-`npm run preview` process, or use another port:
+[Backup](BACKUP.md) describes additive recovery, bounds, canonical identities and failure handling.
 
-```bash
-PLAYWRIGHT_PORT=4175 npm run test:browser -- --project=chromium
-```
+## Troubleshooting
 
-### Offline resume fails locally
+- **Blank/fatal startup:** IndexedDB may be blocked. Inspect the displayed error and browser storage
+  settings. Export any recoverable data before clearing site data.
+- **Memory-only warning:** originals will not survive closing; save originals/export first. An
+  IndexedDB fallback notice is different and should not claim memory-only loss.
+- **Offline reload fails:** use production preview, complete initial caching, and inspect the
+  app-shell status. Private mode/eviction/cleared site data may have removed cached assets.
+- **Sync auth required:** sign in through the configured Access application, then retry. Preserve
+  the local outbox; do not clear it to make the pending count disappear.
+- **Sync CSP/CORS error:** verify VITE_SYNC_URL (including `/api`), HTTPS/loopback policy and exact
+  CLIENT_ORIGIN. Never resolve it by allowing every origin or disabling book CSP.
+- **Failed upload/download:** inspect queue error and limits. A hash failure is not success. Retry
+  after restoring network/auth; use original export for files above transfer limits.
+- **Missing original:** download from a configured server or re-import identical original bytes.
+- **PDF page error:** some source images exceed the decode budget; preserve position and navigate
+  to another page. Do not raise caps without memory measurements.
+- **Save error:** use reader retry and keep the app open if possible; a local pending-intent journal
+  improves recovery but cannot guarantee it when browser storage fails.
+- **Corpus fetch fails:** upstream availability is external. Preserve pinned hashes and report the
+  failed source; never silently substitute different bytes to obtain a passing result.
 
-- You are probably running `npm run dev`. Use `npm run build && npm run preview`.
-- The service worker needs one completed **online** page load before offline works.
-- Private/incognito windows and cleared site data remove both the shell and stored book bytes.
+## Work boundaries
 
-### `corpus:fetch` fails to download
-
-- Corporate proxies/VPNs, IPv6-less networks, or upstream rate limiting can cause timeouts;
-  the fetch sets a browser-like user agent and a longer IPv4 fallback window.
-- Pre-populate `$BOOK_CORPUS_DIR` manually if a host is unreachable. The **hash must match** the
-  manifest in `tooling/corpus-manifest.ts`, or the fetch/read will refuse the file.
-- `403`/timeouts are upstream/environmental; the pinned hashes and test scope are unchanged.
-
-### PDF page shows a visible error instead of content
-
-Some corpus pages contain source images above the 4,000,000-pixel decode cap. They are expected to
-fail visibly and preserve your last good position. See
-[ADR 0005](decisions/0005-pdf-render-errors.md). This is a documented limit, not a bug to "fix" by
-enlarging the cap without a memory review.
-
-### App never renders / blank page
-
-The app awaits IndexedDB before first paint. If IndexedDB is unavailable (some private modes), a
-fatal message is shown. Check the console; clearing site data and reloading usually recovers.
-
-## 7. Repository invariants to respect
-
-- `domain` depends on nothing; `data`/`storage`/`reader` depend on `domain`; `services` orchestrates;
-  `ui` renders and must not import Dexie, OPFS or foliate-js directly.
-- The Dexie metadata schema is at **v2** (adds Phase 2 collections and reading history). Each
-  released version is frozen: never edit a shipped `version(n).stores(...)` block in place — add a
-  new version. The separate binary file store is its own IndexedDB at **v2**.
-- Every replicated mutation writes its outbox row in the same transaction.
-- Never delete original bytes implicitly; archive/tombstone only.
-- Never commit book files, secrets, build output or local databases.
-- Vendored `vendor/foliate-js` is pinned; document any local patch in `vendor/PROVENANCE.md`.
-
-## 8. Before you push
-
-```bash
-npm run check
-npm run test:browser                 # or at least --project=chromium locally
-# For reader/corpus changes, also run:
-BOOK_CORPUS_DIR=/var/tmp/opencode/reader-corpus npm run test:corpus
-```
-
-CI runs `npm run check`, `npm run corpus:fetch`, `npm run test:browser` and `npm run test:corpus`
-on a clean Ubuntu runner with Node 22.
+Keep migrations additive; entity/outbox writes and pull-page/cursor writes are atomic. Original
+cleanup must respect leases, pins, references and verified remote copies. Avoid reading/logging
+credentials or private library content. Vendored engine patches belong in `vendor/PROVENANCE.md`.
+Run appropriate focused checks during a slice and the combined gate before release.

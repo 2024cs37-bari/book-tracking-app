@@ -1,3 +1,4 @@
+import { resolveBookId } from '~/sync/identity';
 import { newId } from '~/domain/ids';
 import {
   normalizeSession,
@@ -31,15 +32,27 @@ export class SessionRepository {
       endFraction: normalized.endFraction,
       deviceId: this.context.deviceId,
     };
-    await this.db.transaction('rw', this.db.sessions, this.db.changes, async () => {
-      await this.db.sessions.add(row);
-      await this.db.changes.add(makeChangeRow(this.context, 'session', row.id, 'upsert', row));
-    });
+    await this.db.transaction(
+      'rw',
+      this.db.sessions,
+      this.db.changes,
+      this.db.syncMeta,
+      async () => {
+        row.bookId = await resolveBookId(this.db, row.bookId);
+        await this.db.sessions.add(row);
+        await this.db.changes.add(makeChangeRow(this.context, 'session', row.id, 'upsert', row));
+      },
+    );
     return toSession(row);
   }
 
   async listByBook(bookId: string): Promise<ReadingSession[]> {
-    const rows = await this.db.sessions.where('bookId').equals(bookId).toArray();
+    const rows = await this.db.transaction('r', [this.db.sessions, this.db.syncMeta], async () =>
+      this.db.sessions
+        .where('bookId')
+        .equals(await resolveBookId(this.db, bookId))
+        .toArray(),
+    );
     return rows.sort((left, right) => left.startedAt - right.startedAt).map(toSession);
   }
 

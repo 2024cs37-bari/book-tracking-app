@@ -14,6 +14,11 @@ npm run test:corpus                   # all three engines, mobile-sized viewport
 npm run test:corpus -- --project=chromium
 ```
 
+Browser and corpus commands build an isolated `.browser-test-dist` and use port 4191 by default.
+Set `PLAYWRIGHT_PORT` to use another port. An occupied port fails explicitly; tests never silently
+reuse an unrelated or stale preview server. The browser matrix pins sync off and dictionary
+availability on; dictionary traffic is intercepted by its consent test.
+
 The default cache is `book-tracking-corpus-v1` under the OS temporary directory. A cache path inside
 the repository is rejected. CI uses `runner.temp`, fetches pinned originals and retains JSON
 measurement artifacts, not downloaded books. Downloaded archives retain their embedded credits,
@@ -71,15 +76,20 @@ visually certified by this slice.
 
 ## 2. Mobile-sized measurement protocol
 
-All corpus projects use a 390×844 viewport, DPR 2 and touch capability. They still run desktop
+Corpus projects use a 390×844 portrait viewport, DPR 2 and touch capability. The square
+Hello World PDF uses the corresponding 844×390 landscape viewport so the saved maximum
+zoom creates actual vertical overflow and tests a nonzero saved scroll offset. They run desktop
 Chromium/Firefox/Playwright WebKit engines: this is **not physical mobile hardware validation**.
-Chromium additionally requests CDP CPU throttling at rate 4; Firefox/WebKit are unthrottled.
-Do not compare their timings as equivalent device performance.
+The measured core/stress workloads request Chromium CDP CPU throttling at rate 4;
+Firefox/WebKit and the expanded PDF correctness-only cases are unthrottled. Do not compare
+these timings as equivalent device performance.
 
-Each run emits `READER_MEASUREMENTS` JSON with browser version, viewport, throttle settings,
-input size, workflow timings, available JS heap and long-task observations. TestInfo attachments
-become the CI `reader-measurements` artifact. Timing is observational, not a flaky CI latency gate.
-Correctness and resource bounds are hard assertions.
+Each measured workload emits `READER_MEASUREMENTS` JSON with browser version, viewport,
+throttle settings, input size, workflow timings, available JS heap and long-task observations.
+Per-test JSON files are written under `test-results/**/attachments/` and also attached to
+TestInfo. CI retains these files as the `reader-measurements` artifact even with the text reporter.
+Timing is observational, not a flaky CI latency gate. Correctness and resource bounds are hard
+assertions.
 
 Limitations:
 
@@ -100,9 +110,57 @@ turns, one cached canvas, the 4-million-pixel cap and no canvas after close. PDF
 allocation of a blank canvas. This is a controlled image-decode/page-cache test; it does not
 represent 240 distinct large images or a real publisher PDF.
 
+### Accepted local run — 2026-11-07
+
+The complete generated browser matrix passed **159/159** (53 cases in each engine),
+the selected-document corpus passed **27/27**, and the configured sync scenario passed
+**1/1** against a fresh local Miniflare Worker/D1/R2. Sync validates three isolated client
+installations, offline independent imports, canonical identity convergence, notes,
+collections, on-demand originals and explicit resolution of genuinely different local
+reading positions. It does not establish deployed Cloudflare Access behavior.
+
+The [dated machine-readable report](validation/2026-11-07-reader.json) preserves all
+**27** successful per-case JSON records: 12 core/stress measurement files and 15 expanded
+PDF evidence files. It also records the exact commands, input hashes, package lock hash,
+tested browser shell hashes/cache identity, and a scoped source fingerprint. The source
+fingerprint explicitly distinguishes later test/configuration-only refinements from the
+unchanged application build. Original book bytes and private library data are not included.
+
+Engines were Chromium `156.0.8078.4`, Firefox `157.0` and Playwright WebKit `27.2`, on Linux
+x64 with Node `26.12.1`. The following are Chromium core/stress observations with fourfold
+CPU throttle; the measurement protocol and limitations above apply.
+
+| Workload            | Import/open or first render | Interaction/page turn                          | Resource observation                                       |
+| ------------------- | --------------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
+| Moby-Dick           | 2.062 s                     | 951 ms including progress save                 | 1,628,868-byte original                                    |
+| SVG in Spine        | 1.905 s                     | 988 ms including progress save                 | 687,362-byte original                                      |
+| Hello World PDF     | 1.243 s                     | 1.016 s zoom/scroll/save                       | 678-byte original; landscape viewport                      |
+| Generated image PDF | 2.496 s                     | 101.5 ms median / 136.5 ms max across 12 turns | 516,344 pixels; 2,065,376 estimated RGBA bytes; one canvas |
+
+The stress test kept the same 516,344-pixel maximum and one canvas in all three engines,
+then removed the canvas on close. Firefox's unthrottled median/max turn observations were
+73/83 ms; WebKit's were 113/137 ms. These differently throttled results must not be used as
+an equivalent-device performance ranking. Host load was unmeasured; known coordinated
+builds were paused for corpus collection, but unrelated background work was possible.
+These are single-run shared desktop observations, not an isolated benchmark.
+
+Validation found and reproduced a Firefox lost click when a lazy PDF thumbnail replaced
+its placeholder between pointerdown and pointerup. Decorative thumbnail children now
+leave the semantic button as the stable pointer target. A controlled regression using
+real delayed thumbnail encoding failed before the repair and passed nine subsequent runs
+(three per engine); the complete matrix and real GNU manual navigation also passed.
+
+For repeatable sync checks, run separate `npm run test:sync-browser` invocations so each
+gets fresh local Worker/D1/R2 state. `--repeat-each` shares that backend within one run and
+is not an isolated installation reset. The current fixture creates an actual local
+Chapter 2 position on paused device B before device A moves to Chapter 3, and asserts that
+B's place survives until it explicitly accepts the remote candidate.
+
 ### Initial local observation
 
-On 2026-10-08, desktop Linux Chromium `156.0.8078.4`, the viewport/throttle above:
+Historical observation on 2026-10-08: desktop Linux Chromium `156.0.8078.4`, the
+then-current reader layout at 390×844 portrait, DPR 2 and fourfold CPU throttle. The
+current Hello World test uses landscape instead; do not treat this as current-source evidence.
 
 | Workload            | Import/open or first render | Interaction/page turn                      | Resource observation                                       |
 | ------------------- | --------------------------- | ------------------------------------------ | ---------------------------------------------------------- |
@@ -123,6 +181,46 @@ Measure first usable content and repeated turns, use platform process/worker mem
 and inspect memory after close and repeated reopen. Capture at least five repetitions and report
 median/worst values, not just a favorable run. Do not upload private book data with diagnostics.
 
-Physical devices, additional real/image-heavy PDF variants and oversized-image handling, obfuscated fonts, other EPUB layout variants,
-accessibility and conformance-wide claims remain pending. EPUB/PDF stay experimental despite
+Physical devices, additional real/image-heavy PDF variants and adaptive oversized-image handling,
+obfuscated fonts, other EPUB layout variants and conformance-wide claims remain pending.
+Automated application accessibility checks are separate from assistive-technology validation of
+book content. EPUB/PDF stay experimental despite
 these selected-file results.
+
+## Advanced reader follow-up — 2026-11-07
+
+The [advanced reader report](validation/2026-11-07-reader-modes.json) retains a fresh complete
+**27/27 corpus pass** against the new page-surface adapter and EPUB settings integration. All 27
+JSON evidence records are embedded with input/version/workflow details. The generated application
+matrix passed **210/210** cases across the three engines, including **21 new mode cases**. The
+expanded accessibility suite passed four cases and the rebuilt Linux package passed its scoped
+reader smoke test.
+
+The external corpus retains its baseline single-page workflows; it does not independently certify
+every advanced mode on every real book. Generated mode tests exercise second-page highlights,
+cover pairing, RTL display order, narrow fallback, a distant continuous PDF offset with offline
+reopen, bounded surfaces, PDF fit/zoom/rotation, focus/full screen, EPUB typography and section
+scrolling. The new report records corrected harness assumptions and the steady-vs-transient bitmap
+budget. Existing decode-limit failures and physical-device limitations remain applicable.
+
+### PDF inversion crash follow-up
+
+A user reported the browser crash screen when enabling page-colour inversion. The original
+failure was not reproduced deterministically, so a graphics-process root cause is not confirmed.
+The live CSS `invert`/`hue-rotate` filter was removed: colours are now transformed on the bounded
+page bitmap before display, with 256 KiB strips. Turning inversion off re-renders the original
+PDF rather than applying a second, lossy colour transform.
+
+The [inversion report](validation/2026-11-07-reader-inversion.json) records **30/30 focused browser
+passes** across Chromium, Firefox and WebKit, including nine new cases covering repeated colour
+toggles at 400% in single/facing/continuous modes. They compare actual raster pixels and complete
+image hashes, force browser screenshots, test rotation/navigation/reload, retain selectable text,
+check the bitmap budget and verify release on close. Adapter tests also cover cancelling an
+unfinished inversion while preserving the working page and anchor.
+
+The complete code checks passed with **509 client and 28 server tests**. The rebuilt Linux `.deb`
+passed four exact colour round trips per mode at 400%, reload/resume and close cleanup. The affected
+PDF was also checked in the live preview with the new renderer, including a successful off/on
+round trip. Browser-control timeouts occurred during rapid scripted live-tab actions; the tab
+remained readable and responsive on subsequent inspection. These observations do not establish
+crash freedom on every graphics driver or PDF.

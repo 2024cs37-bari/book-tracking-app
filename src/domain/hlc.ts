@@ -93,15 +93,22 @@ export function createClock(options: ClockOptions): Clock {
 
   let last: Hlc | null = null;
 
+  function issued(wallMs: number, counter: number): Hlc {
+    const wall = counter > MAX_HLC_COUNTER ? wallMs + 1 : wallMs;
+    if (!Number.isSafeInteger(wall) || wall < 0)
+      throw new Error('Logical clock exhausted its safe range.');
+    return { wallMs: wall, counter: counter > MAX_HLC_COUNTER ? 0 : counter, deviceId };
+  }
+
   function next(): Hlc {
     const physical = now();
     if (last === null) {
-      last = { wallMs: physical, counter: 0, deviceId };
+      last = issued(physical, 0);
       return last;
     }
     const wallMs = Math.max(physical, last.wallMs);
     const counter = wallMs === last.wallMs ? last.counter + 1 : 0;
-    last = { wallMs, counter, deviceId };
+    last = issued(wallMs, counter);
     return last;
   }
 
@@ -119,7 +126,10 @@ export function createClock(options: ClockOptions): Clock {
     }
 
     if (last === null) {
-      last = { wallMs: Math.max(physical, remoteWallMs), counter: 0, deviceId };
+      last = issued(
+        Math.max(physical, remoteWallMs),
+        remoteWallMs >= physical ? remote.counter + 1 : 0,
+      );
       return;
     }
 
@@ -134,7 +144,7 @@ export function createClock(options: ClockOptions): Clock {
     } else {
       counter = 0;
     }
-    last = { wallMs, counter, deviceId };
+    last = issued(wallMs, counter);
   }
 
   function restore(hlc: Hlc): void {

@@ -1,157 +1,118 @@
 # Architecture
 
-## 1. Status and decision principles
+## Current system
 
-This is the initial architecture baseline for a single-user application. Decisions favor understandable local behavior, small operational footprint, replaceable adapters, and recoverability. Details that depend on browser or library behavior remain validation tasks rather than assumed guarantees.
-
-**Implementation status.** The client layers, local persistence, file storage, format detection and import pipeline are implemented as `src/domain`, `src/data`, `src/storage`, `src/reader` and `src/services`. EPUB/PDF adapters, `/read/:id`, EPUB contents, settings, debounced progress/restore and production app-shell precaching are implemented. Generated-fixture checks pass in Chromium, Firefox and Playwright WebKit, including EPUB PNG/CSS/fonts/single-page fixed layout, script blocking and offline reload/resume. Selected pinned real files and desktop mobile-sized measurements have a separate corpus gate; see [Reader validation](READER-VALIDATION.md). A durable IndexedDB binary fallback covers unusable OPFS; metadata stays at schema v1 and the separate binary database is v2. Broader real-file corpus and physical-hardware memory validation remain pending, so both formats are experimental. Nothing in the Cloudflare section exists. Where this document and the code disagree, the code is the fact and this document is the bug.
-
-See [ADR 0001](decisions/0001-technology-baseline.md) for technology choices and [ADR 0002](decisions/0002-data-lifecycle.md) for data lifecycle rules.
-
-## 2. System context
+Personal Book Reader is a single-user, offline-first web application. All core library reads and
+mutations use local repositories. Network availability affects synchronization and remote originals,
+not locally stored books, annotations or progress.
 
 ```text
-┌──────────────────────────── Client ────────────────────────────┐
-│ SolidJS UI (Vite)                                               │
-│  ├─ Library, settings, reader shell                              │
-│  ├─ Renderer adapters: EPUB / PDF                                │
-│  ├─ Domain services and repositories                              │
-│  ├─ Local metadata DB: Dexie + IndexedDB                         │
-│  ├─ Local files: OPFS (web) / app filesystem (Tauri)              │
-│  └─ Sync and transfer queues (later phase)                       │
-└──────────────────────────────┬─────────────────────────────────┘
-                               │ HTTPS; asynchronous sync
-┌──────────────────────────────▼─────────────────────────────────┐
-│ Cloudflare Access → Worker API (Hono) → D1 + private R2         │
-└────────────────────────────────────────────────────────────────┘
+SolidJS UI → application services → Dexie/IndexedDB + atomic outbox
+                            ├── original file store: OPFS → IndexedDB → memory
+                            ├── EPUB adapter: vendored foliate-js
+                            └── PDF adapter: pinned pdf.js + local worker/assets
+
+Background scheduler → metadata push/pull → Access → Worker/Hono → D1 change log
+                     → verified file transfer → Access → Worker → private R2
 ```
 
-The local application can import, browse, read locally present books, change metadata, and save progress with no server. Server unavailability affects cross-device sync and remote-only files, not local reading or mutations.
+Vite builds the TypeScript/Solid client. The production service worker caches application assets,
+not library metadata or books. The server is a separate package with its own tests, dependencies,
+D1 migration and deployment configuration. Resource IDs and Access policies are deployment inputs.
 
-## 3. Technology baseline
+## Boundaries
 
-| Concern        | Baseline                                  | Boundary / caveat                                                                  |
-| -------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| UI and app     | SolidJS + Vite + TypeScript               | UI depends on domain/repository interfaces, not storage implementation.            |
-| Local metadata | Dexie over IndexedDB                      | Start with transactions and explicit schema versions; hide behind repositories.    |
-| Web files      | OPFS where supported                      | Capability-detect and provide a tested fallback; browser quotas and eviction vary. |
-| Desktop files  | Tauri app data directory                  | Native file access is isolated behind a file-store interface.                      |
-| Web delivery   | PWA                                       | Service worker caches app shell, not the entire library by default.                |
-| Desktop        | Tauri                                     | Add after core UI and storage contracts stabilize.                                 |
-| EPUB           | foliate-js adapter, subject to validation | Pin a version and keep it behind `Renderer`.                                       |
-| PDF            | pdf.js adapter                            | Render visible pages and cap memory/cache.                                         |
-| API            | Cloudflare Worker + Hono                  | Validate identity at the trust boundary and validate request schemas.              |
-| Metadata DB    | Cloudflare D1                             | Migrations are checked in and applied deliberately.                                |
-| Files          | Private Cloudflare R2                     | Never expose public object URLs.                                                   |
-| Authentication | Cloudflare Access                         | Worker verifies Access identity; deployment must ensure no bypass route exists.    |
+| Layer              | Responsibilities                                                              | Dependencies                            |
+| ------------------ | ----------------------------------------------------------------------------- | --------------------------------------- |
+| `domain`           | Books, locators, clocks, collections, activity and pure validation            | No UI/storage/network                   |
+| `data`             | Versioned Dexie tables, transactional repositories, durable outbox            | Domain; narrowly shared pure sync rules |
+| `storage`          | Original bytes, hashes, capability probes, file leases, reconciliation        | Domain                                  |
+| `reader`           | Format sniffing, engine lifecycle, rendering, search, selection and speech    | Domain and isolated engine code         |
+| `services`         | Import, reader sessions, portable backup/recovery, offline policy, dictionary | Repositories and adapters               |
+| `sync`, `transfer` | Validated transport, convergence, scheduling and durable work queues          | Domain, data, file-store interfaces     |
+| `app`              | Construction, configuration, startup clock recovery, app-shell registration   | All implementations                     |
+| `ui`               | Local views, navigation, settings, progress and user decisions                | App service facade                      |
 
-Cloudflare and library limits change. Recheck pricing, quotas, browser compatibility, and package licenses before production deployment.
+The UI receives services through context. Repository-change subscriptions refresh library/details,
+settings and statistics after background or other-tab commits. A local database write is never
+conditional on an HTTP request succeeding.
 
-## 4. Client layers
+## Identity, clocks and transactions
 
-### Presentation
+Original identity is lowercase SHA-256 of the exact original bytes. Metadata has opaque IDs; when
+independent devices imported the same original with different IDs, sync deterministically selects
+a canonical ID and moves references atomically. Local aliases keep old references resolvable.
+Already-created outbox messages and their idempotency IDs are immutable.
 
-SolidJS components render library, reader, settings, transfer status, and conflict decisions. Components call application services and observe local state. They must not contain SQL/IndexedDB logic or make the UI wait for network calls.
+Each replicated mutation commits its entity and outbox row in one transaction. Pull applies a
+validated page, identity reconciliation, cursor and clock checkpoint together. Applying remote
+changes does not create an outgoing echo. Startup recovers the clock from durable rows/outbox as
+well as its saved checkpoint, protecting against abrupt termination before pagehide.
 
-### Domain and application services
+Metadata merges retain per-field HLC provenance, including explicit user-cleared optional fields.
+Membership merges preserve add/remove order. Sessions are append-only facts. Substantial remote
+progress divergence is retained for a user decision instead of replacing the current position.
+See [Data model](DATA-MODEL.md), [Sync](SYNC.md) and [Sync implementation](SYNC-IMPLEMENTATION.md).
 
-Use cases own import, progress update, annotation, export, archive/delete, and sync orchestration. These services define atomic boundaries and should be testable without DOM or Cloudflare bindings.
+## Original durability and recovery
 
-### Repositories and adapters
+Originals are written and verified before metadata commits; they cannot share a transaction with
+IndexedDB. A crash can leave an unreferenced original, which reconciliation reports. Re-import of
+identical bytes repairs an absent or corrupt local copy while preserving metadata.
 
-- `BookRepository`, `ProgressRepository`, `AnnotationRepository`, collection repositories, `SessionRepository`, and sync/change repositories manage metadata.
-- `BookFileStore` manages local file bytes and integrity operations.
-- `Renderer` abstracts display engines.
-- `SyncTransport` abstracts HTTP and authentication.
+Shared Web Locks protect originals during import, backup, transfer and reading. Cache removal needs
+an exclusive lease, an unpinned state and a currently verified remote original. Browsers without
+cross-tab locking refuse automatic cache removal. Tombstoned originals remain referenced.
 
-Dexie, OPFS, filesystem access, renderer engines, and network fetches are replaceable adapters. The repository boundary is intended to permit a future database change; it does not promise that arbitrary SQL compatibility with D1 will be automatic.
+Portable backup/recovery uses bounded, validated archives and a preview. Recovery adds missing data
+with fresh local events, preserves current records, and leaves staged files recoverable if the
+metadata transaction fails. [Backup](BACKUP.md) specifies exactly what is and is not restored.
 
-### Renderer contract
+## Renderer isolation
 
-Conceptual interface:
+Only adapters import the underlying engines. A reader session owns one renderer, native locator,
+settings and serialized progress writes. EPUB locators are CFI plus fraction; PDF locators retain
+page/vertical offset plus fraction. Annotations use the same stable locator model.
 
-```ts
-interface Renderer {
-  mount(host: HTMLElement): void;
-  open(file: Blob, startAt?: Locator): Promise<void>;
-  prev(): void;
-  next(): void;
-  goTo(locator: Locator): void;
-  getToc(): Promise<TocItem[]>;
-  onRelocate(callback: (locator: Locator, fraction: number) => void): () => void;
-  search(query: string, signal?: AbortSignal): AsyncIterable<SearchHit>;
-  applySettings(settings: ReaderSettings): void;
-  destroy(): void;
-}
-```
+The PDF adapter bounds canvas size and releases rendering resources. The EPUB adapter strips active
+content and supplies a no-script/no-network book policy before creating content URLs. Neither a
+file extension nor an upstream feature list establishes application support. Only EPUB/PDF adapters
+are registered, and they remain experimental pending broader validation.
 
-Adapter-specific APIs and locator conversion stay inside implementations. All locators include a normalized fraction for fallback and progress comparison. See [Import and reader](IMPORT-AND-READER.md).
+## Security and optional network use
 
-`ReaderService` retrieves originals and saved progress; `ReaderSession` serializes debounced
-repository writes and flushes on close/hide. UI only mounts the contract and calls session methods.
-Vendored engines are loaded exclusively inside `reader`; see [ADR 0003](decisions/0003-reader-engines.md).
-The schema remains v1. Settings are local device defaults in localStorage, not replicated rows.
+The app policy permits local assets, a validated configured sync origin and the optional dictionary
+origin. EPUB documents receive a stricter isolated policy. Dictionary requests require user consent;
+they send a selected word only. Read-aloud uses the browser/platform speech engine; availability and
+voice behavior vary by platform.
 
-The reader shell renders EPUB TOC trees through the `TocItem` contract, without engine imports.
-Contents load after basic reading is ready; navigation uses the same CFI/progress pathway as
-page turns. Conversion is sequential, retains at most one section document, and caches the result
-for the session. Missing/external destinations are unavailable entries rather than invented locators.
+Worker routes validate Access identity, request bounds and protocol envelopes; private R2 keys are
+scoped to the verified user. CORS is an exact origin policy, not authentication. The local identity
+bypass is accepted only on loopback development hosts. Original upload integrity is verified before
+trusted availability; downloads are independently hash-checked before local publication.
 
-Browser regression projects target Chromium, Firefox and Playwright WebKit, including generated
-PNG/CSS/OpenType assets and single-page fixed-layout EPUB. Asset bytes/glyphs are test-generated;
-the font-generation dependency is development-only. Fixed layout retains publisher typography,
-with reader theme applied to the backdrop rather than reflowing pages.
+Originals are private, not end-to-end encrypted. App logs and diagnostic output must avoid book
+content, authentication assertions and private URLs. See [Security](../SECURITY.md).
 
-## 5. Data flow and invariants
+## Platform and future extension points
 
-1. A user mutation is validated and committed to the local database first.
-2. Replicated mutations and their local change-log entries commit in one local transaction.
-3. The UI reflects committed local state immediately.
-4. A background sync worker batches changes and records durable transfer state.
-5. The server applies each idempotently, then makes the mutation visible in its change log.
-6. Pull application updates local replicated state and cursor atomically.
+The web application remains the shared product surface. The experimental Linux Tauri shell selects
+a narrow native file-store adapter only in its native runtime. Rust commands accept validated
+logical original/cover keys, use bounded IPC chunks, verify original SHA-256, stage atomic writes
+and keep a process lock. Metadata remains in the WebView's versioned IndexedDB. Native exports use
+an OS Save dialog and atomic destination writes; native window close waits for registered local
+save guards before closing or offering an explicit failure choice. Desktop assets ship in the
+application and do not install the web service worker.
 
-Required invariants:
+This foundation is not a complete cross-device desktop release. Cloudflare Access's browser cookie
+flow and allowed origins do not work unchanged from a native origin. Desktop builds therefore reject
+configured sync URLs until a native authentication/credential lifecycle is designed and verified.
+The web client keeps its existing private sync. Installer/signing, update/uninstall and other OS
+verification remain separate release gates. [Desktop](DESKTOP.md) records actual native evidence.
+Native mobile is deferred until measured PWA limitations justify it.
 
-- The client never treats a network response as a replacement for unpushed local data.
-- Content hashes are computed over original bytes and verified after transfer.
-- A cursor never advances past a remote event that was not applied locally.
-- A destructive metadata action does not implicitly remove an original file.
-- Local-only device choices (pinning, cache presence) do not overwrite another device's state.
-
-## 6. Platform strategy
-
-### Web and PWA
-
-A single Vite build is served as a static application. Service-worker caching is versioned and limited to app assets. The app requests persistent storage where available but must handle denial and eviction. A PWA cannot promise filesystem durability on every browser, especially iOS.
-
-### Desktop
-
-Tauri provides a thin native container, filesystem access, and later OS-level integration. The UI remains the shared web application. Native commands are narrow and validated; application domain rules remain in shared TypeScript code where possible.
-
-### Mobile
-
-PWA is the initial mobile strategy. Native mobile packaging is deferred until real PWA limitations (storage, background work, file access) are demonstrated to block required workflows.
-
-## 7. Backend boundaries
-
-Cloudflare Access authenticates the user; the Worker enforces identity and validates all requests. D1 stores replicated metadata and the server change log. R2 stores original book bytes and generated covers in a private bucket. Large files move directly between client and R2 through short-lived authorized URLs rather than through the Worker body.
-
-The server is a durable replica, not the UI's source of truth. API contracts and security details are in [Backend](BACKEND.md); conflict and recovery details are in [Sync](SYNC.md).
-
-## 8. Security and privacy boundaries
-
-- No public bucket or unauthenticated metadata endpoints.
-- The Worker validates the Access assertion and authorization on every route.
-- Upload authorization is bound to the authenticated user, expected content hash, and allowed operation.
-- Avoid logging book titles, annotation contents, tokens, signed URLs, or raw file bytes.
-- Secrets and local environment files are never committed.
-- Client-side file encryption is deferred; until adopted, server-side storage is private but not end-to-end encrypted.
-
-## 9. Deployment environments
-
-Use separate development and production Cloudflare resources and credentials. Local development should work without production secrets. Schema migrations, bucket bindings, Access policy, and Pages/Worker routes are deployed as explicit reviewed changes. A deploy must not silently change data retention or remove stored objects.
-
-## 10. Architecture evolution
-
-A change to a baseline decision should update its ADR status and consequences. Changes to replicated schema require forward migration and compatibility planning for stale clients. Renderer changes require the format regression corpus. Sync changes require invariant tests and a documented compatibility/version strategy.
+Large-file transfer can add multipart/resumable protocols behind `FileTransport`; backups can add a
+streamed format behind versioned manifests. Server compaction requires a complete snapshot plus a
+replay cursor, not merely dropping old log rows. Encryption requires a key-recovery design before
+implementation. These changes must preserve original identity and backward compatibility rather
+than forking the domain model. [Roadmap](ROADMAP.md) records their acceptance gates.

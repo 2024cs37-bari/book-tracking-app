@@ -58,13 +58,13 @@ describe('storage reconciliation', () => {
     expect(report.orphanKeys).toEqual([]);
   });
 
-  it('ignores books that were soft-deleted when computing references', async () => {
+  it('retains originals referenced by recoverable tombstones', async () => {
     const bookId = await importEpub('deleted.epub');
     const book = await harness.books.getById(bookId);
     await harness.books.setLifecycle(bookId, 'deleted');
 
     const report = await inspectStorage(harness.db, harness.files);
-    expect(report.orphanKeys).toContain(bookFileKey(book!.sha256));
+    expect(report.orphanKeys).not.toContain(bookFileKey(book!.sha256));
   });
 
   it('removes only the keys it was asked to remove', async () => {

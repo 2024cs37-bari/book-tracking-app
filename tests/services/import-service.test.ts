@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bookFileKey, coverFileKey } from '~/storage/file-store';
 import { sha256Blob } from '~/storage/sha256';
 import { createHarness, type TestHarness } from '../support/harness';
@@ -183,6 +183,37 @@ describe('PDF import', () => {
 });
 
 describe('duplicate detection', () => {
+  it('records repaired file presence on a canonical identity adopted during file IO', async () => {
+    const bytes = buildEpubFixture({ title: 'Canonical repair' });
+    const first = await harness.imports.importFile({ blob: toBlob(bytes), filename: 'a.epub' });
+    if (first.status !== 'imported') throw new Error('Fixture import failed');
+    const original = (await harness.db.books.get(first.book.id))!;
+    const canonicalId = 'canonical-import';
+    const get = harness.files.get.bind(harness.files);
+    vi.spyOn(harness.files, 'get').mockImplementationOnce(async (key) => {
+      const blob = await get(key);
+      await harness.db.transaction('rw', harness.db.books, harness.db.deviceState, async () => {
+        await harness.db.books.delete(original.id);
+        await harness.db.books.add({ ...original, id: canonicalId });
+        await harness.db.deviceState.delete(original.id);
+        await harness.db.deviceState.put({
+          bookId: canonicalId,
+          pinnedOffline: true,
+          filePresent: false,
+        });
+      });
+      return blob;
+    });
+    expect(
+      (await harness.imports.importFile({ blob: toBlob(bytes), filename: 'b.epub' })).status,
+    ).toBe('duplicate');
+    expect(await harness.db.deviceState.get(original.id)).toBeUndefined();
+    expect(await harness.db.deviceState.get(canonicalId)).toMatchObject({
+      pinnedOffline: true,
+      filePresent: true,
+    });
+  });
+
   it('links a re-import to the existing book instead of duplicating it', async () => {
     const bytes = buildEpubFixture({ title: 'Twice' });
     const first = await harness.imports.importFile({ blob: toBlob(bytes), filename: 'a.epub' });

@@ -47,14 +47,17 @@ function identityFrom(payload: JWTPayload): Identity | null {
 }
 
 export async function verifyAccess(request: Request, env: AccessEnv): Promise<Identity | null> {
-  if (env.ACCESS_AUD.length === 0 || env.ACCESS_TEAM_DOMAIN.length === 0) return null;
-  const token = readToken(request);
-  if (token === null) return null;
+  if (!env.ACCESS_AUD || !/^[a-z0-9-]+\.cloudflareaccess\.com$/i.test(env.ACCESS_TEAM_DOMAIN ?? ''))
+    return null;
   const issuer = `https://${env.ACCESS_TEAM_DOMAIN}`;
   try {
+    const token = readToken(request);
+    if (token === null) return null;
     const { payload } = await jwtVerify(token, jwksFor(issuer), {
       issuer,
       audience: env.ACCESS_AUD,
+      algorithms: ['RS256'],
+      requiredClaims: ['exp', 'iat'],
     });
     return identityFrom(payload);
   } catch {

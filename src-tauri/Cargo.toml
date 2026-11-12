@@ -1,0 +1,33 @@
+[package]
+name = "book-reader-desktop"
+version = "0.1.0"
+description = "Offline personal library and EPUB/PDF reader"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+default-run = "book-reader"
+
+[lib]
+name = "book_reader_desktop"
+
+[[bin]]
+name = "book-reader"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[features]
+default = ["desktop"]
+custom-protocol = ["tauri/custom-protocol"]
+desktop = ["dep:tauri", "dep:tauri-plugin-dialog"]
+
+[dependencies]
+fs2 = "0.4"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tempfile = "3"
+uuid = { version = "1", features = ["v4"] }
+tauri = { version = "2", optional = true , features = [] }
+tauri-plugin-dialog = { version = "2", optional = true }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

@@ -3,7 +3,8 @@ import { AppError, isAppError } from '~/domain/errors';
 import { newId } from '~/domain/ids';
 import { detectFormat, DETECTION_SAMPLE_BYTES } from '~/reader/format-detect';
 import { bookFileKey, coverFileKey, type BookFileStore } from '~/storage/file-store';
-import { sha256Blob } from '~/storage/sha256';
+import { sha256Blob, verifySha256 } from '~/storage/sha256';
+import { bookFileLeases } from '~/storage/book-file-leases';
 import type { LibraryDatabase } from '~/data/db';
 import type { BookRepository } from '~/data/repositories/book-repository';
 import type { ProgressRepository } from '~/data/repositories/progress-repository';
@@ -15,6 +16,9 @@ export interface ImportRequest {
   readonly blob: Blob;
   readonly filename: string;
 }
+
+/** Bound whole-file renderer/metadata work before hashing or allocation. */
+export const MAX_IMPORT_BYTES = 256 * 1024 * 1024;
 
 export type ImportOutcome =
   | { readonly status: 'imported'; readonly book: Book; readonly warnings: readonly string[] }
@@ -45,13 +49,30 @@ export class ImportService {
   async importFile(request: ImportRequest): Promise<ImportOutcome> {
     const { filename } = request;
     let contentHash: string | undefined;
+    let release: (() => void) | undefined;
 
     try {
+      if (request.blob.size === 0 || request.blob.size > MAX_IMPORT_BYTES) {
+        throw new AppError('invalid_argument', 'Choose a non-empty book no larger than 256 MiB.');
+      }
       const sha256 = await sha256Blob(request.blob);
       contentHash = sha256;
+      release = await bookFileLeases.acquire(sha256);
 
       const existing = await this.deps.books.findBySha256(sha256);
       if (existing !== undefined) {
+        // Re-import is also the recovery path after browser eviction or a damaged local copy.
+        const key = bookFileKey(sha256);
+        let intact = false;
+        try {
+          intact =
+            (await this.deps.files.has(key)) &&
+            (await verifySha256(await this.deps.files.get(key), sha256));
+        } catch {
+          /* A chosen original can replace an unreadable local copy. */
+        }
+        if (!intact) await this.storeVerified(sha256, request.blob);
+        await this.markPresent(sha256);
         return { status: 'duplicate', book: existing };
       }
 
@@ -72,7 +93,7 @@ export class ImportService {
       // The cover key derives from the book id, so the id is allocated before
       // the metadata row exists.
       const bookId = newId();
-      await this.deps.files.put(bookFileKey(sha256), request.blob);
+      await this.storeVerified(sha256, request.blob);
 
       const extraWarnings: string[] = [];
       let coverKey: string | undefined;
@@ -124,6 +145,7 @@ export class ImportService {
         },
       );
 
+      await this.markPresent(sha256);
       return { status: 'imported', book, warnings };
     } catch (error) {
       // Two identical files selected in one batch can both pass the lookup
@@ -132,6 +154,7 @@ export class ImportService {
       if (contentHash !== undefined && isUniqueConstraintError(error)) {
         const existing = await this.deps.books.findBySha256(contentHash);
         if (existing !== undefined) {
+          await this.markPresent(contentHash);
           return { status: 'duplicate', book: existing };
         }
       }
@@ -146,7 +169,36 @@ export class ImportService {
               { cause: error },
             ),
       };
+    } finally {
+      release?.();
     }
+  }
+
+  private async storeVerified(hash: string, blob: Blob): Promise<void> {
+    const key = bookFileKey(hash);
+    await this.deps.files.put(key, blob);
+    if (!(await verifySha256(await this.deps.files.get(key), hash))) {
+      throw new AppError(
+        'invalid_state',
+        'Stored original failed its integrity check. Import was not completed.',
+      );
+    }
+  }
+
+  private async markPresent(hash: string): Promise<void> {
+    await this.deps.db.transaction('rw', this.deps.db.books, this.deps.db.deviceState, async () => {
+      // A sync merge may replace the imported UUID during file IO. Presence
+      // belongs to the current book for these bytes, never a retired UUID.
+      const book = await this.deps.db.books.where('sha256').equals(hash).first();
+      if (!book) return;
+      const row = await this.deps.db.deviceState.get(book.id);
+      await this.deps.db.deviceState.put({
+        bookId: book.id,
+        pinnedOffline: false,
+        ...row,
+        filePresent: true,
+      });
+    });
   }
 
   /**

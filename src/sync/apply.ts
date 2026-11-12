@@ -12,6 +12,11 @@ import type {
 } from '~/data/db';
 import type { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
 import type { PullChange } from './protocol';
+import { mergeBook } from './book-merge';
+import { moveBookReferences, resolveBookId } from './identity';
+import { validatePullPayload } from './validate';
+import { SyncHttpError } from './http-transport';
+export { mergeBook } from './book-merge';
 
 /**
  * How far two devices' reading positions must differ (as a fraction of the
@@ -38,141 +43,57 @@ function laterHlc(a: string | undefined, b: string | undefined): string | undefi
   return isNewer(a, b) ? a : b;
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function nonEmptyString(value: string | undefined): value is string {
-  return typeof value === 'string' && value.trim() !== '';
-}
-
-/**
- * Picks a book-metadata string field: a non-empty value is always preferred
- * over an empty/absent one (so a newer edit that happens to lack an extracted
- * value never erases it); when both are non-empty and differ, the newer edit
- * wins. Returns undefined only when neither side has a value.
- */
-function pickString(
-  local: string | undefined,
-  remote: string | undefined,
-  remoteNewer: boolean,
-): string | undefined {
-  const l = nonEmptyString(local);
-  const r = nonEmptyString(remote);
-  if (l && r) return remoteNewer ? remote : local;
-  if (r) return remote;
-  if (l) return local;
-  return undefined;
-}
-
-function pickNumber(
-  local: number | undefined,
-  remote: number | undefined,
-  remoteNewer: boolean,
-): number | undefined {
-  const l = typeof local === 'number' && local > 0;
-  const r = typeof remote === 'number' && remote > 0;
-  if (l && r) return remoteNewer ? remote : local;
-  if (r) return remote;
-  if (l) return local;
-  return undefined;
-}
-
-/**
- * Merges a remote book row into the local one per the §6 book-metadata policy:
- * non-empty extracted/user-edited metadata is preserved field by field (a newer
- * row never erases a value it simply lacks), while lifecycle fields (lifecycle,
- * archive/tombstone timestamps) move together with the HLC winner. The merge is
- * deterministic and order-independent, so every device that receives the same
- * set of change events converges on the same union without echoing a write.
- */
-export function mergeBook(local: BookRow, remote: BookRow): BookRow {
-  const remoteNewer = isNewer(remote.updatedHlc, local.updatedHlc);
-  const lifecycleSource = remoteNewer ? remote : local;
-  const author = pickString(local.author, remote.author, remoteNewer);
-  const language = pickString(local.language, remote.language, remoteNewer);
-  const coverKey = pickString(local.coverKey, remote.coverKey, remoteNewer);
-  const isbn = pickString(local.isbn, remote.isbn, remoteNewer);
-  const publisher = pickString(local.publisher, remote.publisher, remoteNewer);
-  const pageCount = pickNumber(local.pageCount, remote.pageCount, remoteNewer);
-  return {
-    id: local.id,
-    sha256: remoteNewer && nonEmptyString(remote.sha256) ? remote.sha256 : local.sha256,
-    title: pickString(local.title, remote.title, remoteNewer) ?? local.title,
-    format: local.format,
-    sizeBytes: local.sizeBytes || remote.sizeBytes,
-    // Incompleteness is monotonic: once any device marks metadata complete, the
-    // merged row stays complete.
-    metadataIncomplete: local.metadataIncomplete && remote.metadataIncomplete,
-    lifecycle: lifecycleSource.lifecycle,
-    addedAt: Math.min(local.addedAt, remote.addedAt),
-    updatedHlc: laterHlc(local.updatedHlc, remote.updatedHlc) ?? local.updatedHlc,
-    ...(author !== undefined ? { author } : {}),
-    ...(language !== undefined ? { language } : {}),
-    ...(coverKey !== undefined ? { coverKey } : {}),
-    ...(isbn !== undefined ? { isbn } : {}),
-    ...(publisher !== undefined ? { publisher } : {}),
-    ...(pageCount !== undefined ? { pageCount } : {}),
-    ...(lifecycleSource.archivedAt !== undefined ? { archivedAt: lifecycleSource.archivedAt } : {}),
-    ...(lifecycleSource.deletedAt !== undefined ? { deletedAt: lifecycleSource.deletedAt } : {}),
-  };
-}
-
-/** Field-by-field equality for a merged book, to skip no-op writes. */
-function sameBook(a: BookRow, b: BookRow): boolean {
-  return (
-    a.id === b.id &&
-    a.sha256 === b.sha256 &&
-    a.title === b.title &&
-    a.author === b.author &&
-    a.language === b.language &&
-    a.format === b.format &&
-    a.sizeBytes === b.sizeBytes &&
-    a.coverKey === b.coverKey &&
-    a.isbn === b.isbn &&
-    a.publisher === b.publisher &&
-    a.pageCount === b.pageCount &&
-    a.metadataIncomplete === b.metadataIncomplete &&
-    a.lifecycle === b.lifecycle &&
-    a.addedAt === b.addedAt &&
-    a.updatedHlc === b.updatedHlc &&
-    a.archivedAt === b.archivedAt &&
-    a.deletedAt === b.deletedAt
-  );
-}
-
 /**
  * Applies one remote change to the local tables using the entity's conflict
  * rule (docs/SYNC.md §6). It writes only entity tables, never the outbox, so a
  * remote change never echoes back as a local mutation (invariant 5). Equal or
  * older writes are no-ops, which makes replay safe. A structurally invalid
- * payload is skipped rather than throwing, so one bad row cannot wedge sync.
+ * payload aborts its page; the cursor never silently skips unprocessed data.
  *
  * Must run inside a transaction that covers every replicated table.
  */
 export async function applyChange(db: LibraryDatabase, change: PullChange): Promise<void> {
-  const payload = change.payload;
-  if (!isObject(payload)) return;
+  const payload = { ...validatePullPayload(change) } as Record<string, unknown>;
+  if (typeof payload.bookId === 'string') payload.bookId = await resolveBookId(db, payload.bookId);
 
   switch (change.entity) {
     case 'book': {
       const row = payload as unknown as BookRow;
-      if (typeof row.id !== 'string') return;
-      const local = await db.books.get(row.id);
-      // Per-field merge rather than whole-row LWW: a newer edit must not erase a
-      // non-empty value it simply lacks (§6). First insert takes the row as-is.
+      const remoteId = row.id;
+      row.id = await resolveBookId(db, remoteId);
+      let local = await db.books.get(row.id);
+      if (local !== undefined && local.sha256 !== row.sha256)
+        throw new SyncHttpError('A remote book changed its content identity.', {
+          retryable: false,
+          code: 'identity_conflict',
+        });
+      if (local === undefined) {
+        const sameContent = await db.books.where('sha256').equals(row.sha256).first();
+        if (sameContent !== undefined) {
+          assertSameOriginal(sameContent, row);
+          const canonical = [sameContent.id, row.id].sort()[0]!;
+          await moveBookReferences(db, sameContent.id, canonical);
+          await moveBookReferences(db, row.id, canonical);
+          await db.books.delete(sameContent.id);
+          local = { ...sameContent, id: canonical };
+          row.id = canonical;
+        }
+      }
       if (local === undefined) {
         await db.books.put(row);
         return;
       }
+      assertSameOriginal(local, row);
       const merged = mergeBook(local, row);
-      if (!sameBook(local, merged)) await db.books.put(merged);
+      await db.books.put(merged);
       return;
     }
     case 'progress': {
       const row = payload as unknown as ProgressRow;
       if (typeof row.bookId !== 'string') return;
       const local = await db.progress.get(row.bookId);
+      const pending = await db.progressConflicts.get(row.bookId);
+      if (pending && !isNewer(row.updatedHlc, pending.remote.updatedHlc)) return;
       // Only a strictly newer remote position is a candidate at all.
       if (!isNewer(row.updatedHlc, local?.updatedHlc)) return;
       // Divergence between two different devices beyond the threshold is held
@@ -248,6 +169,14 @@ export async function applyChange(db: LibraryDatabase, change: PullChange): Prom
   }
 }
 
+function assertSameOriginal(local: BookRow, remote: BookRow): void {
+  if (local.sizeBytes !== remote.sizeBytes || local.format !== remote.format)
+    throw new SyncHttpError('A remote book conflicts with the known original size or format.', {
+      retryable: false,
+      code: 'identity_conflict',
+    });
+}
+
 /** Latest add/remove across the two copies — a newer re-add beats an older remove. */
 function membershipHlcs(
   local: { addedHlc: string; removedHlc?: string } | undefined,
@@ -266,8 +195,8 @@ function mergeMembership(local: ShelfBookRow | undefined, remote: ShelfBookRow):
  * Applies a whole pull page and advances the cursor in one transaction
  * (invariant 4): if application fails nothing commits and the same page is
  * retried, so the cursor never runs ahead of applied data. The clock is
- * observed only after the commit, so a rollback cannot leave it advanced past
- * data the device did not actually store.
+ * checkpointed in that same transaction. A rollback may advance the in-memory
+ * clock harmlessly; it never makes the durable clock or cursor run ahead.
  */
 export async function applyPullPage(
   db: LibraryDatabase,
@@ -288,15 +217,18 @@ export async function applyPullPage(
       db.bookTags,
       db.sessions,
       db.progressConflicts,
+      db.deviceState,
       db.syncMeta,
     ],
     async () => {
       for (const change of changes) await applyChange(db, change);
       await syncMeta.setPullCursor(nextCursor);
+      for (const change of changes) {
+        const hlc = parseHlc(change.hlc);
+        if (hlc) clock.observe(hlc);
+      }
+      const last = clock.last();
+      if (last) await syncMeta.setClockState(last);
     },
   );
-  for (const change of changes) {
-    const hlc = parseHlc(change.hlc);
-    if (hlc) clock.observe(hlc);
-  }
 }

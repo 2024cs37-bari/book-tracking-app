@@ -1,3 +1,6 @@
+import { isNativeRuntime } from '~/storage/native-file-store';
+import { saveFile } from '~/storage/save-file';
+import { useLibraryRevision } from './use-library-revision';
 import { A, useNavigate, useParams } from '@solidjs/router';
 import { createMemo, createResource, createSignal, For, Show } from 'solid-js';
 import {
@@ -18,12 +21,16 @@ import { bookFileKey } from '~/storage/file-store';
 import { useApp } from '~/app/context';
 import BookCover from './BookCover';
 import { SupportNote, StatusBadge } from './badges';
+import Icon from './Icon';
+import Select from './Select';
+import '~/styles/details-refinement.css';
 
 interface DetailsData {
   readonly book: Book | undefined;
   readonly progress: Progress | undefined;
   /** Whether the original file is stored on this device (STORAGE.md §4). */
   readonly filePresent: boolean;
+  readonly pinnedOffline: boolean;
 }
 
 interface CollectionsData {
@@ -35,6 +42,7 @@ interface CollectionsData {
 
 export default function BookDetailsView() {
   const app = useApp();
+  const revision = useLibraryRevision();
   const params = useParams();
   const navigate = useNavigate();
   const [refreshToken, setRefreshToken] = createSignal(0);
@@ -45,22 +53,28 @@ export default function BookDetailsView() {
   const [form, setForm] = createSignal<MetadataForm>(EMPTY_FORM);
   const [newShelf, setNewShelf] = createSignal('');
   const [newTag, setNewTag] = createSignal('');
+  let editTrigger: HTMLButtonElement | undefined;
 
   const bookId = createMemo(() => params.id ?? '');
 
   const [details, { refetch }] = createResource<DetailsData, string>(
-    () => `${bookId()}:${refreshToken()}`,
+    () => `${bookId()}:${refreshToken()}:${revision()}`,
     async () => {
       const id = bookId();
-      const [book, progress] = await Promise.all([app.books.getById(id), app.progress.get(id)]);
+      const book = await app.books.getById(id);
+      if (book !== undefined && book.id !== id && bookId() === id) {
+        navigate(`/book/${book.id}`, { replace: true });
+      }
+      const progress = await app.progress.get(book?.id ?? id);
       const filePresent = book !== undefined && (await app.files.has(bookFileKey(book.sha256)));
-      return { book, progress, filePresent };
+      const state = await app.deviceState.get(id);
+      return { book, progress, filePresent, pinnedOffline: state?.pinnedOffline ?? false };
     },
   );
 
   const [collectionsToken, setCollectionsToken] = createSignal(0);
   const [collections] = createResource<CollectionsData, string>(
-    () => `${bookId()}:${collectionsToken()}`,
+    () => `${bookId()}:${collectionsToken()}:${revision()}`,
     async () => {
       const id = bookId();
       const [shelves, tags, shelfIds, tagIds] = await Promise.all([
@@ -79,22 +93,21 @@ export default function BookDetailsView() {
   );
 
   const [annotations] = createResource<readonly Annotation[], string>(
-    () => `${bookId()}:${refreshToken()}`,
+    () => `${bookId()}:${refreshToken()}:${revision()}`,
     () => app.annotations.listByBook(bookId()),
   );
 
-  function exportNotes(): void {
+  async function exportNotes(): Promise<void> {
     const title = details()?.book?.title ?? 'Untitled book';
     const markdown = buildNotesMarkdown(title, annotations() ?? [], Date.now());
-    const blob = new Blob([markdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = notesFilename(title);
-    anchor.rel = 'noopener';
-    anchor.click();
-    // Keep the blob alive until the download starts; see ExportService.download.
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    setBusy(true);
+    try {
+      await saveFile(new Blob([markdown], { type: 'text/markdown' }), notesFilename(title));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Notes could not be exported.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function withCollections(action: () => Promise<void>): Promise<void> {
@@ -201,6 +214,7 @@ export default function BookDetailsView() {
     setEditError(null);
     setMessage(null);
     setEditing(true);
+    queueMicrotask(() => document.getElementById('edit-title')?.focus());
   }
 
   function updateField<K extends keyof MetadataForm>(field: K, value: string): void {
@@ -232,6 +246,7 @@ export default function BookDetailsView() {
       setEditError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
+      if (!editing()) queueMicrotask(() => editTrigger?.focus());
     }
   }
 
@@ -245,8 +260,44 @@ export default function BookDetailsView() {
     setMessage(
       present
         ? 'The original file is present in local storage.'
-        : 'The original file is missing from local storage in this browser.',
+        : 'The original file is missing from local storage on this device.',
     );
+  }
+
+  async function pinBook(pinned: boolean): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await app.offline.setPinned(bookId(), pinned);
+      await refetch();
+      setMessage(
+        pinned
+          ? 'Pinned for offline reading on this device.'
+          : 'Unpinned. The original stays here until you free local space.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Pinning could not be updated.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveOriginal(): Promise<void> {
+    const book = details()?.book;
+    if (book === undefined) return;
+    setBusy(true);
+    try {
+      await app.offline.downloadOriginal(book.id);
+      setMessage(
+        isNativeRuntime()
+          ? 'Original file saved. Keep a copy on another device for recovery.'
+          : 'Original file download started. Keep it outside this browser for recovery.',
+      );
+    } catch (error) {
+      setMessage(`The original could not be exported: ${String(error)}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   // Back up the local original to sync (upload) or fetch a remote-only one
@@ -284,7 +335,9 @@ export default function BookDetailsView() {
   return (
     <section class="details">
       <p class="back-link">
-        <A href="/">← Library</A>
+        <A href="/" aria-label="Back to library">
+          <Icon name="arrow-left" size={17} /> Library
+        </A>
       </p>
 
       <Show when={details.error}>
@@ -299,77 +352,112 @@ export default function BookDetailsView() {
             when={data().book}
             fallback={
               <div class="empty-state">
-                <h2>Book not found</h2>
+                <h1>Book not found</h1>
                 <p>This book is no longer in the library.</p>
               </div>
             }
           >
             {(book) => (
               <article class="details-card">
-                <BookCover book={book()} variant="detail" />
-
-                <div class="details-body">
-                  <h2>{book().title}</h2>
-                  <dl class="details-list">
-                    <dt>Author</dt>
-                    <dd>{displayAuthor(book())}</dd>
-                    <dt>Format</dt>
-                    <dd>
-                      {formatLabel(book().format)} · {supportLabel(book().format)}
-                    </dd>
-                    <dt>Publisher</dt>
-                    <dd>{displayPublisher(book())}</dd>
-                    <Show when={book().language}>
-                      {(language) => (
-                        <>
-                          <dt>Language</dt>
-                          <dd>{language()}</dd>
-                        </>
-                      )}
-                    </Show>
-                    <Show when={book().isbn}>
-                      {(isbn) => (
-                        <>
-                          <dt>ISBN</dt>
-                          <dd>{isbn()}</dd>
-                        </>
-                      )}
-                    </Show>
+                <div class="details-cover-rail">
+                  <div class="details-cover-stage">
+                    <BookCover book={book()} variant="detail" />
+                  </div>
+                  <p class="details-cover-caption">
+                    {formatLabel(book().format)}
                     <Show when={book().pageCount}>
                       {(pages) => (
                         <>
-                          <dt>Pages</dt>
-                          <dd>{pages()}</dd>
+                          {' '}
+                          <span aria-hidden="true">·</span> {pages()} pages
                         </>
                       )}
                     </Show>
-                    <dt>Added</dt>
-                    <dd>{new Date(book().addedAt).toLocaleString()}</dd>
-                    <dt>Size</dt>
-                    <dd>{formatBytes(book().sizeBytes)}</dd>
-                    <dt>Content hash</dt>
-                    <dd class="mono">{book().sha256}</dd>
-                    <dt>Lifecycle</dt>
-                    <dd>{book().lifecycle}</dd>
-                    <dt>Reading state</dt>
-                    <dd>
-                      <Show when={data().progress} fallback={<span>Not started</span>}>
-                        {(progress) => (
-                          <span class="inline-group">
-                            <StatusBadge status={progress().status} />
-                            <span>{describeLocator(progress().locator)}</span>
-                            <Show when={progressFraction(progress()) > 0}>
-                              <span>
-                                {Math.round(progressFraction(progress()) * 100)}% complete
-                              </span>
-                            </Show>
-                          </span>
-                        )}
-                      </Show>
-                    </dd>
-                  </dl>
+                  </p>
+                </div>
 
-                  <SupportNote format={book().format} />
+                <div class="details-body">
+                  <header class="details-heading">
+                    <p class="details-eyebrow">
+                      Your library <span aria-hidden="true">/</span> {formatLabel(book().format)}
+                      <span aria-hidden="true">·</span>
+                      {supportLabel(book().format)}
+                    </p>
+                    <h1>{book().title}</h1>
+                    <p class="details-author">{displayAuthor(book())}</p>
+                    <Show when={book().lifecycle !== 'active'}>
+                      <p class="details-lifecycle">
+                        {book().lifecycle === 'archived'
+                          ? 'Archived in your library'
+                          : 'Marked as deleted'}
+                      </p>
+                    </Show>
+                  </header>
+                  <div class="details-actions details-primary-actions">
+                    <button
+                      type="button"
+                      class="button button-primary details-read"
+                      disabled={!app.renderers.has(book().format) || book().lifecycle === 'deleted'}
+                      onClick={() => navigate(`/read/${book().id}`)}
+                    >
+                      <Icon name="book" size={19} />
+                      {app.renderers.has(book().format) ? 'Read' : 'Reading not implemented'}
+                    </button>
+
+                    <Show when={!editing() && book().lifecycle !== 'deleted'}>
+                      <button
+                        type="button"
+                        class="button details-edit"
+                        disabled={busy()}
+                        ref={(element) => {
+                          editTrigger = element;
+                        }}
+                        onClick={() => startEditing(book())}
+                      >
+                        <Icon name="edit" size={16} /> Edit details
+                      </button>
+                    </Show>
+                  </div>
+                  <div class="details-reading">
+                    <Show when={book().lifecycle === 'active'}>
+                      <div class="field details-status-field">
+                        <label for="reading-status">Reading status</label>
+                        <Select
+                          id="reading-status"
+                          value={data().progress?.status ?? 'to_read'}
+                          disabled={busy()}
+                          onChange={(value) => void changeStatus(value)}
+                          options={READING_STATUSES.map((status) => ({
+                            value: status,
+                            label: statusLabel(status),
+                          }))}
+                        />
+                      </div>
+                    </Show>
+
+                    <Show when={data().progress}>
+                      {(progress) => (
+                        <div class="details-progress">
+                          <div class="details-progress-label">
+                            <span>Your progress</span>
+                            <span>{Math.round(progressFraction(progress()) * 100)}%</span>
+                          </div>
+                          <progress
+                            value={progressFraction(progress())}
+                            max="1"
+                            aria-label="Reading progress"
+                          />
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+                  <Show when={message()}>
+                    {(text) => (
+                      <p class="note" role="status">
+                        {text()}
+                      </p>
+                    )}
+                  </Show>
 
                   <Show when={book().metadataIncomplete}>
                     <p class="note note-warning">
@@ -377,239 +465,6 @@ export default function BookDetailsView() {
                       come from the filename. Use “Edit details” to correct it.
                     </p>
                   </Show>
-
-                  <section class="annotations-review">
-                    <h3>Notes &amp; highlights</h3>
-                    <Show
-                      when={(annotations() ?? []).length > 0}
-                      fallback={
-                        <p class="note">
-                          No bookmarks, highlights or notes yet. Add them while reading.
-                        </p>
-                      }
-                    >
-                      <div class="panel-actions">
-                        <button type="button" class="button" onClick={() => exportNotes()}>
-                          Export notes as Markdown
-                        </button>
-                      </div>
-                      <ul class="annotation-review-list">
-                        <For each={annotations() ?? []}>
-                          {(annotation) => (
-                            <li class="annotation-review-row">
-                              <span class="annotation-review-head">
-                                <span class="reader-annotation-kind">
-                                  {annotation.kind === 'highlight'
-                                    ? 'Highlight'
-                                    : annotation.kind === 'note'
-                                      ? 'Note'
-                                      : 'Bookmark'}
-                                </span>{' '}
-                                {Math.round(annotation.locator.fraction * 100)}%
-                              </span>
-                              <Show when={annotation.textExcerpt}>
-                                {(excerpt) => (
-                                  <blockquote class="annotation-review-excerpt">
-                                    {excerpt()}
-                                  </blockquote>
-                                )}
-                              </Show>
-                              <Show when={annotation.note}>
-                                {(note) => <p class="annotation-review-note">{note()}</p>}
-                              </Show>
-                            </li>
-                          )}
-                        </For>
-                      </ul>
-                    </Show>
-                  </section>
-
-                  <section class="collections">
-                    <h3>Collections</h3>
-                    <Show when={collections()} fallback={<p class="note">Loading collections…</p>}>
-                      {(data) => (
-                        <>
-                          <div class="collections-group">
-                            <h4>Shelves</h4>
-                            <Show
-                              when={data().shelves.length > 0}
-                              fallback={<p class="note">No shelves yet. Create one below.</p>}
-                            >
-                              <ul class="chip-list">
-                                <For each={data().shelves}>
-                                  {(shelf) => (
-                                    <li>
-                                      <label class="chip">
-                                        <input
-                                          type="checkbox"
-                                          checked={data().shelfIds.has(shelf.id)}
-                                          disabled={busy()}
-                                          onChange={(event) =>
-                                            void toggleShelf(shelf.id, event.currentTarget.checked)
-                                          }
-                                        />
-                                        {shelf.name}
-                                      </label>
-                                    </li>
-                                  )}
-                                </For>
-                              </ul>
-                            </Show>
-                            <form
-                              class="inline-form"
-                              onSubmit={(event) => {
-                                event.preventDefault();
-                                void createShelfForBook(newShelf());
-                                setNewShelf('');
-                              }}
-                            >
-                              <input
-                                type="text"
-                                aria-label="New shelf name"
-                                placeholder="New shelf…"
-                                value={newShelf()}
-                                disabled={busy()}
-                                onInput={(event) => setNewShelf(event.currentTarget.value)}
-                              />
-                              <button
-                                type="submit"
-                                class="button"
-                                disabled={busy() || newShelf().trim() === ''}
-                              >
-                                Add shelf
-                              </button>
-                            </form>
-                          </div>
-
-                          <div class="collections-group">
-                            <h4>Tags</h4>
-                            <Show
-                              when={
-                                data().tags.filter((tag) => data().tagIds.has(tag.id)).length > 0
-                              }
-                              fallback={<p class="note">No tags on this book yet.</p>}
-                            >
-                              <ul class="chip-list">
-                                <For each={data().tags.filter((tag) => data().tagIds.has(tag.id))}>
-                                  {(tag) => (
-                                    <li>
-                                      <span class="chip chip-active">
-                                        {tag.name}
-                                        <button
-                                          type="button"
-                                          class="chip-remove"
-                                          aria-label={`Remove tag ${tag.name}`}
-                                          disabled={busy()}
-                                          onClick={() => void toggleTag(tag.id, false)}
-                                        >
-                                          ×
-                                        </button>
-                                      </span>
-                                    </li>
-                                  )}
-                                </For>
-                              </ul>
-                            </Show>
-                            <Show when={data().tags.some((tag) => !data().tagIds.has(tag.id))}>
-                              <ul class="chip-list">
-                                <For each={data().tags.filter((tag) => !data().tagIds.has(tag.id))}>
-                                  {(tag) => (
-                                    <li>
-                                      <button
-                                        type="button"
-                                        class="chip chip-add"
-                                        disabled={busy()}
-                                        onClick={() => void toggleTag(tag.id, true)}
-                                      >
-                                        + {tag.name}
-                                      </button>
-                                    </li>
-                                  )}
-                                </For>
-                              </ul>
-                            </Show>
-                            <form
-                              class="inline-form"
-                              onSubmit={(event) => {
-                                event.preventDefault();
-                                void addTagForBook(newTag());
-                                setNewTag('');
-                              }}
-                            >
-                              <input
-                                type="text"
-                                aria-label="New tag"
-                                placeholder="New tag…"
-                                value={newTag()}
-                                disabled={busy()}
-                                onInput={(event) => setNewTag(event.currentTarget.value)}
-                              />
-                              <button
-                                type="submit"
-                                class="button"
-                                disabled={busy() || newTag().trim() === ''}
-                              >
-                                Add tag
-                              </button>
-                            </form>
-                          </div>
-                        </>
-                      )}
-                    </Show>
-                  </section>
-
-                  <div class="details-actions">
-                    <button
-                      type="button"
-                      class="button button-primary"
-                      disabled={!app.renderers.has(book().format) || book().lifecycle === 'deleted'}
-                      onClick={() => navigate(`/read/${book().id}`)}
-                    >
-                      {app.renderers.has(book().format) ? 'Read' : 'Reading not implemented'}
-                    </button>
-
-                    <Show when={book().lifecycle === 'active'}>
-                      <button
-                        type="button"
-                        class="button"
-                        disabled={busy()}
-                        onClick={() => void changeLifecycle('archive')}
-                      >
-                        Archive
-                      </button>
-                    </Show>
-
-                    <Show when={book().lifecycle !== 'active'}>
-                      <button
-                        type="button"
-                        class="button"
-                        disabled={busy()}
-                        onClick={() => void changeLifecycle('restore')}
-                      >
-                        Restore to library
-                      </button>
-                    </Show>
-
-                    <button
-                      type="button"
-                      class="button button-danger"
-                      disabled={busy() || book().lifecycle === 'deleted'}
-                      onClick={() => void changeLifecycle('delete')}
-                    >
-                      Mark as deleted
-                    </button>
-
-                    <Show when={!editing() && book().lifecycle !== 'deleted'}>
-                      <button
-                        type="button"
-                        class="button"
-                        disabled={busy()}
-                        onClick={() => startEditing(book())}
-                      >
-                        Edit details
-                      </button>
-                    </Show>
-                  </div>
 
                   <Show when={editing()}>
                     <form
@@ -619,7 +474,7 @@ export default function BookDetailsView() {
                         void saveEditing();
                       }}
                     >
-                      <h3>Edit details</h3>
+                      <h2>Edit details</h2>
                       <div class="field">
                         <label for="edit-title">Title</label>
                         <input
@@ -704,6 +559,7 @@ export default function BookDetailsView() {
                           onClick={() => {
                             setEditing(false);
                             setEditError(null);
+                            queueMicrotask(() => editTrigger?.focus());
                           }}
                         >
                           Cancel
@@ -712,39 +568,305 @@ export default function BookDetailsView() {
                     </form>
                   </Show>
 
-                  <Show when={book().lifecycle === 'active'}>
-                    <div class="field">
-                      <label for="reading-status">Reading status</label>
-                      <select
-                        id="reading-status"
-                        value={data().progress?.status ?? 'to_read'}
-                        disabled={busy()}
-                        onChange={(event) =>
-                          void changeStatus(
-                            event.currentTarget.value as (typeof READING_STATUSES)[number],
-                          )
-                        }
-                      >
-                        <For each={READING_STATUSES}>
-                          {(status) => <option value={status}>{statusLabel(status)}</option>}
-                        </For>
-                      </select>
+                  <details class="details-edition">
+                    <summary>
+                      <span>Book details</span>
+                      <Icon name="chevron-down" size={17} />
+                    </summary>
+                    <dl class="details-list">
+                      <dt>Author</dt>
+                      <dd>{displayAuthor(book())}</dd>
+                      <dt>Format</dt>
+                      <dd>
+                        {formatLabel(book().format)} · {supportLabel(book().format)}
+                      </dd>
+                      <dt>Publisher</dt>
+                      <dd>{displayPublisher(book())}</dd>
+                      <Show when={book().language}>
+                        {(language) => (
+                          <>
+                            <dt>Language</dt>
+                            <dd>{language()}</dd>
+                          </>
+                        )}
+                      </Show>
+                      <Show when={book().isbn}>
+                        {(isbn) => (
+                          <>
+                            <dt>ISBN</dt>
+                            <dd>{isbn()}</dd>
+                          </>
+                        )}
+                      </Show>
+                      <Show when={book().pageCount}>
+                        {(pages) => (
+                          <>
+                            <dt>Pages</dt>
+                            <dd>{pages()}</dd>
+                          </>
+                        )}
+                      </Show>
+                      <dt>Added</dt>
+                      <dd>{new Date(book().addedAt).toLocaleString()}</dd>
+                      <dt>Size</dt>
+                      <dd>{formatBytes(book().sizeBytes)}</dd>
+                      <dt>Content hash</dt>
+                      <dd class="mono">{book().sha256}</dd>
+                      <dt>Lifecycle</dt>
+                      <dd>{book().lifecycle}</dd>
+                      <dt>Reading state</dt>
+                      <dd>
+                        <Show when={data().progress} fallback={<span>Not started</span>}>
+                          {(progress) => (
+                            <span class="inline-group">
+                              <StatusBadge status={progress().status} />
+                              <span>{describeLocator(progress().locator)}</span>
+                              <Show when={progressFraction(progress()) > 0}>
+                                <span>
+                                  {Math.round(progressFraction(progress()) * 100)}% complete
+                                </span>
+                              </Show>
+                            </span>
+                          )}
+                        </Show>
+                      </dd>
+                    </dl>
+                    <SupportNote format={book().format} />
+                  </details>
+                  <section class="annotations-review">
+                    <div class="details-section-heading">
+                      <h2>Notes &amp; highlights</h2>
+                      <span class="details-count">{(annotations() ?? []).length}</span>
                     </div>
-                  </Show>
+                    <Show
+                      when={(annotations() ?? []).length > 0}
+                      fallback={
+                        <p class="note">
+                          No bookmarks, highlights or notes yet. Add them while reading.
+                        </p>
+                      }
+                    >
+                      <div class="panel-actions">
+                        <button
+                          type="button"
+                          class="button"
+                          disabled={busy()}
+                          onClick={() => void exportNotes()}
+                        >
+                          <Icon name="download" size={16} /> Export notes as Markdown
+                        </button>
+                      </div>
+                      <ul class="annotation-review-list">
+                        <For each={annotations() ?? []}>
+                          {(annotation) => (
+                            <li class="annotation-review-row">
+                              <span class="annotation-review-head">
+                                <span class="reader-annotation-kind">
+                                  {annotation.kind === 'highlight'
+                                    ? 'Highlight'
+                                    : annotation.kind === 'note'
+                                      ? 'Note'
+                                      : 'Bookmark'}
+                                </span>{' '}
+                                {Math.round(annotation.locator.fraction * 100)}%
+                              </span>
+                              <Show when={annotation.textExcerpt}>
+                                {(excerpt) => (
+                                  <blockquote class="annotation-review-excerpt">
+                                    {excerpt()}
+                                  </blockquote>
+                                )}
+                              </Show>
+                              <Show when={annotation.note}>
+                                {(note) => <p class="annotation-review-note">{note()}</p>}
+                              </Show>
+                            </li>
+                          )}
+                        </For>
+                      </ul>
+                    </Show>
+                  </section>
+
+                  <section class="collections">
+                    <div class="details-section-heading">
+                      <h2>Collections</h2>
+                      <span class="details-section-caption">Make it yours</span>
+                    </div>
+                    <Show when={collections()} fallback={<p class="note">Loading collections…</p>}>
+                      {(data) => (
+                        <>
+                          <div class="collections-group">
+                            <h3>Shelves</h3>
+                            <Show
+                              when={data().shelves.length > 0}
+                              fallback={<p class="note">No shelves yet. Create one below.</p>}
+                            >
+                              <ul class="chip-list">
+                                <For each={data().shelves}>
+                                  {(shelf) => (
+                                    <li>
+                                      <label class="chip">
+                                        <input
+                                          type="checkbox"
+                                          checked={data().shelfIds.has(shelf.id)}
+                                          disabled={busy()}
+                                          onChange={(event) =>
+                                            void toggleShelf(shelf.id, event.currentTarget.checked)
+                                          }
+                                        />
+                                        {shelf.name}
+                                      </label>
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </Show>
+                            <form
+                              class="inline-form"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void createShelfForBook(newShelf());
+                                setNewShelf('');
+                              }}
+                            >
+                              <input
+                                type="text"
+                                aria-label="New shelf name"
+                                placeholder="New shelf…"
+                                value={newShelf()}
+                                disabled={busy()}
+                                onInput={(event) => setNewShelf(event.currentTarget.value)}
+                              />
+                              <button
+                                type="submit"
+                                class="button"
+                                disabled={busy() || newShelf().trim() === ''}
+                              >
+                                <Icon name="plus" size={16} /> Add shelf
+                              </button>
+                            </form>
+                          </div>
+
+                          <div class="collections-group">
+                            <h3>Tags</h3>
+                            <Show
+                              when={
+                                data().tags.filter((tag) => data().tagIds.has(tag.id)).length > 0
+                              }
+                              fallback={<p class="note">No tags on this book yet.</p>}
+                            >
+                              <ul class="chip-list">
+                                <For each={data().tags.filter((tag) => data().tagIds.has(tag.id))}>
+                                  {(tag) => (
+                                    <li>
+                                      <span class="chip chip-active">
+                                        {tag.name}
+                                        <button
+                                          type="button"
+                                          class="chip-remove"
+                                          aria-label={`Remove tag ${tag.name}`}
+                                          disabled={busy()}
+                                          onClick={() => void toggleTag(tag.id, false)}
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </Show>
+                            <Show when={data().tags.some((tag) => !data().tagIds.has(tag.id))}>
+                              <ul class="chip-list">
+                                <For each={data().tags.filter((tag) => !data().tagIds.has(tag.id))}>
+                                  {(tag) => (
+                                    <li>
+                                      <button
+                                        type="button"
+                                        class="chip chip-add"
+                                        disabled={busy()}
+                                        onClick={() => void toggleTag(tag.id, true)}
+                                      >
+                                        + {tag.name}
+                                      </button>
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </Show>
+                            <form
+                              class="inline-form"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void addTagForBook(newTag());
+                                setNewTag('');
+                              }}
+                            >
+                              <input
+                                type="text"
+                                aria-label="New tag"
+                                placeholder="New tag…"
+                                value={newTag()}
+                                disabled={busy()}
+                                onInput={(event) => setNewTag(event.currentTarget.value)}
+                              />
+                              <button
+                                type="submit"
+                                class="button"
+                                disabled={busy() || newTag().trim() === ''}
+                              >
+                                <Icon name="plus" size={16} /> Add tag
+                              </button>
+                            </form>
+                          </div>
+                        </>
+                      )}
+                    </Show>
+                  </section>
 
                   <section class="file-availability">
-                    <h3>File</h3>
+                    <div class="details-section-heading">
+                      <h2>On this device</h2>
+                      <span
+                        class="details-availability-dot"
+                        classList={{ available: data().filePresent }}
+                        aria-hidden="true"
+                      />
+                    </div>
                     <p class="note">
                       {data().filePresent
                         ? 'The original is available offline on this device.'
                         : 'The original is not stored on this device.'}
                     </p>
+                    <Show when={data().filePresent}>
+                      <div class="panel-actions">
+                        <button
+                          type="button"
+                          class="button"
+                          disabled={busy() || !app.files.durable}
+                          aria-pressed={data().pinnedOffline}
+                          onClick={() => void pinBook(!data().pinnedOffline)}
+                        >
+                          <Icon name="bookmark" size={16} />{' '}
+                          {data().pinnedOffline ? 'Unpin offline copy' : 'Pin for offline reading'}
+                        </button>
+                        <button
+                          type="button"
+                          class="button"
+                          disabled={busy()}
+                          onClick={() => void saveOriginal()}
+                        >
+                          <Icon name="download" size={16} /> Save original file
+                        </button>
+                      </div>
+                    </Show>
                     <Show
                       when={app.fileTransfer !== null}
                       fallback={
                         <p class="note">
-                          Configure sync to back up the original and download it on your other
-                          devices.
+                          {isNativeRuntime()
+                            ? 'This desktop build keeps your library locally. Use portable backups to move it between devices.'
+                            : 'Configure sync to back up the original and download it on your other devices.'}
                         </p>
                       }
                     >
@@ -783,13 +905,48 @@ export default function BookDetailsView() {
                     </details>
                   </section>
 
-                  <Show when={message()}>
-                    {(text) => (
-                      <p class="note" role="status">
-                        {text()}
-                      </p>
-                    )}
-                  </Show>
+                  <details class="details-management">
+                    <summary>
+                      <span>Manage book</span>
+                      <Icon name="chevron-down" size={17} />
+                    </summary>
+                    <p class="note">
+                      Archive to set this book aside, or mark its metadata as deleted. Your original
+                      file is kept.
+                    </p>
+                    <div class="details-actions">
+                      <Show when={book().lifecycle === 'active'}>
+                        <button
+                          type="button"
+                          class="button"
+                          disabled={busy()}
+                          onClick={() => void changeLifecycle('archive')}
+                        >
+                          Archive
+                        </button>
+                      </Show>
+
+                      <Show when={book().lifecycle !== 'active'}>
+                        <button
+                          type="button"
+                          class="button"
+                          disabled={busy()}
+                          onClick={() => void changeLifecycle('restore')}
+                        >
+                          Restore to library
+                        </button>
+                      </Show>
+
+                      <button
+                        type="button"
+                        class="button button-danger"
+                        disabled={busy() || book().lifecycle === 'deleted'}
+                        onClick={() => void changeLifecycle('delete')}
+                      >
+                        Mark as deleted
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </article>
             )}

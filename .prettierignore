@@ -4,6 +4,7 @@ docs/archive/
 # Dependencies and build output
 node_modules/
 dist/
+dist-desktop/
 coverage/
 
 # Lockfiles are generated
@@ -11,3 +12,19 @@ package-lock.json
 vendor/
 test-results/
 playwright-report/
+
+# Local tool state and generated Worker bundles
+.zcode/
+.claude/
+server/.wrangler/
+
+# Isolated production bundle for browser regressions
+.browser-test-dist/
+.sync-test-dist/
+.accessibility-test-results/
+.sync-test-results/
+src-tauri/target/
+src-tauri/gen/
+
+# Native desktop bundle
+dist-desktop/

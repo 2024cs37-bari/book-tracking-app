@@ -68,7 +68,7 @@ export async function extractBookMetadata(
     );
   } else if (support === 'experimental') {
     warnings.push(
-      `${input.format.toUpperCase()} reading support is experimental and has not been validated against a test corpus.`,
+      `${input.format.toUpperCase()} reading support is experimental; some files or layouts may not render correctly.`,
     );
   }
 

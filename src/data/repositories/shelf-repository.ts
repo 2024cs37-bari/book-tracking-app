@@ -1,3 +1,4 @@
+import { resolveBookId } from '~/sync/identity';
 import { AppError } from '~/domain/errors';
 import { formatHlc } from '~/domain/hlc';
 import { newId } from '~/domain/ids';
@@ -81,16 +82,25 @@ export class ShelfRepository {
   }
 
   async listShelfIdsForBook(bookId: string): Promise<string[]> {
-    const rows = await this.db.shelfBooks.where('bookId').equals(bookId).toArray();
-    const activeIds = rows.filter(isMembershipActive).map((row) => row.shelfId);
-    if (activeIds.length === 0) return [];
-    // Drop memberships whose shelf was deleted, so a tombstoned shelf never
-    // surfaces through a reverse lookup.
-    const shelves = await this.db.shelves.bulkGet(activeIds);
-    return activeIds.filter((_, index) => {
-      const shelf = shelves[index];
-      return shelf !== undefined && !shelf.deleted;
-    });
+    return this.db.transaction(
+      'r',
+      [this.db.shelfBooks, this.db.shelves, this.db.syncMeta],
+      async () => {
+        const rows = await this.db.shelfBooks
+          .where('bookId')
+          .equals(await resolveBookId(this.db, bookId))
+          .toArray();
+        const activeIds = rows.filter(isMembershipActive).map((row) => row.shelfId);
+        if (activeIds.length === 0) return [];
+        // Drop memberships whose shelf was deleted, so a tombstoned shelf never
+        // surfaces through a reverse lookup.
+        const shelves = await this.db.shelves.bulkGet(activeIds);
+        return activeIds.filter((_, index) => {
+          const shelf = shelves[index];
+          return shelf !== undefined && !shelf.deleted;
+        });
+      },
+    );
   }
 
   private async requireShelf(id: string): Promise<ShelfRow> {
@@ -107,7 +117,9 @@ export class ShelfRepository {
       this.db.shelves,
       this.db.shelfBooks,
       this.db.changes,
+      this.db.syncMeta,
       async () => {
+        bookId = await resolveBookId(this.db, bookId);
         await this.requireShelf(shelfId);
         const hlc = formatHlc(this.context.clock.next());
         const existing = await this.db.shelfBooks.get([shelfId, bookId]);

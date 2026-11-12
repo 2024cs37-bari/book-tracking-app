@@ -1,0 +1,446 @@
+/* Book detail: a cover, a reading invitation, and a quieter reference section. */
+.details {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-bottom: 3rem;
+}
+.details .back-link {
+  margin: 0 0 2.5rem;
+}
+.details .back-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  text-decoration: none;
+}
+.details .back-link a:hover {
+  color: var(--text);
+}
+.details .details-card {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(0, 1.5fr);
+  gap: clamp(2rem, 5vw, 5.5rem);
+  align-items: start;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.details-cover-rail {
+  position: sticky;
+  top: 2rem;
+  min-width: 0;
+}
+.details-cover-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 370px;
+  padding: 2.25rem 1.5rem;
+  background: var(--surface-sunken);
+  border-radius: 5px;
+}
+.details .cover-detail {
+  width: min(100%, 214px);
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 2 / 3;
+  border: 0;
+  border-radius: 2px 5px 5px 2px;
+  box-shadow:
+    -2px 0 0 color-mix(in srgb, var(--text) 16%, transparent),
+    8px 12px 20px #24261c20;
+}
+.details .cover-detail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.details-cover-caption {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+}
+.details .details-body {
+  min-width: 0;
+}
+.details-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0 0 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.details .details-heading h1 {
+  margin: 0;
+  max-width: 20ch;
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: clamp(2rem, 3.6vw, 3.4rem);
+  font-weight: 400;
+  line-height: 1.13;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.details-author {
+  margin: 0.85rem 0 0;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+.details-lifecycle {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.details .details-primary-actions {
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1.8rem 0;
+}
+.details .details-read {
+  min-height: 46px;
+  min-width: 132px;
+  gap: 0.65rem;
+}
+.details .details-edit {
+  color: var(--text-muted);
+}
+.details .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.details-reading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 1.8rem;
+  padding: 0 0 1.6rem;
+}
+.details .details-status-field {
+  margin: 0;
+}
+.details .details-status-field label,
+.details-progress-label {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 400;
+}
+.details .details-status-field .select-trigger {
+  width: 100%;
+  min-height: 39px;
+  padding: 0.4rem 0.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background-color: transparent;
+  font-size: 0.86rem;
+}
+.details .details-status-field .select-trigger:hover,
+.details .details-status-field .select-trigger[aria-expanded='true'] {
+  background: var(--surface-sunken);
+}
+.details-progress {
+  padding-bottom: 0.45rem;
+}
+.details-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+.details-progress progress {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  accent-color: var(--accent);
+  background: var(--surface-sunken);
+}
+.details-progress progress::-webkit-progress-bar {
+  background: var(--surface-sunken);
+}
+.details-progress progress::-webkit-progress-value {
+  background: var(--accent);
+}
+.details-progress progress::-moz-progress-bar {
+  background: var(--accent);
+}
+.details .details-body > .note {
+  font-size: 0.82rem;
+}
+.details-edition,
+.details-management {
+  padding: 1rem 0;
+  border-top: 1px solid var(--border);
+}
+.details-edition > summary,
+.details-management > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+.details-edition > summary::-webkit-details-marker,
+.details-management > summary::-webkit-details-marker {
+  display: none;
+}
+.details-edition > summary svg,
+.details-management > summary svg {
+  transition: transform 160ms ease;
+}
+.details-edition[open] > summary svg,
+.details-management[open] > summary svg {
+  transform: rotate(180deg);
+}
+.details .details-list {
+  grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr);
+  gap: 0.75rem 1.25rem;
+  padding-top: 1.25rem;
+  margin: 0;
+  font-size: 0.83rem;
+}
+.details .details-list dt {
+  font-size: inherit;
+}
+.details .details-list .mono {
+  font-size: 0.68rem;
+}
+.details .details-body h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.details-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.details-count {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.details-section-caption {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.details .annotations-review,
+.details .collections,
+.details .file-availability {
+  margin: 0;
+  padding: 1.65rem 0;
+  border-top: 1px solid var(--border);
+}
+.details .annotations-review .note,
+.details .collections .note,
+.details .file-availability .note,
+.details-management .note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.details .annotations-review .panel-actions {
+  margin: -0.35rem 0 0.8rem;
+}
+.details .annotations-review .button {
+  font-size: 0.76rem;
+  padding-left: 0;
+}
+.details .annotation-review-row {
+  padding: 1rem 0;
+  border-color: var(--border);
+}
+.details .annotation-review-row:last-child {
+  border: 0;
+  padding-bottom: 0;
+}
+.details .annotation-review-head {
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+.details .annotation-review-excerpt {
+  margin: 0.6rem 0;
+  padding-left: 1rem;
+  border-left-width: 2px;
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+.details .annotation-review-note {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.details .collections-group {
+  margin: 1.3rem 0 0;
+}
+.details .collections-group h3 {
+  margin-bottom: 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.details .chip {
+  min-height: 32px;
+  padding: 0.2rem 0.65rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  font-size: 0.78rem;
+}
+.details .chip:has(input:checked),
+.details .chip-active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent-ink, var(--accent));
+}
+.details .chip-add {
+  background: transparent;
+}
+.details .chip input {
+  accent-color: var(--accent);
+}
+.details .chip-remove {
+  min-width: 26px;
+  min-height: 28px;
+}
+.details .inline-form {
+  align-items: center;
+  margin-top: 0.6rem;
+  gap: 0.5rem;
+}
+.details .inline-form input {
+  flex: 1 1 9rem;
+  min-width: 0;
+  padding: 0.55rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.8rem;
+}
+.details .inline-form .button {
+  font-size: 0.76rem;
+}
+.details .file-availability .panel-actions {
+  gap: 0.25rem;
+  margin: 0.75rem 0;
+}
+.details .file-availability .button {
+  padding-left: 0;
+  padding-right: 1rem;
+  font-size: 0.78rem;
+}
+.details .file-availability .button-primary {
+  padding-left: 1rem;
+}
+.details-availability-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.details-availability-dot.available {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.details .diagnostics {
+  margin-top: 1.15rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+.details .diagnostics summary {
+  font-weight: 400;
+}
+.details .metadata-form {
+  margin: 0 0 1.5rem;
+  padding: 1.5rem;
+  background: var(--surface-sunken);
+  border: 0;
+  border-radius: 6px;
+}
+.details .metadata-form h2 {
+  margin-bottom: 1.25rem;
+}
+.details .metadata-form .details-actions {
+  margin: 1.2rem 0 0;
+}
+.details-management .details-actions {
+  margin: 1rem 0 0;
+}
+@media (max-width: 680px) {
+  .details .back-link {
+    margin-bottom: 1.5rem;
+  }
+  .details .details-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.7rem;
+  }
+  .details-cover-rail {
+    position: static;
+  }
+  .details-cover-stage {
+    min-height: 0;
+    padding: 1.8rem;
+  }
+  .details .cover-detail {
+    width: 146px;
+  }
+  .details-cover-caption {
+    margin-top: 0.65rem;
+  }
+  .details .details-heading h1 {
+    max-width: none;
+    font-size: 2.25rem;
+  }
+  .details-reading {
+    gap: 1.25rem;
+  }
+  .details .details-primary-actions {
+    margin: 1.4rem 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .details-edition > summary svg,
+  .details-management > summary svg {
+    transition: none;
+  }
+}
+
+/* These are supporting sentences, not alerts or independent cards. */
+.details .annotations-review .note,
+.details .collections .note,
+.details .file-availability > .note,
+.details-management > .note {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.details-edition .note-warning {
+  margin-bottom: 0;
+  font-size: 0.78rem;
+}
+@media (max-width: 680px) {
+  .details .cover-detail .cover-placeholder-title {
+    font-size: 1.15rem;
+  }
+}

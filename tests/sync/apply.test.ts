@@ -171,7 +171,7 @@ describe('applyPullPage', () => {
           bookId: 'b1',
           kind: 'bookmark',
           locatorKind: 'cfi',
-          locatorValue: 'x',
+          locatorValue: 'epubcfi(/6/2!/4/2)',
           fraction: 0.1,
           createdHlc: hlc(100, 0),
           updatedHlc: hlc(100, 0),
@@ -188,7 +188,7 @@ describe('applyPullPage', () => {
           bookId: 'b1',
           kind: 'bookmark',
           locatorKind: 'cfi',
-          locatorValue: 'x',
+          locatorValue: 'epubcfi(/6/2!/4/2)',
           fraction: 0.1,
           createdHlc: hlc(100, 0),
           updatedHlc: hlc(200, 0),
@@ -252,7 +252,7 @@ describe('applyPullPage', () => {
       updatedHlc: hlc(100, 0),
       deviceId: 'local',
       locatorKind: 'cfi',
-      locatorValue: 'L',
+      locatorValue: 'epubcfi(/6/2!/4/2)',
     });
     await apply(
       [
@@ -263,7 +263,7 @@ describe('applyPullPage', () => {
           updatedHlc: hlc(200, 0),
           deviceId: 'remote',
           locatorKind: 'cfi',
-          locatorValue: 'R',
+          locatorValue: 'epubcfi(/6/8!/4/2)',
         }),
       ],
       1,

@@ -1,163 +1,131 @@
 # Personal Book Reader
 
-Offline-first, cross-device reading and library management for one person.
+A private, single-user book library and EPUB/PDF reader that works offline. Import original books,
+organize them, resume reading, and keep annotations and reading history on your devices.
 
-> **Project status:** Phase 1 (local reader MVP) in progress. Import, storage, metadata and the
-> library UI work end to end. The reader milestone adds local EPUB/PDF reading and offline resume.
-> Both formats remain experimental pending real-file corpus validation.
+**Status:** active development and hardening. The local library and reader, collections, annotations,
+backup/recovery, sync client and Cloudflare backend are implemented. Production deployment and
+physical mobile-device validation are separate release prerequisites. EPUB/PDF support remains
+experimental against the documented corpus; importing another format does not make it readable.
+See [Development record](docs/DEVELOPMENT.md) for current evidence and remaining work.
 
-Personal Book Reader keeps a private book collection readable and recoverable across web, mobile PWA
-and desktop without making the network a dependency. Local storage is the source of truth for the
-interface; Cloudflare provides synchronization and durable file storage in later phases.
+## Capabilities
 
-## What works today
+- Import EPUB, PDF, MOBI, AZW3, FB2 and CBZ; detect content rather than trusting extensions.
+- Preserve original bytes under SHA-256 identities, deduplicate imports, and repair missing or
+  corrupted local originals by re-importing the same file without replacing your metadata.
+- Extract available metadata and covers; edit details; search, sort and filter by status, format,
+  shelf or tag; rename collections; archive and restore books; retain recoverable tombstones for metadata deletion.
+- Read EPUB/PDF with contents, search, stable progress, themes, font sizing/PDF zoom, keyboard
+  navigation and a resizable sidebar. Add bookmarks, notes and text-selection highlights, with
+  visible feedback when the current renderer cannot resolve a saved annotation anchor.
+- Use read-aloud controls where browser speech is available. Optional online English definitions
+  require consent and send only the selected word to dictionaryapi.dev.
+- View reading time, books finished, daily activity/last positions and streaks derived from saved sessions.
+- Pin verified originals locally, save individual originals, and free eligible cached copies in
+  least-recently-used order after verifying a remote copy. Open/pinned books remain protected.
+- Export metadata as JSON and annotations as Markdown. Portable ZIP backups include verified
+  original files; recovery validates a preview before adding missing data and preserves existing
+  records. See [Backup and recovery](docs/BACKUP.md) for size limits and exact merge rules.
+- Run metadata sync and file transfers in the background when a server is configured, with visible
+  state, bounded work, retries, pause/resume, progress conflicts and recoverable queues.
+- Cache the production app shell for offline reload. PWA updates wait for existing windows to
+  close rather than interrupting an active reader.
 
-- **Import** EPUB, PDF, MOBI, AZW3, FB2 and CBZ files through the file picker.
-- **Content-addressed storage**: files are hashed with a streaming SHA-256 and stored under that
-  hash, so re-importing identical bytes links to the existing book instead of duplicating it.
-- **Durable file fallback**: OPFS is preferred; browsers which fail its write probe use a separate
-  IndexedDB byte-buffer store. Memory is an explicitly reported last resort.
-- **Metadata extraction** from the EPUB package document (title, author, language, publisher, ISBN,
-  cover) and, best-effort, from the PDF information dictionary (title, author, page count). Files
-  with unreadable metadata are still imported, with the title derived from the filename and flagged
-  as incomplete.
-- **Format detection by content** rather than extension, including distinguishing KF8 (AZW3) from
-  older MOBI.
-- **Library view** with search across title/author/publisher/ISBN, sorting, reading status, and
-  status editing.
-- **Local persistence** in IndexedDB with an outbox: every mutation is written together with a change
-  record, ready for the sync engine.
-- **Lifecycle management**: archive and restore, plus soft delete with tombstones. Nothing removes
-  original bytes implicitly.
-- **Storage reconciliation** that reports unreferenced files and books missing their local file, with
-  an explicit cleanup action.
-- **JSON export** of library metadata, generated entirely on the client.
-- **Reader** at `/read/:id`: EPUB via pinned upstream foliate-js, PDF via pdf.js directly,
-  previous/next navigation, font size/PDF zoom, line height, margins and themes.
-- **EPUB contents**: nested EPUB 2 NCX / EPUB 3 navigation entries, keyboard-accessible chapter
-  and fragment jumps, with unavailable destinations disabled.
-- **Progress**: EPUB CFI or zero-based PDF page/vertical offset plus normalized fraction,
-  debounced local saves with an atomic outbox row, and restoration on reopen.
-- **Offline app shell** in production builds: service-worker precache includes renderer modules,
-  PDF worker, fonts and decoding assets. Book bytes remain in the file store.
-- **Content security policy**: app scripts restricted to self; EPUB content gets a stricter
-  no-script/no-network policy before rendering. A hostile generated EPUB is browser-tested.
+## Run locally
 
-## What is deliberately not implemented yet
-
-- No sync, no server, no accounts. The outbox grows locally and is reported in Settings.
-- No annotations, shelves, tags, statistics, or selective offline pinning.
-- No PDF outline or in-book search. Real-file EPUB/PDF corpus and mobile memory profiling remain
-  limited to selected upstream samples and desktop mobile-sized measurements. Physical-device
-  profiling and a broader corpus remain pending. See [Reader validation](docs/READER-VALIDATION.md).
-- Oversized PDF source images fail visibly at the decode limit; they are not silently treated as
-  readable blank pages. Valid pages remain navigable and failed pages do not overwrite progress.
-- MOBI/AZW3 are importable but unvalidated for reading; FB2/CBZ are importable with reading
-  explicitly marked as unimplemented.
-- DRM-protected books are unsupported and always will be.
-
-## Getting started
-
-Requires Node.js 20.19 or newer.
+Requires Node.js 20.19+; CI uses Node 22. Use a current supported Node LTS for development.
 
 ```bash
-npm install
-npm run dev        # start the development server
+npm ci
+npm run dev
 ```
 
-Open the printed URL and import a book. Everything stays in the browser.
+Open Vite's printed URL. No account or server is needed for local reading. The production service
+worker is available with `npm run build` followed by `npm run preview`; complete one online load
+before testing an offline reload.
 
-## Commands
-
-| Command                | Purpose                                                        |
-| ---------------------- | -------------------------------------------------------------- |
-| `npm run dev`          | Development server with hot reload                             |
-| `npm run build`        | Production build into `dist/`                                  |
-| `npm run preview`      | Serve the production build locally                             |
-| `npm run typecheck`    | Type-check app, tooling and test projects                      |
-| `npm run lint`         | ESLint, including Solid-specific reactivity rules              |
-| `npm run lint:fix`     | ESLint with automatic fixes                                    |
-| `npm run format`       | Format with Prettier                                           |
-| `npm run format:check` | Verify formatting without writing                              |
-| `npm test`             | Run the unit test suite once                                   |
-| `npm run test:watch`   | Run tests in watch mode                                        |
-| `npm run test:browser` | Cross-browser production checks (Playwright)                   |
-| `npm run corpus:fetch` | Fetch/hash-verify selected upstream originals outside the repo |
-| `npm run test:corpus`  | Real-file and mobile-sized resource/measurement checks         |
-| `npm run check`        | Full gate: typecheck, lint, format check, tests and build      |
-
-CI runs `npm run check` and `npm run test:browser`. Install the test browser once with
-`npx playwright install chromium firefox webkit`. On supported Linux distributions add
-`--with-deps` to install required browser libraries. Run both gates before pushing reader changes.
-Use `npm run test:browser -- --project=chromium` for a targeted local run.
-Offline navigation/reload needs a production build (`npm run build && npm run preview`)
-and a completed first-online service-worker installation; development mode has no precache.
-
-## Project structure
-
-```text
-src/
-  app/         Application shell: bootstrap, service wiring, routes
-  domain/      Pure types and rules (HLC, locators, books, progress, enums, hashing identity)
-  data/        Dexie schema, row types, and repositories including the outbox
-  storage/     File stores (OPFS, memory), streaming SHA-256, mime mapping, reconciliation
-  reader/      Renderer contract, EPUB/PDF adapters, content-based format detection
-  services/    Use cases: import, metadata, export, reader sessions and progress
-  ui/          Solid components
-  styles/      Global stylesheet
-tests/         Vitest suites mirroring src/, plus fixtures and a harness
-docs/          Product, architecture and operational documentation
-vendor/        Pinned foliate-js source snapshot and third-party license notices
-tooling/       Renderer assets and offline app-shell build integration
+```bash
+npm run check          # frontend typecheck, lint, formatting, unit tests, build
+npm ci --prefix server
+npm run check:server   # server typecheck and tests, including local Worker bindings
+npm run check:all      # both gates
+npm run test:browser   # production browser regressions
+npm run test:sync-browser # isolated browser + Worker/D1/R2 convergence
+npm run corpus:fetch   # explicitly fetch hash-pinned licensed files outside the repo
+npm run test:corpus    # selected real-file correctness and measurements
+npm run test:accessibility # populated views, keyboard focus and contrast
+npm run test:native    # Rust native storage/exports (requires Rust)
+npm run check:desktop  # Tauri compile check (requires Linux native dependencies)
 ```
 
-Layer rules: `domain` depends on nothing, `data`/`storage`/`reader` depend on `domain`, `services`
-orchestrates the layers, and `ui` talks to services and repositories through context rather than
-importing storage or database code directly.
+Install browser binaries with `npx playwright install chromium firefox webkit`. On supported Linux
+hosts use `--with-deps` for native libraries. A targeted check uses
+`npm run test:browser -- --project=chromium`. See [Runbook](docs/RUNBOOK.md) for complete workflows.
 
-## Architecture at a glance
+## Optional private sync
 
-```text
-SolidJS UI / PWA  →  repositories (Dexie + IndexedDB)  →  outbox
-                  →  file store (OPFS, IndexedDB fallback, memory last resort)
-                  →  renderer registry (EPUB / PDF adapters)
-                        ↓ later phase
-                  Cloudflare Access → Worker/Hono → D1 + private R2
-```
+The browser remains the immediate source for the interface. With `VITE_SYNC_URL` configured, it
+synchronizes metadata to a Cloudflare Worker and original files to private R2. D1 stores the
+idempotent sequenced change history; Access verifies identity. No credentials go into the client.
 
-See [Architecture](docs/ARCHITECTURE.md) for the boundaries, [Data model](docs/DATA-MODEL.md) for the
-schema, and [Import and reader](docs/IMPORT-AND-READER.md) for the import pipeline and format policy.
+Set the API **base ending in `/api`**, for example `https://reader.example.com/api`. The build
+validates this public URL and scopes its connection policy to the selected origin. HTTPS is required
+except for loopback development. Server CORS must explicitly allow a separate client origin.
+The default build has no configured sync server.
 
-## Documentation map
+Production setup, limits and auth configuration are in [server/README.md](server/README.md) and
+[API contract](docs/API.md). Local tests do not certify a deployed Access policy or cloud account.
 
-| Document                                                              | Purpose                                             |
-| --------------------------------------------------------------------- | --------------------------------------------------- |
-| [Product](docs/PRODUCT.md)                                            | Scope, user experience, requirements, terminology   |
-| [Architecture](docs/ARCHITECTURE.md)                                  | System boundaries and technology choices            |
-| [Data model](docs/DATA-MODEL.md)                                      | Entities, schema, lifecycle, migrations             |
-| [Sync](docs/SYNC.md)                                                  | Synchronization protocol and conflict behaviour     |
-| [Storage](docs/STORAGE.md)                                            | Local database, files, quotas, selective offline    |
-| [Backend](docs/BACKEND.md)                                            | Cloudflare services, API, authentication            |
-| [Import and reader](docs/IMPORT-AND-READER.md)                        | Ingestion, rendering, locators, format validation   |
-| [Operations](docs/OPERATIONS.md)                                      | Development, release, backup, diagnostics, recovery |
-| [Roadmap](docs/ROADMAP.md)                                            | Phases, dependencies, acceptance criteria           |
-| [Technology baseline](docs/decisions/0001-technology-baseline.md)     | Initial architecture decisions                      |
-| [Data lifecycle](docs/decisions/0002-data-lifecycle.md)               | Archive, deletion, tombstones, recoverability       |
-| [Reader engines](docs/decisions/0003-reader-engines.md)               | Pinned provenance, CSP and format evidence          |
-| [Reader validation](docs/READER-VALIDATION.md)                        | Licensed external corpus, measurements and limits   |
-| [Archived initial requirements](docs/archive/initial-requirements.md) | Original planning document, kept for history        |
+## Data and practical limits
 
-## Contributing
+- Metadata uses Dexie/IndexedDB. Originals prefer OPFS with a tested IndexedDB fallback; memory is
+  the visibly non-durable last resort. Browser site-data clearing/eviction can remove either store.
+- A pin protects against application cache cleanup; it cannot prevent the browser clearing site
+  data. Keep an external backup. JSON exports contain metadata, **not original book bytes**.
+- Imports are bounded to 256 MiB per file. Transfers and portable backups have separate documented
+  bounds. Current transfers restart a failed whole-file upload rather than resume multipart bytes.
+- PDF rendering bounds canvas and image decoding, not total process memory. Oversized source
+  images fail visibly without replacing the last usable saved position.
+- MOBI/AZW3/FB2/CBZ have no registered reading adapter. DRM-protected books are unsupported.
+- An experimental Linux Tauri desktop foundation adds app-owned native originals, OS Save dialogs
+  and guarded close/restart. Desktop sync is not available: native Access authentication remains
+  unfinished and desktop builds reject `VITE_SYNC_URL`. Signed/installer releases, native mobile,
+  multipart transfer, history compaction and broader device certification remain future work.
+- Private cloud storage is not end-to-end encryption. No analytics is included.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). Changes should keep the documentation, tests and code
-consistent; behaviour changes need tests, and any change to persisted data needs a migration.
+## Code and documentation
 
-## Security and privacy
+`src/domain` holds pure types/rules; `data` repositories and `storage` adapters hold persistence;
+`reader` isolates foliate-js/pdf.js; `services` orchestrates use cases; `sync` and `transfer` handle
+network work; `app` wires services; `ui` renders them. `server/` is independently deployable.
 
-This is a private library, not a public catalogue. There is no analytics or third-party tracking, no
-public object storage, and no upload until sync is configured. See [SECURITY.md](SECURITY.md).
+| Document                                       | Purpose                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| [Desktop](docs/DESKTOP.md)                     | Linux native storage, save dialogs, verification and release limits |
+| [Interface design](docs/DESIGN.md)             | Design research, visual system and future interface rules           |
+| [User guide](docs/USER-GUIDE.md)               | Import, reading, offline use, sync and recovery                     |
+| [Accessibility](docs/ACCESSIBILITY.md)         | Keyboard/contrast checks and assistive-technology scope             |
+| [Product](docs/PRODUCT.md)                     | User needs, scope and intended acceptance criteria                  |
+| [Architecture](docs/ARCHITECTURE.md)           | Current boundaries, invariants and future extension points          |
+| [Data model](docs/DATA-MODEL.md)               | Persisted entities, versions, identity and migration rules          |
+| [Sync](docs/SYNC.md)                           | Conflict/delivery contract and operational limits                   |
+| [Storage](docs/STORAGE.md)                     | Original integrity, pins, cleanup and quotas                        |
+| [Backup](docs/BACKUP.md)                       | Portable format, validation, recovery and limits                    |
+| [Diagnostics](docs/DIAGNOSTICS.md)             | Shareable aggregate report and privacy exclusions                   |
+| [Offline app](docs/OFFLINE-APP.md)             | Installability, offline cache and safe updates                      |
+| [Backend](docs/BACKEND.md)                     | Cloud responsibilities and implemented transfer lifecycle           |
+| [API](docs/API.md)                             | Executable request/response behavior and error codes                |
+| [Import and reader](docs/IMPORT-AND-READER.md) | Format policy, navigation, annotations and rendering bounds         |
+| [Reader validation](docs/READER-VALIDATION.md) | Corpus provenance, evidence and physical-device protocol            |
+| [Runbook](docs/RUNBOOK.md)                     | Local setup, verification and troubleshooting                       |
+| [Operations](docs/OPERATIONS.md)               | Release, deployment, backup and incident procedures                 |
+| [Roadmap](docs/ROADMAP.md)                     | Remaining work, dependencies and future application design          |
+| [Development record](docs/DEVELOPMENT.md)      | Completed slices and actual verification results                    |
 
-## License
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before changes. Keep code,
+contracts and documentation aligned; never edit released database versions in place. Generated
+fixtures are committed as source; original corpus files and personal books are not.
 
-No license has been selected yet. Until one is added, all rights are reserved by the repository owner,
-and a license decision should be made before accepting external code contributions.
+No project license has been selected. Rights remain with the owner until a license is added;
+third-party components retain the notices in `vendor/` and their packages.

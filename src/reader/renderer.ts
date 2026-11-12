@@ -1,5 +1,19 @@
 import type { BookFormat, RenderSupport } from '~/domain/enums';
 import type { Locator } from '~/domain/locator';
+import type { AnnotationKind } from '~/domain/enums';
+
+export interface AnnotationAnchor {
+  readonly id: string;
+  readonly kind: AnnotationKind;
+  readonly locator: Locator;
+}
+
+/** Local renderer evidence only; never persisted as a property of a synced note. */
+export interface AnnotationAnchorStatus {
+  readonly id: string;
+  readonly state: 'unchecked' | 'resolved' | 'unresolved';
+  readonly reason?: string;
+}
 
 export interface TocItem {
   readonly id?: string;
@@ -39,21 +53,14 @@ export interface ReaderPage {
   readonly locator: Locator;
 }
 
-export type ReaderTheme = 'light' | 'sepia' | 'dark';
-
-export interface ReaderSettings {
-  readonly fontSizePx: number;
-  readonly lineHeight: number;
-  readonly marginPx: number;
-  readonly theme: ReaderTheme;
-}
-
-export const DEFAULT_READER_SETTINGS: ReaderSettings = {
-  fontSizePx: 18,
-  lineHeight: 1.6,
-  marginPx: 24,
-  theme: 'light',
-};
+export {
+  DEFAULT_READER_SETTINGS,
+  normalizeReaderSettings,
+  type ReaderTheme,
+  type ReaderMode,
+  type ReaderSettings,
+} from './settings';
+import type { ReaderSettings } from './settings';
 
 export type Unsubscribe = () => void;
 
@@ -75,6 +82,8 @@ export interface Renderer {
   search(query: string, signal?: AbortSignal): AsyncIterable<SearchHit>;
   /** True when this engine can capture selections and draw highlight overlays. */
   readonly supportsHighlights: boolean;
+  /** Publisher-positioned EPUB pages cannot be reflowed into a continuous text column. */
+  readonly fixedLayout?: boolean;
   /** Notifies with the current selection, or null when it is cleared. */
   onSelection(callback: (selection: SelectionInfo | null) => void): Unsubscribe;
   /**
@@ -88,6 +97,9 @@ export interface Renderer {
   onContextMenu(callback: (point: { x: number; y: number }) => void): Unsubscribe;
   /** Draws the given highlights, replacing any previously drawn set. */
   applyHighlights(highlights: readonly Highlight[]): void;
+  /** Check saved anchors as their pages/sections become available; offscreen is not failure. */
+  setAnnotationAnchors?(annotations: readonly AnnotationAnchor[]): void;
+  onAnnotationStatus?(callback: (statuses: readonly AnnotationAnchorStatus[]) => void): Unsubscribe;
   /** True when `renderThumbnail` can produce page images (PDF yes, EPUB no). */
   readonly supportsThumbnails: boolean;
   /** The book's navigable units — PDF pages or EPUB sections — for the Pages view. */

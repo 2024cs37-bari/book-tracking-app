@@ -1,0 +1,91 @@
+{
+  "recordedAt": "2026-11-07T14:38:55.246343+00:00",
+  "reportedFailure": "Browser crash screen when toggling PDF colour inversion",
+  "causeStatus": "Original crash not deterministically reproduced; unbounded compositor filter path removed as mitigation.",
+  "implementation": {
+    "filter": "none",
+    "temporaryRGBAChunkBytes": 262144,
+    "restoration": "Re-render original PDF through cancellable render queue"
+  },
+  "validation": {
+    "checkAll": {
+      "passed": true,
+      "clientTests": 509,
+      "serverTests": 28
+    },
+    "browsers": {
+      "passed": 30,
+      "engines": ["Chromium", "Firefox", "WebKit"],
+      "specs": ["tests/browser/pdf-inversion.spec.ts", "tests/browser/reader-modes.spec.ts"],
+      "inversionCases": 9,
+      "zoomPercent": 400,
+      "checks": [
+        "actual bitmap pixels",
+        "exact whole-raster hash restoration",
+        "screenshots after inversion",
+        "navigation",
+        "rotation with superseding toggles",
+        "reload",
+        "text layer",
+        "steady bitmap budget",
+        "close cleanup"
+      ]
+    },
+    "native": {
+      "capabilities": {
+        "browserName": "wry",
+        "browserVersion": "0.57.1",
+        "platformName": "linux",
+        "acceptInsecureCerts": false,
+        "strictFileInteractability": false,
+        "setWindowRect": true,
+        "webkit:processID": 2713619,
+        "unhandledPromptBehavior": "dismiss and notify",
+        "pageLoadStrategy": "normal",
+        "proxy": {},
+        "timeouts": {
+          "script": 30000,
+          "pageLoad": 300000,
+          "implicit": 0
+        }
+      },
+      "passed": [
+        "Single page: four exact colour round trips at 400%",
+        "Facing pages: four exact colour round trips at 400%",
+        "Continuous scroll: four exact colour round trips at 400%",
+        "Inversion and page 11 survive reload",
+        "Close releases page surfaces"
+      ],
+      "profile": "/tmp/book-inversion-native-8m91o1_6"
+    },
+    "livePreview": {
+      "newCodeConfirmed": true,
+      "invertedBitmapAttribute": true,
+      "cssFilter": "none",
+      "offOnRoundTripPassed": true,
+      "automationLimitation": "Intermittent Page.getFrameTree timeouts during rapid actions; subsequent inspection and individual actions succeeded."
+    }
+  },
+  "sourceSha256": {
+    "src/reader/pdf-colors.ts": "1336678b24a02198a4327fe0c9da9ce8b8072a8ccd26028bfeb84e5a0ef018bb",
+    "src/reader/pdf-renderer.ts": "6f4ea9c9ecd7a6e6b48d099df072aa0e87eeb688b1666a89dbe8ad28a4c30b26",
+    "src/styles/reader-advanced.css": "be191ef4cf7c8973184ce0b8def212bcae1768b2234f61a92064882ea7ef206c",
+    "tests/reader/pdf-colors.test.ts": "ebf8be272a631ba601f177e1f1a49b9ecd1c301e84115970a64d63ad563702ee",
+    "tests/reader/pdf-renderer.dom.test.ts": "e14ede1a590f62dc53091156191e1e5fb938c3bc49de27d912a52f8ae07923e2",
+    "tests/browser/pdf-inversion.spec.ts": "853fc00671c366ba27feab3248562ea8d35dffdff173a4e38375f4b559eb74ce",
+    "tests/browser/reader-modes.spec.ts": "cbed01ae4ba233e48575812b33f950a2bad0ba0c93022c62ad3e957f2439b644"
+  },
+  "package": {
+    "path": "src-tauri/target/release/bundle/deb/Book Reader_0.1.0_amd64.deb",
+    "sha256": "f60278262a7e583105828923271bf337f9020bca040efc717645fa4031bacbaa"
+  },
+  "screenshots": [
+    "reader-inversion-2026-11-07/native-inversion.png",
+    "reader-inversion-2026-11-07/live-reader.png"
+  ],
+  "limitations": [
+    "No deterministic reproduction of the original browser crash.",
+    "Graphics driver/device coverage is limited to these local runtimes.",
+    "Canvas backing limits do not cap total browser or PDF worker memory."
+  ]
+}

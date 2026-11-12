@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import type { Plugin } from 'vite';
+import { generateServiceWorker } from './service-worker.ts';
 
 async function filesIn(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -27,8 +28,40 @@ export function readerAssets(): Plugin {
       building = config.command === 'build';
     },
     configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        let pathname: string;
+        try {
+          pathname = decodeURIComponent((request.url ?? '').split('?')[0]!);
+        } catch {
+          next();
+          return;
+        }
+        if (pathname !== '/manifest.webmanifest' && !/^\/icons\/[a-z0-9.-]+$/.test(pathname)) {
+          next();
+          return;
+        }
+        void readFile(resolve('public', `.${pathname}`))
+          .then((bytes) => {
+            response.setHeader(
+              'Content-Type',
+              pathname.endsWith('.webmanifest')
+                ? 'application/manifest+json'
+                : pathname.endsWith('.svg')
+                  ? 'image/svg+xml'
+                  : 'image/png',
+            );
+            response.end(bytes);
+          })
+          .catch(() => next());
+      });
       server.middlewares.use('/pdf-assets', (request, response, next) => {
-        const path = decodeURIComponent((request.url ?? '').split('?')[0]!);
+        let path: string;
+        try {
+          path = decodeURIComponent((request.url ?? '').split('?')[0]!);
+        } catch {
+          next();
+          return;
+        }
         if (path.includes('..') || !roots.some((root) => path.startsWith(`/${root}/`))) {
           next();
           return;
@@ -45,6 +78,13 @@ export function readerAssets(): Plugin {
       });
     },
     async generateBundle() {
+      for (const file of await filesIn(resolve('public'))) {
+        this.emitFile({
+          type: 'asset',
+          fileName: relative(resolve('public'), file),
+          source: await readFile(file),
+        });
+      }
       for (const root of roots) {
         const directory = resolve('node_modules/pdfjs-dist', root);
         for (const file of await filesIn(directory)) {
@@ -62,27 +102,20 @@ export function readerAssets(): Plugin {
         (file) => !file.endsWith('.map') && !file.endsWith('/sw.js'),
       );
       const hash = createHash('sha256');
+      // Worker behavior is part of the cache identity, even if assets are unchanged.
+      hash.update(generateServiceWorker('version', []));
+      const assets = [];
       for (const file of files.sort()) {
         hash.update(relative(output, file));
-        hash.update(await readFile(file));
+        const bytes = await readFile(file);
+        hash.update(bytes);
+        assets.push({
+          url: `./${relative(output, file)}`,
+          integrity: `sha256-${createHash('sha256').update(bytes).digest('base64')}`,
+        });
       }
       const cache = `reader-shell-${hash.digest('hex').slice(0, 16)}`;
-      const paths = files.map((file) => `./${relative(output, file)}`);
-      await writeFile(
-        resolve(output, 'sw.js'),
-        `const CACHE=${JSON.stringify(cache)};
-const ASSETS=${JSON.stringify(paths)};
-self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
-self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('reader-shell-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
-  event.respondWith(caches.open(CACHE).then(async cache => {
-    if (event.request.mode === 'navigate') return (await cache.match('./index.html')) || fetch(event.request);
-    return (await cache.match(event.request, { ignoreVary: true })) || fetch(event.request);
-  }));
-});
-`,
-      );
+      await writeFile(resolve(output, 'sw.js'), generateServiceWorker(cache, assets));
     },
   };
 }

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Book Reader",
+  "mainBinaryName": "book-reader",
+  "version": "0.1.0",
+  "identifier": "app.bookreader.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --mode desktop",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:desktop",
+    "frontendDist": "../dist-desktop"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Book Reader",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 360,
+        "minHeight": 480
+      }
+    ],
+    "security": { "csp": null, "capabilities": ["main"] }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb"],
+    "icon": ["icons/reader-192.png", "icons/reader-512.png"],
+    "category": "Education",
+    "shortDescription": "Offline personal book reader",
+    "longDescription": "A local EPUB and PDF library with reading progress, annotations and portable backups."
+  }
+}

@@ -1,7 +1,7 @@
-import { createEffect, createSignal, onCleanup } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { Book } from '~/domain/book';
 import { useApp } from '~/app/context';
-import { BookFormatBadge } from './badges';
+import { BOOK_FORMAT_LABELS } from '~/domain/enums';
 
 /**
  * Renders a stored cover image.
@@ -14,9 +14,10 @@ import { BookFormatBadge } from './badges';
 export default function BookCover(props: { book: Book; variant?: 'card' | 'detail' }) {
   const app = useApp();
   const [url, setUrl] = createSignal<string | null>(null);
+  const coverKey = createMemo(() => props.book.coverKey);
 
   createEffect(() => {
-    const key = props.book.coverKey;
+    const key = coverKey();
     setUrl(null);
     if (key === undefined) return;
 
@@ -32,7 +33,7 @@ export default function BookCover(props: { book: Book; variant?: 'card' | 'detai
       })
       .catch(() => {
         // A missing or unreadable cover is presented as "no cover".
-        setUrl(null);
+        if (!disposed) setUrl(null);
       });
 
     onCleanup(() => {
@@ -42,10 +43,22 @@ export default function BookCover(props: { book: Book; variant?: 'card' | 'detai
   });
 
   return (
-    <div class={`cover cover-${props.variant ?? 'card'}`} aria-hidden="true">
+    <div
+      class={`cover cover-${props.variant ?? 'card'}`}
+      data-cover-tone={
+        Array.from(props.book.id).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 6
+      }
+      aria-hidden="true"
+    >
       {url() === null ? (
         <span class="cover-placeholder">
-          <BookFormatBadge format={props.book.format} />
+          <span class="cover-edition">
+            {BOOK_FORMAT_LABELS[props.book.format]} · PERSONAL LIBRARY
+          </span>
+          <span class="cover-rule" />
+          <span class="cover-placeholder-title">{props.book.title}</span>
+          <span class="cover-placeholder-author">{props.book.author ?? 'Unknown author'}</span>
+          <span class="cover-ornament">✳</span>
         </span>
       ) : (
         <img src={url()!} alt="" loading="lazy" decoding="async" />

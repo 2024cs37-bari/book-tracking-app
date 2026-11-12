@@ -1,4 +1,30 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+
+/** Choose through the same custom popup and pointer path used by a reader. */
+export async function chooseSelect(
+  control: Locator,
+  choice: string | { label: string },
+): Promise<void> {
+  await expect(control).toHaveAttribute('role', 'combobox');
+  if ((await control.getAttribute('aria-expanded')) !== 'true') await control.click();
+  const popupId = await control.getAttribute('aria-controls');
+  expect(popupId).toBeTruthy();
+  const escapedId = await control.evaluate((_, value) => CSS.escape(value), popupId!);
+  const listbox = control.page().locator(`#${escapedId}`);
+  await expect(listbox).toHaveAttribute('role', 'listbox');
+  await expect(listbox).toBeVisible();
+  const option =
+    typeof choice === 'string'
+      ? listbox.locator(
+          `[role="option"][data-value="${await control.evaluate((_, value) => CSS.escape(value), choice)}"]`,
+        )
+      : listbox.getByRole('option', { name: choice.label, exact: true });
+  const selectedValue = await option.getAttribute('data-value');
+  expect(selectedValue).not.toBeNull();
+  await option.click();
+  await expect(control).toHaveAttribute('aria-expanded', 'false');
+  await expect(control).toHaveAttribute('data-value', selectedValue!);
+}
 
 export async function importStoredBook(
   page: Page,

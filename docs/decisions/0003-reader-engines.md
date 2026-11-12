@@ -22,7 +22,8 @@ never selected. PDF uses the official `pdfjs-dist@5.4.624` package (Apache-2.0) 
 pinned exactly in package.json/lockfile and compatible with the project's Node baseline.
 Retain upstream source verbatim except narrowly scoped, documented compatibility patches;
 keep integration code in `src/reader`. `vendor/PROVENANCE.md` records the paginator lifecycle
-guards required after asset tests reproduced deferred font-ready callbacks touching closed frames.
+guards required after asset tests reproduced deferred font-ready callbacks touching closed frames,
+and the explicit `page-mode` override for fixed-layout single/facing display.
 Updates must
 record a new full SHA, review upstream changes, and rerun security and fixture checks.
 
@@ -36,4 +37,5 @@ security boundary. Inline styles are needed for layout and reader settings.
 foliate-js is unstable and targets latest Chromium/Firefox/WebKitGTK; Firefox ESR and
 older engines are unsupported upstream. It stays behind `Renderer`; neither UI nor
 services import it. Generated fixtures are evidence for basic reading, not proof of
-full EPUB/PDF conformance. Real-file corpus/browser/mobile validation remains pending.
+full EPUB/PDF conformance. The pinned real-file corpus and current browser evidence are recorded in
+[Reader validation](../READER-VALIDATION.md); physical-device certification remains pending.

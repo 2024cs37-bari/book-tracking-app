@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { buildEpubFixture, buildPdfFixture } from '../support/fixtures';
-import { importBook, position } from './support';
+import { chooseSelect, importBook, position } from './support';
 
 let browserErrors: string[];
 test.beforeEach(({ page }) => {
@@ -44,7 +44,7 @@ test('hostile EPUB renders, saves CFI, and resumes after an offline reload', asy
   expect(initialSave.locatorKind).toBe('cfi');
   expect(initialSave.locatorValue).toMatch(/^epubcfi\(/);
   await page.getByText('Reader settings', { exact: true }).click();
-  await page.getByLabel('Theme', { exact: true }).selectOption('sepia');
+  await chooseSelect(page.getByRole('combobox', { name: 'Theme', exact: true }), 'sepia');
   await page.getByRole('link', { name: '← Close reader' }).click();
   const saved = await position(page);
   await page.evaluate(async () => {
@@ -74,7 +74,10 @@ test('hostile EPUB renders, saves CFI, and resumes after an offline reload', asy
     )
     .toBeGreaterThan(0);
   await page.getByText('Reader settings', { exact: true }).click();
-  await expect(page.getByLabel('Theme', { exact: true })).toHaveValue('sepia');
+  await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toHaveAttribute(
+    'data-value',
+    'sepia',
+  );
 });
 
 for (const version of ['2.0', '3.0'] as const) {
@@ -149,6 +152,12 @@ test('PDF uses one bounded visible canvas, handles varied/rotated pages and rest
   await page.goto(readerUrl);
   await expect(canvas).toHaveAttribute('aria-label', 'Page 9 of 30');
   await expect.poll(async () => (await position(page)).locatorValue).toBe(saved.locatorValue);
+  // Programmatic scroll rounding must not accumulate lost PDF points on reopen.
+  for (let reload = 0; reload < 2; reload++) {
+    await page.reload();
+    await expect(canvas).toHaveAttribute('aria-label', 'Page 9 of 30');
+    await expect.poll(async () => (await position(page)).locatorValue).toBe(saved.locatorValue);
+  }
 });
 
 async function targetParagraphVisible(page: Page): Promise<boolean> {

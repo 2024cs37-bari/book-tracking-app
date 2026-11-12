@@ -2,6 +2,7 @@ import { MemoryBookFileStore } from './memory-file-store';
 import { OpfsBookFileStore, isOpfsSupported } from './opfs-file-store';
 import { IndexedDbBookFileStore } from './indexeddb-file-store';
 import type { BookFileStore } from './file-store';
+import { isNativeRuntime, NativeBookFileStore } from './native-file-store';
 
 export type FileStorePreference = 'auto' | 'opfs' | 'memory';
 
@@ -11,7 +12,6 @@ export interface FileStoreSelection {
   readonly fallbackReason: string | null;
 }
 
-const PROBE_KEY = 'books/probe.bin';
 const PROBE_BYTES = new Uint8Array([0x62, 0x6f, 0x6f, 0x6b]);
 
 /**
@@ -22,13 +22,19 @@ const PROBE_BYTES = new Uint8Array([0x62, 0x6f, 0x6f, 0x6b]);
  * that fails at import time is much worse than an honest fallback.
  */
 async function probeOpfs(store: OpfsBookFileStore): Promise<string | null> {
+  // Each tab probes independently: shared keys let one startup remove another
+  // startup's file and incorrectly select a different storage backend.
+  const probeKey = `books/probe-${crypto.randomUUID()}.bin`;
   try {
-    await store.put(PROBE_KEY, new Blob([PROBE_BYTES]));
-    const roundTripped = new Uint8Array(await (await store.get(PROBE_KEY)).arrayBuffer());
-    if (roundTripped.length !== PROBE_BYTES.length) {
-      return 'OPFS probe returned a different byte count than was written.';
+    await store.put(probeKey, new Blob([PROBE_BYTES]));
+    const roundTripped = new Uint8Array(await (await store.get(probeKey)).arrayBuffer());
+    if (
+      roundTripped.length !== PROBE_BYTES.length ||
+      !roundTripped.every((byte, index) => byte === PROBE_BYTES[index])
+    ) {
+      return 'OPFS probe returned different bytes than were written.';
     }
-    await store.remove(PROBE_KEY);
+    await store.remove(probeKey);
     return null;
   } catch (error) {
     return error instanceof Error ? error.message : 'OPFS probe failed.';
@@ -40,6 +46,12 @@ export async function selectBookFileStore(
 ): Promise<FileStoreSelection> {
   if (preference === 'memory') {
     return { store: new MemoryBookFileStore(), fallbackReason: 'Memory storage was requested.' };
+  }
+
+  if (isNativeRuntime()) {
+    // A desktop startup failure must not quietly create a second browser
+    // file store and make the user's existing originals appear missing.
+    return { store: await NativeBookFileStore.connect(), fallbackReason: null };
   }
 
   if (!isOpfsSupported()) {
@@ -58,15 +70,16 @@ export async function selectBookFileStore(
 
 async function durableFallback(reason: string): Promise<FileStoreSelection> {
   const store = new IndexedDbBookFileStore();
+  const probeKey = `books/probe-${crypto.randomUUID()}.bin`;
   try {
-    await store.put(PROBE_KEY, new Blob([PROBE_BYTES]));
-    const bytes = new Uint8Array(await (await store.get(PROBE_KEY)).arrayBuffer());
+    await store.put(probeKey, new Blob([PROBE_BYTES]));
+    const bytes = new Uint8Array(await (await store.get(probeKey)).arrayBuffer());
     if (
       bytes.length !== PROBE_BYTES.length ||
       !bytes.every((byte, index) => byte === PROBE_BYTES[index])
     )
       throw new Error('IndexedDB probe bytes differed.');
-    await store.remove(PROBE_KEY);
+    await store.remove(probeKey);
     return { store, fallbackReason: `${reason} Files use durable IndexedDB storage instead.` };
   } catch (error) {
     await store.close().catch(() => {});

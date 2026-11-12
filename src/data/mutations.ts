@@ -1,6 +1,7 @@
 import { newId } from '~/domain/ids';
 import { formatHlc, type Clock } from '~/domain/hlc';
 import type { ChangeOp, ChangeRow, ReplicatedEntity } from './db';
+import { parseReplicatedRow } from './replicated-validation';
 
 /**
  * Shared context for every replicated mutation.
@@ -24,12 +25,15 @@ export function makeChangeRow(
   op: ChangeOp,
   payload: unknown,
 ): ChangeRow {
+  // Reject invalid local input before its transaction can commit a row that
+  // other devices or backup recovery would have to refuse.
+  const validated = parseReplicatedRow(entity, payload);
   return {
     id: newId(),
     entity,
     entityId,
     op,
-    payload: JSON.stringify(payload),
+    payload: JSON.stringify(validated),
     hlc: formatHlc(context.clock.next()),
     deviceId: context.deviceId,
     createdAt: Date.now(),

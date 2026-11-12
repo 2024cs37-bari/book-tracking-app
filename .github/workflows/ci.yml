@@ -4,59 +4,192 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  verify:
-    name: Typecheck, lint, format, test, build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+jobs:
+  desktop-audit:
+    name: Native Rust dependency advisories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install locked audit tooling
+        run: cargo install cargo-audit --locked --version 0.22.2
+      # Vulnerabilities fail this job. Informational warnings remain visible;
+      # the inherited GTK warnings and upgrade constraints are in DESKTOP.md.
+      - name: Audit the complete native lockfile without advisory ignores
+        run: cargo audit --file src-tauri/Cargo.lock
+
+  desktop:
+    name: Linux native storage and packaged shell
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Install Linux WebView build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: npm run build:desktop
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Test native filesystem and export invariants
+        run: npm run test:native
+      - name: Compile and package the Linux desktop application
+        run: npm run desktop:build -- --debug -- --locked
 
-      - name: Install dependencies
+  client:
+    name: Client checks and browser regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install client dependencies
         run: npm ci
-
-      - name: Verify
+      - name: Typecheck, lint, formatting, unit tests, and build
         run: npm run check
-
-      - name: Fetch pinned external corpus
-        env:
-          BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
-        run: npm run corpus:fetch
-
+      - name: Audit shipped client dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Report tooling advisories
+        continue-on-error: true
+        run: npm audit --audit-level=high
       - name: Install browsers
         run: npx playwright install --with-deps chromium firefox webkit
-
-      - name: Browser reader checks
+      - name: Deterministic reader and offline update checks
         run: npm run test:browser
+      - name: Retain browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failures
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Real-file and mobile-sized reader checks
+  integration:
+    name: Configured sync and accessibility journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - name: Install client and local Worker dependencies
+        run: npm ci && npm --prefix server ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Exercise actual configured sync against local D1 and R2
+        run: npm run test:sync-browser
+      - name: Check accessible application journeys
+        run: npm run test:accessibility
+      - name: Retain integration diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-failures
+          path: |
+            .sync-test-results/
+            .accessibility-test-results/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+  server:
+    name: Worker, D1, R2, and API contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Run pure and actual local Worker/D1/R2 tests
+        run: npm test
+      - name: Verify checked-in migration applies locally
+        run: npm run migrate:local
+      - name: Validate deployable bundle and bindings without publishing
+        run: npm run deploy -- --dry-run
+      - name: Audit shipped server dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Report tooling advisories
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+  corpus:
+    name: External book corpus and mobile viewports
+    # Network-backed corpus evidence runs after merge or on explicit dispatch.
+    # Pull requests always run the deterministic generated-file regressions above.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache hash-verified corpus downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/book-tracking-corpus-v1
+          key: book-corpus-${{ hashFiles('tooling/corpus-manifest.ts', 'tooling/corpus-files.ts') }}
+      - run: npm run corpus:fetch
         env:
           BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
-        run: npm run test:corpus
-
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:corpus
+        env:
+          BOOK_CORPUS_DIR: ${{ runner.temp }}/book-tracking-corpus-v1
       - name: Retain reader measurements
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reader-measurements
           path: test-results/**/attachments/*.json
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
-
-      - name: Retain browser failure diagnostics
+      - name: Retain corpus failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-failures
+          name: corpus-failures
           path: test-results/
+          if-no-files-found: ignore
           retention-days: 7

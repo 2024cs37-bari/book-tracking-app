@@ -7,6 +7,16 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'dist-desktop/**',
+      'dist-desktop/**',
+      'src-tauri/target/**',
+      'src-tauri/gen/**',
+      '.sync-test-dist/**',
+      '.browser-test-dist/**',
+      '.accessibility-test-results/**',
+      '.sync-test-results/**',
+      'src-tauri/target/**',
+      'src-tauri/gen/**',
       'coverage/**',
       'node_modules/**',
       'vendor/**',

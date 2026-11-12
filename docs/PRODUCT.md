@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Personal Book Reader is a private, single-user library and reading application. It imports books from the user's devices, organizes the collection, reads supported files, records progress and annotations, and eventually synchronizes that state across the user's web, mobile, and desktop clients.
+Personal Book Reader is a private, single-user library and reading application. It imports books from the user's devices, organizes the collection, reads supported files, records progress and annotations, and optionally synchronizes that state across the user's web, mobile, and desktop clients.
 
 The system must remain useful without a network connection. Cloud services make data durable and cross-device; they must not be required for opening a locally available book or recording a local change.
 
@@ -45,7 +45,9 @@ DRM-protected books are unsupported. The application will not bypass DRM or clai
 
 ## 5. Functional requirements
 
-Priority labels: **MVP** is required for the first local-reader milestone; **Later** follows after its dependencies are stable; **Deferred** is not committed to the initial product.
+Priority labels retain the original delivery ordering: **MVP** for the initial local reader,
+**Later** after that foundation, and **Deferred** outside the committed baseline. They are not
+implementation-status labels. The current capability/evidence mapping below distinguishes them.
 
 | ID   | Priority | Requirement                                                                                         | Acceptance intent                                                                                      |
 | ---- | -------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -67,6 +69,23 @@ Priority labels: **MVP** is required for the first local-reader milestone; **Lat
 | F-16 | Deferred | Automated third-party cloud backup.                                                                 | Manual export and restore must exist first.                                                            |
 | F-17 | Deferred | Client-side encryption of files.                                                                    | Requires a key recovery design and a documented trade-off with server-side processing.                 |
 
+### Current capability and evidence mapping
+
+| Requirements | Current implementation                                                                                                         | Remaining qualification                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| F-01–F-04    | Multiple imports, exact-byte hashes, repair/deduplication, available metadata/covers, offline status/format/collection filters | Metadata extraction varies by format; imports and archives have resource bounds                            |
+| F-05–F-07    | EPUB/PDF adapters, saved locators and recovery journal, JSON/Markdown exports                                                  | Experimental renderer status; pending intent cannot survive every storage/termination failure              |
+| F-08         | Background metadata sync and verified whole-file transfers, local Worker backend                                               | Owner must validate deployed Access; multipart and compaction are deferred                                 |
+| F-09         | Device-local pins, file states, original export and conservative cache cleanup                                                 | Browser eviction is outside app control; no background execution after app closure                         |
+| F-10–F-12    | Highlights/notes/bookmarks with anchor warnings, shelf/tag renaming, contents and cancellable search                           | Unloaded anchors stay unchecked; search, selection and locator quality depend on the original and renderer |
+| F-13         | Recorded reading time, reading days, streaks, daily last positions and finished-book count                                     | Daily positions can move backward with rereading/seeking; time measures recorded visible activity          |
+| F-14         | Retained divergent positions with explicit user resolution                                                                     | Integration tests cover selected conflict paths, not every possible device history                         |
+| F-15–F-17    | Deferred as originally scoped                                                                                                  | No nested folders, third-party automatic backups or end-to-end encryption                                  |
+
+Portable backups and original-file export now supplement F-07 with bounded, validated recovery.
+See [Development](DEVELOPMENT.md) for executed checks, [Roadmap](ROADMAP.md) for release gates,
+and [Backup](BACKUP.md) for exact recovery semantics.
+
 ## 6. Non-functional requirements
 
 | ID    | Requirement   | Initial measurable intent                                                                                                           |
@@ -87,7 +106,7 @@ Performance targets apply only after profiling on declared hardware and represen
 ## 7. Platforms and formats
 
 - **Web/PWA:** first delivery target; installable where supported, subject to browser storage quotas and iOS eviction behavior.
-- **Desktop:** Tauri wrapper after web storage, rendering, and repository boundaries are stable; native filesystem support improves offline durability.
+- **Desktop:** an experimental Linux Tauri foundation shares the frontend and stores originals in an app-owned directory. Native sync authentication, installer/signing/update validation and other operating systems remain release work; see [Desktop](DESKTOP.md).
 - **Mobile native:** deferred to a later version unless PWA limitations prevent core use cases.
 - **Initial rendering commitment:** EPUB and PDF.
 - **Validation spike:** DRM-free MOBI and AZW3; support is committed only after corpus testing on target browsers/webviews.
@@ -108,7 +127,8 @@ Multi-user accounts, shared libraries, public sharing, social feeds, book sales,
 
 ## 10. Open validation items
 
-- Confirm exact foliate-js capabilities and license/maintenance fit for target formats and runtimes.
-- Establish a representative, legally distributable regression corpus; do not commit copyrighted test books.
-- Measure IndexedDB/OPFS quota behavior and persistence options on target browsers.
-- Verify Cloudflare service limits, Access integration, and presigned upload constraints at implementation time.
+- Expand the pinned, licensed corpus across EPUB variants and real large-image PDFs; keep original files outside the repository.
+- Repeat storage eviction, annotation, recovery and performance checks on physical Android and Apple devices.
+- Measure quota/persistence behavior on declared browser/OS versions; a pin cannot guarantee site-data retention.
+- Verify deployed Cloudflare Access and current account/service limits. The current API mediates whole-file transfers; a presigned/multipart protocol remains future work.
+- Reassess the pinned engines and private PDF error bridge during dependency upgrades; selected passing files do not establish format-wide conformance.

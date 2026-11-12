@@ -1,3 +1,4 @@
+import { resolveBookId } from '~/sync/identity';
 import { AppError } from '~/domain/errors';
 import { formatHlc } from '~/domain/hlc';
 import { newId } from '~/domain/ids';
@@ -63,6 +64,32 @@ export class TagRepository {
     });
   }
 
+  /** Rename the stable tag identity without changing any book memberships. */
+  async rename(id: string, name: string): Promise<Tag> {
+    const clean = assertCollectionName(name, 'Tag');
+    const normalized = normalizeTagName(clean);
+    return this.db.transaction('rw', this.db.tags, this.db.changes, async () => {
+      const row = await this.db.tags.get(id);
+      if (row === undefined || row.deleted) {
+        throw new AppError('not_found', 'This tag no longer exists.');
+      }
+      if (row.name === clean) return toTag(row);
+      const matches = await this.db.tags.where('normalizedName').equals(normalized).toArray();
+      if (matches.some((other) => !other.deleted && other.id !== id)) {
+        throw new AppError('invalid_argument', 'Another tag already uses this name.');
+      }
+      const next: TagRow = {
+        ...row,
+        name: clean,
+        normalizedName: normalized,
+        updatedHlc: formatHlc(this.context.clock.next()),
+      };
+      await this.db.tags.put(next);
+      await this.db.changes.add(makeChangeRow(this.context, 'tag', id, 'upsert', next));
+      return toTag(next);
+    });
+  }
+
   async tagBook(tagId: string, bookId: string): Promise<void> {
     await this.writeMembership(tagId, bookId, true);
   }
@@ -77,34 +104,51 @@ export class TagRepository {
   }
 
   async listTagIdsForBook(bookId: string): Promise<string[]> {
-    const rows = await this.db.bookTags.where('bookId').equals(bookId).toArray();
-    const activeIds = rows.filter(isMembershipActive).map((row) => row.tagId);
-    if (activeIds.length === 0) return [];
-    // Drop memberships whose tag was deleted, so a tombstoned tag never
-    // surfaces through a reverse lookup.
-    const tags = await this.db.tags.bulkGet(activeIds);
-    return activeIds.filter((_, index) => {
-      const tag = tags[index];
-      return tag !== undefined && !tag.deleted;
-    });
+    return this.db.transaction(
+      'r',
+      [this.db.bookTags, this.db.tags, this.db.syncMeta],
+      async () => {
+        const rows = await this.db.bookTags
+          .where('bookId')
+          .equals(await resolveBookId(this.db, bookId))
+          .toArray();
+        const activeIds = rows.filter(isMembershipActive).map((row) => row.tagId);
+        if (activeIds.length === 0) return [];
+        // Drop memberships whose tag was deleted, so a tombstoned tag never
+        // surfaces through a reverse lookup.
+        const tags = await this.db.tags.bulkGet(activeIds);
+        return activeIds.filter((_, index) => {
+          const tag = tags[index];
+          return tag !== undefined && !tag.deleted;
+        });
+      },
+    );
   }
 
   private async writeMembership(tagId: string, bookId: string, active: boolean): Promise<void> {
-    await this.db.transaction('rw', this.db.tags, this.db.bookTags, this.db.changes, async () => {
-      const tag = await this.db.tags.get(tagId);
-      if (tag === undefined || tag.deleted) {
-        throw new AppError('not_found', `Tag ${tagId} does not exist.`);
-      }
-      const hlc = formatHlc(this.context.clock.next());
-      const existing = await this.db.bookTags.get([tagId, bookId]);
-      const next: BookTagRow = active
-        ? { tagId, bookId, addedHlc: hlc, removedHlc: undefined }
-        : { tagId, bookId, addedHlc: existing?.addedHlc ?? hlc, removedHlc: hlc };
-      await this.db.bookTags.put(next);
-      await this.db.changes.add(
-        makeChangeRow(this.context, 'book_tag', `${tagId}:${bookId}`, 'upsert', next),
-      );
-    });
+    await this.db.transaction(
+      'rw',
+      this.db.tags,
+      this.db.bookTags,
+      this.db.changes,
+      this.db.syncMeta,
+      async () => {
+        bookId = await resolveBookId(this.db, bookId);
+        const tag = await this.db.tags.get(tagId);
+        if (tag === undefined || tag.deleted) {
+          throw new AppError('not_found', `Tag ${tagId} does not exist.`);
+        }
+        const hlc = formatHlc(this.context.clock.next());
+        const existing = await this.db.bookTags.get([tagId, bookId]);
+        const next: BookTagRow = active
+          ? { tagId, bookId, addedHlc: hlc, removedHlc: undefined }
+          : { tagId, bookId, addedHlc: existing?.addedHlc ?? hlc, removedHlc: hlc };
+        await this.db.bookTags.put(next);
+        await this.db.changes.add(
+          makeChangeRow(this.context, 'book_tag', `${tagId}:${bookId}`, 'upsert', next),
+        );
+      },
+    );
   }
 }
 

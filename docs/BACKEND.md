@@ -1,93 +1,100 @@
 # Cloudflare backend
 
-## 1. Scope
+## Implemented responsibilities
 
-The backend provides authenticated synchronization and durable file storage. It does not render books or sit on the critical path for local reading. Design for a single user's workload and current free/low-cost plans, then verify actual limits and prices before deployment.
+The optional backend stores a private change history and original book files. It is never required
+for reading a local book or recording a local mutation. The independently installed `server/`
+package contains the Hono Worker, protocol validation, Access verification, D1 migration and local
+workerd integration tests. [API](API.md) is the authoritative endpoint and error contract;
+[server setup](../server/README.md) contains executable deployment instructions.
 
-## 2. Services and responsibilities
+| Component               | Current responsibility                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------- |
+| Static frontend hosting | Serve the matching app shell, reader engines and assets                                           |
+| Cloudflare Access       | Authenticate the intended owner; Worker independently verifies the assertion                      |
+| Worker + Hono           | Exact-origin policy, bounded request validation, idempotent log writes and mediated file transfer |
+| D1                      | Per-user idempotent append-only changes with a globally sequenced pull cursor                     |
+| Private R2              | Original bytes under verified-user and SHA-256-derived object keys                                |
 
-| Component         | Responsibility                                                                   | Security boundary                                                                                   |
-| ----------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Cloudflare Pages  | Serve the static PWA assets                                                      | Access policy protects the private application if desired; cache only public application assets.    |
-| Cloudflare Access | Authenticate the user                                                            | Worker must verify signed identity headers/assertion; do not trust arbitrary client-supplied email. |
-| Worker + Hono     | API validation, authorization, sync orchestration, signed transfer authorization | Every route checks identity, method, body size, schema, and allowed operation.                      |
-| D1                | Replicated metadata, idempotency records, sequenced change log                   | Bind queries, use transactions where required, and minimize personal text in logs.                  |
-| R2                | Original books and cover derivatives                                             | Private bucket; no public object access.                                                            |
+D1 does not maintain a second normalized copy of every entity. Clients validate entity fields,
+resolve conflicts, reconcile duplicate identities and materialize their local libraries from the
+log. Covers are local derivatives and portable-backup members, not a separate R2 service.
 
-Exact service bindings, free-tier limits, upload mechanisms, and Access integration must be verified at implementation/deployment time. Do not assume an S3-style presigned operation exists in a specific form without validating the selected Cloudflare APIs and plan.
+## Authentication and configuration
 
-## 3. API baseline
+Production uses HTTPS and Cloudflare Access. The Worker verifies the assertion signature, issuer,
+audience and lifetime before using its email/subject to scope storage. Device IDs are sync metadata,
+not authorization. Configure the Access policy for the intended owner and check every alternate
+hostname. The supplied configuration disables public workers.dev and preview URLs.
 
-All endpoints are under `/api/v1`, authenticated, HTTPS-only, and versioned. Request and response schemas must have shared TypeScript types plus runtime validation.
+A same-origin frontend with `/api/*` routed to the Worker is recommended. A separate API origin
+requires exact `CLIENT_ORIGIN`, compatible Access preflight/cookie settings and matching frontend
+CSP. CORS is not authentication. Unauthenticated preflight never reads private data; actual API
+requests always require identity. Browser responses are private/no-store.
 
-| Method and path                         | Purpose                                                                                  |
-| --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `POST /api/v1/sync/push`                | Idempotently submit a bounded batch of local changes.                                    |
-| `GET /api/v1/sync/pull?since=&limit=`   | Fetch sequenced changes after an exclusive cursor.                                       |
-| `POST /api/v1/files/upload-authorize`   | Authorize upload for a declared hash and size; return short-lived transfer instructions. |
-| `POST /api/v1/files/upload-complete`    | Verify and register a completed object upload.                                           |
-| `POST /api/v1/files/download-authorize` | Authorize access to a known remote object.                                               |
-| `GET /api/v1/files/:sha256/status`      | Query remote presence/size without exposing object content.                              |
-| `GET /api/v1/export`                    | Optional later server-side metadata export; client-side export is initial requirement.   |
+`DEV_USER` is a local development convenience accepted only on loopback hosts. Do not configure it
+in production. Public Vite variables contain configuration only, never credentials. The frontend
+`VITE_SYNC_URL` ends in `/api`; production builds reject insecure or malformed origins.
 
-The exact file-transfer protocol (single PUT versus multipart) depends on file size limits and R2 capabilities. Endpoint naming does not imply that a Worker proxies file bodies.
+## Current API
 
-## 4. Authentication and authorization
+All paths below are relative to `/api/v1` and require authentication.
 
-Cloudflare Access is the initial choice. Configure the Worker so requests cannot bypass Access through a direct hostname or alternate route. Validate the Access JWT signature, issuer, audience, and expiration using Cloudflare's supported mechanism; use identity only after validation. The single-user allowlist is deployment configuration, not a client-side check.
+| Method and path                | Behavior                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `POST /sync/push`              | Accept bounded schema-v2 changes; return one outcome per mutation |
+| `GET /sync/pull?since=&limit=` | Return ordered rows strictly after the exclusive cursor           |
+| `POST /files/begin`            | Report whether exact verified hash/size already exists            |
+| `PUT /files/:sha256`           | Stream an original through the Worker; R2 checks SHA-256          |
+| `POST /files/finish`           | Confirm verified object checksum and exact declared size          |
+| `GET /files/:sha256`           | Stream a private original for client-side verification            |
+| `HEAD /files/:sha256`          | Confirm trusted remote presence and size before local eviction    |
 
-- Auth required on all API routes, including status and export.
-- CORS allowlist is restricted to known app origins; CORS is not authorization.
-- Signed transfer URLs are short-lived, scoped to one object and operation, and omitted from logs.
-- Never return private bucket names/credentials or allow arbitrary key selection.
-- No reusable secret is shipped in browser bundles.
+There are no upload-authorize/download-authorize, signed-URL, status-suffix, server export, snapshot,
+multipart or remote deletion endpoints. Client-side JSON and portable exports remain usable without
+this backend.
 
-If Access proves impractical, bearer-token auth requires a separate ADR covering secure storage, rotation, revocation, and recovery; do not silently switch mechanisms.
+## Sync and retries
 
-## 5. Sync application
+Push accepts at most 500 changes, 64 KiB UTF-8 per serialized payload and 8 MiB for the whole body.
+The server validates the envelope and supports only wire schema 2. A reused mutation ID with the
+same data returns its original sequence; a changed payload under that ID is rejected. Malformed
+members have explicit outcomes. Earlier chunks can commit before a later storage failure, so
+clients retry immutable IDs instead of generating replacements.
 
-On push, validate batch and each change, then within a transaction check idempotency IDs, apply conflict rules, persist accepted state, and append a server change-log row with monotonically increasing sequence. A duplicate ID returns its prior outcome and does not append a second event. Partial batch outcomes are explicit.
+Pull returns at most 500 rows per page, ordered by sequence within the authenticated user's log.
+Sequence gaps are normal because other users can occupy intervening values. Clients validate and
+apply the page, its cursor, canonical identities and clock checkpoint atomically. There is no
+history compaction or cursor expiry yet: retaining the entire history supports rebuilding a new
+installation. A future retention feature requires complete snapshots and compatibility rules.
+See [Sync](SYNC.md) and [Sync implementation](SYNC-IMPLEMENTATION.md).
 
-On pull, query ordered rows after `since`, bounded by row and byte limit. The cursor is exclusive. Retention/compaction must return a clear expired-cursor response rather than partial history. See [Sync](SYNC.md) for convergence and client rules.
+## Original integrity and recovery
 
-## 6. File lifecycle
+Transfers are mediated through the authenticated Worker and streamed into/from private R2. The
+current whole-file request limit is **100,000,000 bytes**. A failed transfer restarts; there is no
+multipart resume. Local import and portable-backup limits are independent.
 
-1. Client declares SHA-256, size, and format using authenticated authorization.
-2. Worker validates limits and returns scoped short-lived transfer details.
-3. Client sends bytes directly to private R2; large file handling uses a supported multipart flow.
-4. Client calls completion; backend verifies actual object existence, size, and checksum where the platform supports it. If checksum verification cannot be performed server-side, require a trustworthy client confirmation plus independent verification on download and document the residual limitation.
-5. Backend records availability only after successful completion.
-6. Download authorization is returned only for an existing object; client verifies SHA-256 before setting local availability.
+The upload's expected SHA-256 is passed to R2 for checksum verification. Begin, finish and HEAD
+trust only an object with that checksum and exact size. Downloads are independently hashed before
+publication in local storage. Legacy objects without a verified checksum remain GET-recoverable,
+but are not evidence that the last local copy can be safely removed. Download, verify and re-upload
+such an original to establish trusted remote availability.
 
-Duplicate hash upload should resolve to the existing object without creating duplicate bytes. Abandoned multipart uploads require an expiration/cleanup policy. Deleting metadata does not automatically delete R2 content.
+D1 and R2 are not one transaction. Their retryable workflow tolerates upload/metadata ordering;
+metadata deletion does not remove the remote original. Any future object-retention policy must
+consider tombstones, offline clients and backups, and report candidates before deleting bytes.
 
-Baseline implementation: for a single-user deployment the Worker **mediates** the transfer (bytes PUT/GET through `/api/v1/files/*`, authorized by the same Access identity and written to private R2 under a per-user, hash-derived key) rather than issuing S3 presigned URLs — no S3 credentials are provisioned and every byte is Access-gated. The trade-off is a conservative per-request size bound (`MAX_FILE_BYTES`, 100 MiB); a presigned-URL/multipart path is the route for larger objects. R2 cannot verify SHA-256 server-side, so `begin`/`finish` record availability on existence + size and the **client independently verifies the hash on download** before marking local presence (the documented residual limitation of §6.4).
+## Operation and release evidence
 
-## 7. D1 schema and operations
+Run `npm ci --prefix server` and `npm run check:server` from the project root. Tests bundle the
+actual Worker and exercise local workerd, D1 and R2, including checksum failures, retry collisions,
+CORS and user separation. Generated JOSE keys verify assertion claims locally. The configured
+browser sync suite also exercises frontend CSP, browser CORS, reconnect and file transfer against
+an isolated local Worker. Neither suite certifies a deployed Access policy or cloud account.
 
-Keep migration SQL in source control. Separate replicated entity tables, idempotency records, and append-only change log. Use indexes for primary access paths, parameterized queries, and batches/transactions that preserve event atomicity. Establish maximum payloads and pagination before public deployment. Test migrations on empty DB and representative prior schemas.
-
-D1 and R2 are not a single transaction. The upload workflow is a state machine designed for retries and reconciliation. A periodic audit can detect objects without metadata and metadata whose object is missing; it must report before deleting anything.
-
-## 8. Cost controls
-
-- Batch metadata changes and debounce progress events.
-- Avoid write-heavy KV usage for authoritative metadata.
-- Keep covers small and generate once per original/metadata policy.
-- Bound upload size, request size, pull page size, and concurrency.
-- Monitor storage, request counts, and error rates against current plan limits.
-- Keep export/restore independent from Cloudflare so migration remains possible.
-
-## 9. Logs and privacy
-
-Log request IDs, route, timing, status, and coarse error category. Do not log authentication assertions, bearer tokens, signed URLs, full book titles, annotation text, or request bodies containing user content. Define retention and access for operational logs before production use.
-
-## 10. Deployment checklist
-
-- Separate dev/prod Pages, Worker bindings, D1, R2, and Access policy.
-- Create the private R2 bucket before first deploy: `wrangler r2 bucket create book-reader-files` (the `FILES` binding in `wrangler.toml`). `wrangler dev` simulates it locally.
-- Verify authentication on every path, including direct Worker URLs.
-- Verify R2 bucket is private and object keys are content-derived, not user-controlled paths.
-- Apply reviewed D1 migrations and verify rollback/recovery approach.
-- Test duplicate push, partial push, cursor pagination, expired cursor, interrupted upload, checksum mismatch, and denied Access.
-- Recheck current Cloudflare pricing and quotas.
+For production, provision separate resources, apply reviewed migrations, set actual bindings and
+Access configuration, deploy matching frontend/API versions, and perform denied-login plus
+multi-device recovery exercises. Recheck current Cloudflare quotas and prices in the owner's
+account. Monitor aggregate request/storage/error rates without logging book titles, annotations,
+assertions or request bodies. [Operations](OPERATIONS.md) covers release and incident procedures.

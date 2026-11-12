@@ -4,7 +4,6 @@ import {
   createMemo,
   createSignal,
   For,
-  type JSX,
   Match,
   onCleanup,
   Show,
@@ -17,16 +16,25 @@ import type { Annotation } from '~/domain/annotation';
 import type { ProgressConflictRow } from '~/data/db';
 import { parseHlc } from '~/domain/hlc';
 import type {
+  AnnotationAnchorStatus,
   ReaderPage,
   ReaderSettings,
-  ReaderTheme,
   SearchHit,
   SelectionInfo,
   TocItem,
 } from '~/reader/renderer';
-import type { ReaderSession } from '~/services/reader-service';
+import { normalizeReaderSettings } from '~/reader/settings';
+import type { ReaderSession, PositionSaveState } from '~/services/reader-service';
+import { registerNativeCloseGuard } from '~/app/native-lifecycle';
+import {
+  ReadingActivity,
+  readingActivityQueue,
+  READING_CHECKPOINT_MS,
+} from '~/services/reading-activity';
 import { buildNotesMarkdown, notesFilename } from '~/services/notes-markdown';
+import { saveFile } from '~/storage/save-file';
 import { normalizeLookupTerm } from '~/services/dictionary';
+import { dictionaryAvailable } from '~/services/privacy-preferences';
 import { createSpeech } from '~/reader/tts';
 import { showToast } from './toast';
 import ReaderContents from './ReaderContents';
@@ -36,10 +44,12 @@ import ReaderAnnotations, { HIGHLIGHT_PALETTE } from './ReaderAnnotations';
 import ReaderTts from './ReaderTts';
 import WordLookup from './WordLookup';
 import ReaderContextMenu, { type ContextMenuAction } from './ReaderContextMenu';
+import Icon from './Icon';
+import ReaderSettingsMenu from './ReaderSettingsMenu';
+import '~/styles/reader-refinement.css';
+import '~/styles/reader-advanced.css';
 
 const MAX_SEARCH_HITS = 200;
-/** Reading spans shorter than this are noise and are not recorded as sessions. */
-const MIN_SESSION_SECONDS = 5;
 
 type SidebarPanel = 'contents' | 'pages' | 'notes' | 'search' | 'listen';
 const SIDEBAR_TABS: readonly SidebarTab[] = [
@@ -103,6 +113,15 @@ export default function ReaderView() {
   const [title, setTitle] = createSignal('Reader');
   const [message, setMessage] = createSignal('Opening book…');
   const [ready, setReady] = createSignal(false);
+  const [fixedLayout, setFixedLayout] = createSignal(false);
+  const [focusMode, setFocusMode] = createSignal(false);
+  const [fullscreen, setFullscreen] = createSignal(false);
+  const [jump, setJump] = createSignal('1');
+  let shell!: HTMLElement;
+  const [activeBookId, setActiveBookId] = createSignal('');
+  const [saveState, setSaveState] = createSignal<PositionSaveState>('saved');
+  const [activityError, setActivityError] = createSignal<string | null>(null);
+  let activity: ReadingActivity | undefined;
   const [fraction, setFraction] = createSignal(0);
   const [settings, setSettings] = createSignal(app.reader.loadSettings());
   const [toc, setToc] = createSignal<readonly TocItem[]>([]);
@@ -113,6 +132,9 @@ export default function ReaderView() {
   const [searching, setSearching] = createSignal(false);
   const [searchStatus, setSearchStatus] = createSignal('');
   const [annotations, setAnnotations] = createSignal<readonly Annotation[]>([]);
+  const [annotationStatuses, setAnnotationStatuses] = createSignal<
+    readonly AnnotationAnchorStatus[]
+  >([]);
   const [selection, setSelection] = createSignal<SelectionInfo | null>(null);
   const [canHighlight, setCanHighlight] = createSignal(false);
   const [contextMenu, setContextMenu] = createSignal<{
@@ -143,6 +165,42 @@ export default function ReaderView() {
     for (const page of pages()) if (page.locator.fraction <= here + 1e-9) index = page.index;
     return index;
   });
+  createEffect(() => setJump(String(Math.max(0, currentPageIndex()) + 1)));
+  const visibleSidebar = () => sidebarOpen() && !focusMode();
+  let focusWasActive = false;
+  createEffect(() => {
+    const active = focusMode();
+    if (active === focusWasActive) return;
+    focusWasActive = active;
+    const frame = requestAnimationFrame(() =>
+      shell
+        .querySelector<HTMLButtonElement>(
+          active ? '.reader-focus-exit' : '[aria-label="Focus mode"]',
+        )
+        ?.focus({ preventScroll: true }),
+    );
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
+  async function toggleFullscreen(): Promise<void> {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await shell.requestFullscreen();
+    } catch {
+      showToast('Full screen is unavailable in this window.', 'error');
+    }
+  }
+  const fullscreenChanged = () => setFullscreen(document.fullscreenElement === shell);
+  document.addEventListener('fullscreenchange', fullscreenChanged);
+  onCleanup(() => {
+    document.removeEventListener('fullscreenchange', fullscreenChanged);
+    if (document.fullscreenElement === shell) void document.exitFullscreen().catch(() => {});
+  });
+  function jumpToPage(event: SubmitEvent): void {
+    event.preventDefault();
+    const index = Number(jump()) - 1;
+    const page = Number.isInteger(index) ? pages()[index] : undefined;
+    if (page) session?.renderer.goTo(page.locator);
+  }
   let host!: HTMLDivElement;
   let session: ReaderSession | undefined;
   let searchController: AbortController | undefined;
@@ -151,7 +209,7 @@ export default function ReaderView() {
   onCleanup(() => cancelLongPress());
 
   function updateSettings(patch: Partial<ReaderSettings>): void {
-    const next = { ...settings(), ...patch };
+    const next = normalizeReaderSettings({ ...settings(), ...patch });
     setSettings(next);
     session?.renderer.applySettings(next);
     try {
@@ -164,7 +222,9 @@ export default function ReaderView() {
   async function reloadAnnotations(bookId: string): Promise<void> {
     try {
       const list = await app.annotations.listByBook(bookId);
+      if (bookId !== activeBookId()) return;
       setAnnotations(list);
+      session?.renderer.setAnnotationAnchors?.(list);
       // Keep the renderer's drawn overlays in step with stored highlights; it
       // re-draws them per section as the reader navigates.
       session?.renderer.applyHighlights(
@@ -186,7 +246,7 @@ export default function ReaderView() {
     if (selected === null) return;
     try {
       await app.annotations.create({
-        bookId: params.id ?? '',
+        bookId: activeBookId(),
         kind: 'highlight',
         locator: selected.locator,
         textExcerpt: selected.excerpt,
@@ -194,7 +254,7 @@ export default function ReaderView() {
       });
       void app.persistClockState();
       setSelection(null);
-      await reloadAnnotations(params.id ?? '');
+      await reloadAnnotations(activeBookId());
     } catch (error) {
       showToast(`Could not add highlight: ${String(error)}`, 'error');
     }
@@ -204,7 +264,7 @@ export default function ReaderView() {
     try {
       await app.annotations.update(id, { color });
       void app.persistClockState();
-      await reloadAnnotations(params.id ?? '');
+      await reloadAnnotations(activeBookId());
     } catch (error) {
       showToast(`Could not change highlight colour: ${String(error)}`, 'error');
     }
@@ -215,11 +275,12 @@ export default function ReaderView() {
   async function resolveConflict(choice: 'local' | 'remote'): Promise<void> {
     const pending = conflict();
     if (pending === null) return;
-    const id = params.id ?? '';
-    setConflict(null);
+    const id = activeBookId();
     try {
       await app.progressConflicts.resolve(id, choice);
-      void app.persistClockState();
+      setConflict(null);
+      await app.persistClockState();
+      await session?.resumeSaving(choice === 'local');
       const remote = pending.remote;
       if (
         choice === 'remote' &&
@@ -244,9 +305,9 @@ export default function ReaderView() {
       return;
     }
     try {
-      await app.annotations.create({ bookId: params.id ?? '', kind: 'bookmark', locator });
+      await app.annotations.create({ bookId: activeBookId(), kind: 'bookmark', locator });
       void app.persistClockState();
-      await reloadAnnotations(params.id ?? '');
+      await reloadAnnotations(activeBookId());
     } catch (error) {
       showToast(`Could not add bookmark: ${String(error)}`, 'error');
     }
@@ -281,7 +342,7 @@ export default function ReaderView() {
     // Offer a dictionary lookup only for a single-word selection.
     const singleWord = captured.excerpt.trim().split(/\s+/u).length === 1;
     const term = singleWord ? normalizeLookupTerm(captured.excerpt) : null;
-    if (term !== null) {
+    if (term !== null && dictionaryAvailable) {
       actions.push({ label: `Define “${term}”`, onSelect: () => setLookup({ word: term, x, y }) });
     }
     actions.push({ label: 'Bookmark here', onSelect: () => void addBookmark() });
@@ -328,30 +389,26 @@ export default function ReaderView() {
     try {
       await app.annotations.remove(id);
       void app.persistClockState();
-      await reloadAnnotations(params.id ?? '');
+      await reloadAnnotations(activeBookId());
     } catch (error) {
       showToast(`Could not remove bookmark: ${String(error)}`, 'error');
     }
   }
 
-  function exportNotes(): void {
-    const markdown = buildNotesMarkdown(title(), annotations(), Date.now());
-    const blob = new Blob([markdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = notesFilename(title());
-    anchor.rel = 'noopener';
-    anchor.click();
-    // Keep the blob alive until the download starts; see ExportService.download.
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  async function exportNotes(): Promise<void> {
+    try {
+      const markdown = buildNotesMarkdown(title(), annotations(), Date.now());
+      await saveFile(new Blob([markdown], { type: 'text/markdown' }), notesFilename(title()));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not export notes.', 'error');
+    }
   }
 
   async function saveNote(id: string, note: string): Promise<void> {
     try {
       await app.annotations.update(id, { note: note.trim() === '' ? undefined : note.trim() });
       void app.persistClockState();
-      await reloadAnnotations(params.id ?? '');
+      await reloadAnnotations(activeBookId());
     } catch (error) {
       showToast(`Could not save note: ${String(error)}`, 'error');
     }
@@ -405,9 +462,13 @@ export default function ReaderView() {
     const id = params.id ?? '';
     let disposed = false;
     let current: ReaderSession | undefined;
-    let openedAt: number | undefined;
-    let startFraction = 0;
+    let currentActivity: ReadingActivity | undefined;
+    let pageHidden = false;
+    let offSaveState: (() => void) | undefined;
     setReady(false);
+    setSaveState('saved');
+    setActivityError(null);
+    setActiveBookId('');
     setFraction(0);
     setToc([]);
     setTocLoading(true);
@@ -415,6 +476,7 @@ export default function ReaderView() {
     setHits([]);
     setSearchStatus('');
     setAnnotations([]);
+    setAnnotationStatuses([]);
     setSelection(null);
     setConflict(null);
     setCanHighlight(false);
@@ -423,43 +485,84 @@ export default function ReaderView() {
     currentLocator = undefined;
     stopSearch();
     let offSelection: (() => void) | undefined;
+    let offAnnotationStatus: (() => void) | undefined;
     let offContextMenu: (() => void) | undefined;
 
-    // One reading session per open span. Idempotent: recording clears the
-    // start marker so pagehide + cleanup cannot double-count the same span.
-    const recordSession = () => {
-      if (openedAt === undefined) return;
-      const startedAt = openedAt;
-      openedAt = undefined;
-      const durationS = Math.round((Date.now() - startedAt) / 1000);
-      if (durationS < MIN_SESSION_SECONDS) return;
-      void app.sessions
-        .record({ bookId: id, startedAt, durationS, startFraction, endFraction: fraction() })
-        .then(() => app.persistClockState())
-        .catch(() => {
-          // A lost session is cosmetic; never surface it over the reader.
-        });
+    const activityReport = (error: string | null) => {
+      if (!disposed) setActivityError(error);
+      else if (error) showToast(error, 'error');
     };
-
     const readerMessage = (event: Event) => setMessage(String((event as CustomEvent).detail));
-    const flush = () => {
+    const pause = () => {
       void current?.flush();
-      recordSession();
+      void currentActivity?.pause(untrack(fraction));
     };
+    const resume = () => {
+      if (!disposed && !pageHidden && document.visibilityState !== 'hidden' && untrack(ready))
+        currentActivity?.resume(untrack(fraction));
+    };
+    const removeCloseGuard = registerNativeCloseGuard(async () => {
+      try {
+        await Promise.all([current?.flush(), currentActivity?.pause(untrack(fraction))]);
+        return untrack(saveState) !== 'failed' && !untrack(activityError);
+      } finally {
+        // A failed save may lead the user to keep the app open.
+        resume();
+      }
+    });
+    const pagehide = () => {
+      pageHidden = true;
+      pause();
+    };
+    const pageshow = () => {
+      pageHidden = false;
+      resume();
+    };
+    const readerSettingsChanged = (event: Event) =>
+      updateSettings((event as CustomEvent<Partial<ReaderSettings>>).detail);
+    host.addEventListener('reader-settings-change', readerSettingsChanged);
     host.addEventListener('reader-message', readerMessage);
-    window.addEventListener('pagehide', flush);
+    window.addEventListener('pagehide', pagehide);
+    window.addEventListener('pageshow', pageshow);
     const visibility = () => {
-      if (document.visibilityState === 'hidden') flush();
+      if (document.visibilityState === 'hidden') pause();
+      else {
+        resume();
+        void current?.flush();
+      }
     };
     document.addEventListener('visibilitychange', visibility);
+    const checkpoint = window.setInterval(() => {
+      if (!disposed && !pageHidden && document.visibilityState !== 'hidden') {
+        void currentActivity?.checkpoint(untrack(fraction));
+        void current?.flush();
+      }
+    }, READING_CHECKPOINT_MS);
     // Shell-level page turns. Keydown inside the book iframe stays with the
     // engine (which has its own keys), so this only fires when focus is on the
     // reader chrome, and never while typing in the search box.
     const onKey = (event: KeyboardEvent) => {
-      if (!ready() || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        !ready() ||
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        contextMenu() ||
+        lookup()
+      )
+        return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable ||
+        target?.closest(
+          '[role=dialog], [role=alertdialog], [role=menu], [role=tablist], [role=combobox], [role=listbox]',
+        )
+      ) {
         return;
       }
       if (event.key === 'ArrowLeft') {
@@ -468,7 +571,14 @@ export default function ReaderView() {
       } else if (event.key === 'ArrowRight') {
         session?.renderer.next();
         event.preventDefault();
+      } else if (event.key === 'f') {
+        setFocusMode((active) => !active);
+        event.preventDefault();
+      } else if (event.key === 'Escape' && focusMode()) {
+        setFocusMode(false);
+        event.preventDefault();
       } else if (event.key === 's' || event.key === '[') {
+        setFocusMode(false);
         setSidebarOpen((open) => !open);
         event.preventDefault();
       } else if (event.key === 'Escape' && sidebarOpen()) {
@@ -477,7 +587,10 @@ export default function ReaderView() {
     };
     window.addEventListener('keydown', onKey);
     void app.reader
-      .prepare(id, setMessage)
+      .prepare(id, (text) => {
+        if (!disposed) setMessage(text);
+        else showToast(text, 'error');
+      })
       .then(async (prepared) => {
         if (disposed) {
           await prepared.session.close();
@@ -485,7 +598,30 @@ export default function ReaderView() {
         }
         current = prepared.session;
         session = current;
+        setActiveBookId(prepared.bookId);
+        offSaveState = current.onSaveState((state) => {
+          setSaveState(state);
+          if (state === 'saved')
+            setMessage((text) => (text.startsWith('Position could not be saved:') ? '' : text));
+        });
+        currentActivity = new ReadingActivity(
+          prepared.bookId,
+          readingActivityQueue(app.sessions, app.persistClockState),
+          activityReport,
+        );
+        activity = currentActivity;
         setTitle(prepared.title);
+        // Initial renderer relocations must not acknowledge a cross-device
+        // conflict before its concrete position choice has been shown.
+        const pendingConflict = await app.progressConflicts.get(prepared.bookId);
+        if (disposed) {
+          await current.close();
+          return;
+        }
+        if (pendingConflict) {
+          current.suspendSaving();
+          setConflict(pendingConflict);
+        }
         current.renderer.mount(host);
         current.renderer.applySettings(app.reader.loadSettings());
         setMessage('');
@@ -494,12 +630,15 @@ export default function ReaderView() {
           setFraction(locator.fraction);
         });
         if (disposed) return;
+        setFixedLayout(current.renderer.fixedLayout ?? false);
         setReady(true);
-        openedAt = Date.now();
-        startFraction = fraction();
+        resume();
         setCanHighlight(current.renderer.supportsHighlights);
         setSupportsThumbnails(current.renderer.supportsThumbnails);
         offSelection = current.renderer.onSelection(setSelection);
+        offAnnotationStatus = current.renderer.onAnnotationStatus?.((states) => {
+          if (!disposed) setAnnotationStatuses(states);
+        });
         // EPUB forwards right-click / long-press from inside its iframe (where
         // the event cannot bubble to the surface); PDF leaves this a no-op and
         // is covered by the surface handler below.
@@ -519,18 +658,7 @@ export default function ReaderView() {
           .catch(() => {
             // The Pages view is optional; a failure leaves it empty.
           });
-        void reloadAnnotations(id);
-        // Surface a pending progress-divergence prompt for this book, if the
-        // last sync recorded one (SYNC.md §6). The reader opens at the local
-        // position; the prompt offers to jump to the other device's instead.
-        void app.progressConflicts
-          .get(id)
-          .then((pending) => {
-            if (!disposed) setConflict(pending ?? null);
-          })
-          .catch(() => {
-            // The prompt is optional; a load failure must not break reading.
-          });
+        void reloadAnnotations(prepared.bookId);
         // Contents are optional: their parsing must not delay basic reading.
         try {
           const items = await current.renderer.getToc();
@@ -542,17 +670,25 @@ export default function ReaderView() {
         }
       })
       .catch((error: unknown) => {
+        void current?.close();
         if (!disposed) setMessage(`Could not open book: ${String(error)}`);
       });
     onCleanup(() => {
       disposed = true;
       session = undefined;
+      offSaveState?.();
+      removeCloseGuard();
       offSelection?.();
+      offAnnotationStatus?.();
       offContextMenu?.();
       stopSearch();
-      recordSession();
+      void currentActivity?.pause(untrack(fraction));
+      if (activity === currentActivity) activity = undefined;
+      clearInterval(checkpoint);
+      host.removeEventListener('reader-settings-change', readerSettingsChanged);
       host.removeEventListener('reader-message', readerMessage);
-      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('pagehide', pagehide);
+      window.removeEventListener('pageshow', pageshow);
       document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('keydown', onKey);
       void current?.close();
@@ -616,7 +752,13 @@ export default function ReaderView() {
   const notesPanel = () => (
     <div class="reader-notes-panel">
       <div class="reader-bookmarks-actions">
-        <button type="button" class="button" disabled={!ready()} onClick={() => void addBookmark()}>
+        <button
+          type="button"
+          class="button reader-bookmark-action"
+          disabled={!ready()}
+          onClick={() => void addBookmark()}
+        >
+          <Icon name="bookmark" size={16} />
           Bookmark this position
         </button>
         <Show when={canHighlight()}>
@@ -633,13 +775,15 @@ export default function ReaderView() {
           type="button"
           class="button"
           disabled={annotations().length === 0}
-          onClick={() => exportNotes()}
+          onClick={() => void exportNotes()}
         >
+          <Icon name="download" size={15} />
           Export notes
         </button>
       </div>
       <ReaderAnnotations
         annotations={annotations()}
+        anchorStatuses={annotationStatuses()}
         onSelect={(locator) => session?.renderer.goTo(locator)}
         onDelete={(id) => void removeAnnotation(id)}
         onEditNote={(id, note) => void saveNote(id, note)}
@@ -654,55 +798,89 @@ export default function ReaderView() {
     />
   );
   return (
-    <section class="reader-shell" classList={{ 'reader-sidebar-open': sidebarOpen() }}>
+    <section
+      ref={(element) => {
+        shell = element;
+      }}
+      class="reader-shell"
+      classList={{ 'reader-sidebar-open': visibleSidebar(), 'reader-focus': focusMode() }}
+      style={{ '--reader-sidebar-width': `${sidebarWidth()}px` }}
+    >
       <div class="reader-toolbar">
+        <div class="reader-toolbar-group">
+          <A
+            class="reader-close"
+            aria-label="← Close reader"
+            title="Back to book"
+            href={`/book/${activeBookId() || params.id}`}
+          >
+            <Icon name="arrow-left" size={18} />
+            <span class="reader-close-label">Back to book</span>
+          </A>
+          <button
+            type="button"
+            class="reader-icon-button"
+            id="reader-sidebar-toggle"
+            aria-controls={sidebarOpen() ? 'reader-sidebar' : undefined}
+            aria-label="Toggle sidebar"
+            title="Explore this book (S)"
+            aria-expanded={sidebarOpen()}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <Icon name="sidebar" size={19} />
+          </button>
+        </div>
+        <h1 class="reader-title" title={title()}>
+          {title()}
+        </h1>
         <div class="reader-toolbar-group">
           <button
             type="button"
             class="reader-icon-button"
-            aria-label="Toggle sidebar"
-            aria-expanded={sidebarOpen()}
-            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label="Focus mode"
+            title="Focus mode (F)"
+            aria-pressed={focusMode()}
+            onClick={() => setFocusMode(true)}
           >
-            ☰
+            <Icon name="focus" size={19} />
           </button>
-          <A class="reader-close" href={`/book/${params.id}`}>
-            ← Close reader
-          </A>
-        </div>
-        <h2 class="reader-title" title={title()}>
-          {title()}
-        </h2>
-        <div class="reader-toolbar-group">
-          <div class="reader-nav" role="group" aria-label="Pages">
+          <Show when={document.fullscreenEnabled}>
             <button
               type="button"
               class="reader-icon-button"
-              aria-label="Previous"
-              disabled={!ready()}
-              onClick={() => session?.renderer.prev()}
+              aria-label={fullscreen() ? 'Exit full screen' : 'Full screen'}
+              title={fullscreen() ? 'Exit full screen' : 'Full screen'}
+              onClick={() => void toggleFullscreen()}
             >
-              ‹
+              <Icon name="maximize" size={19} />
             </button>
-            <span class="reader-progress" aria-label="Reading progress">
-              {Math.round(fraction() * 100)}%
-            </span>
-            <button
-              type="button"
-              class="reader-icon-button"
-              aria-label="Next"
-              disabled={!ready()}
-              onClick={() => session?.renderer.next()}
-            >
-              ›
-            </button>
-          </div>
-          <ReaderSettingsMenu settings={settings()} onChange={updateSettings} />
+          </Show>
+          <ReaderSettingsMenu
+            settings={settings()}
+            onChange={updateSettings}
+            pdf={supportsThumbnails()}
+            fixed={fixedLayout()}
+            ready={ready()}
+          />
         </div>
       </div>
+      <Show when={focusMode()}>
+        <button
+          type="button"
+          class="reader-focus-exit"
+          onClick={() => {
+            setFocusMode(false);
+            requestAnimationFrame(() =>
+              shell.querySelector<HTMLButtonElement>('[aria-label="Focus mode"]')?.focus(),
+            );
+          }}
+        >
+          <Icon name="focus" size={17} /> Exit focus <kbd>Esc</kbd>
+        </button>
+      </Show>
       <div class="reader-body">
         <ReaderSidebar
-          open={sidebarOpen()}
+          open={visibleSidebar()}
           panel={sidebarPanel()}
           tabs={SIDEBAR_TABS}
           width={sidebarWidth()}
@@ -741,6 +919,24 @@ export default function ReaderView() {
               {message()}
             </p>
           </Show>
+          <Show when={saveState() === 'failed'}>
+            <p class="note note-error" role="alert">
+              Your latest reading position has not been saved. Keep this page open and retry.
+              <button type="button" class="button" onClick={() => void session?.flush()}>
+                Retry saving position
+              </button>
+            </p>
+          </Show>
+          <Show when={activityError()}>
+            {(error) => (
+              <p class="note note-error" role="alert">
+                {error()}{' '}
+                <button type="button" class="button" onClick={() => void activity?.retry()}>
+                  Retry saving reading time
+                </button>
+              </p>
+            )}
+          </Show>
           <Show when={conflict()}>
             {(pending) => (
               <div class="reader-conflict" role="alertdialog" aria-label="Reading position differs">
@@ -748,7 +944,8 @@ export default function ReaderView() {
                   Another device reached{' '}
                   <strong>{Math.round(pending().remote.fraction * 100)}%</strong> of this book
                   {formatHlcTime(pending().remote.updatedHlc)}. You're at{' '}
-                  <strong>{Math.round(pending().localFraction * 100)}%</strong> here.
+                  <strong>{Math.round(pending().localFraction * 100)}%</strong> here. Choose a
+                  position to resume automatic saving.
                 </p>
                 <div class="reader-conflict-actions">
                   <button
@@ -782,6 +979,66 @@ export default function ReaderView() {
           />
         </div>
       </div>
+      <footer class="reader-footer">
+        <span class="reader-footer-hint" aria-hidden="true">
+          Use ← → to turn pages
+        </span>
+        <div class="reader-nav" role="group" aria-label="Pages">
+          <button
+            type="button"
+            class="reader-icon-button"
+            aria-label="Previous"
+            title="Previous page (←)"
+            disabled={!ready()}
+            onClick={() => session?.renderer.prev()}
+          >
+            <Icon name="arrow-left" size={19} />
+          </button>
+          <span class="reader-progress" aria-label="Reading progress">
+            {Math.round(fraction() * 100)}%
+          </span>
+          <button
+            type="button"
+            class="reader-icon-button"
+            aria-label="Next"
+            title="Next page (→)"
+            disabled={!ready()}
+            onClick={() => session?.renderer.next()}
+          >
+            <Icon name="arrow-right" size={19} />
+          </button>
+        </div>
+        <form class="reader-page-jump" onSubmit={jumpToPage}>
+          <label for="reader-page-number">{supportsThumbnails() ? 'Page' : 'Section'}</label>
+          <input
+            id="reader-page-number"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max={pages().length || 1}
+            aria-label={supportsThumbnails() ? 'Go to page' : 'Go to section'}
+            value={jump()}
+            disabled={!ready()}
+            onInput={(event) => setJump(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setJump(String(currentPageIndex() + 1));
+                event.currentTarget.blur();
+                event.stopPropagation();
+              }
+            }}
+          />
+          <span>of {pages().length || '—'}</span>
+          <button
+            class="reader-icon-button"
+            type="submit"
+            aria-label="Go to location"
+            disabled={!ready()}
+          >
+            <Icon name="arrow-right" size={15} />
+          </button>
+        </form>
+      </footer>
       <Show when={contextMenu()}>
         {(menu) => (
           <ReaderContextMenu
@@ -808,67 +1065,5 @@ export default function ReaderView() {
         )}
       </Show>
     </section>
-  );
-}
-
-/** The reader's appearance controls, shown from the toolbar's gear popover. */
-function ReaderSettingsMenu(props: {
-  settings: ReaderSettings;
-  onChange: (patch: Partial<ReaderSettings>) => void;
-}): JSX.Element {
-  return (
-    <details class="reader-settings-popover">
-      <summary class="reader-icon-button reader-settings-summary">Reader settings</summary>
-      <div class="reader-settings">
-        <label>
-          Font size / PDF zoom
-          <input
-            aria-label="Font size / PDF zoom"
-            type="range"
-            min="12"
-            max="36"
-            value={props.settings.fontSizePx}
-            onInput={(event) => props.onChange({ fontSizePx: Number(event.currentTarget.value) })}
-          />
-        </label>
-        <label>
-          Line height
-          <input
-            aria-label="Line height"
-            type="range"
-            min="1"
-            max="2.5"
-            step="0.1"
-            value={props.settings.lineHeight}
-            onInput={(event) => props.onChange({ lineHeight: Number(event.currentTarget.value) })}
-          />
-        </label>
-        <label>
-          Margins
-          <input
-            aria-label="Margins"
-            type="range"
-            min="0"
-            max="80"
-            value={props.settings.marginPx}
-            onInput={(event) => props.onChange({ marginPx: Number(event.currentTarget.value) })}
-          />
-        </label>
-        <label>
-          Theme
-          <select
-            aria-label="Theme"
-            value={props.settings.theme}
-            onChange={(event) =>
-              props.onChange({ theme: event.currentTarget.value as ReaderTheme })
-            }
-          >
-            <option value="light">Light</option>
-            <option value="sepia">Sepia</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-      </div>
-    </details>
   );
 }

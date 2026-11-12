@@ -188,3 +188,86 @@ describe('createDictionaryService.lookupWord', () => {
     await expect(service.lookupWord('hello')).resolves.toBeNull();
   });
 });
+
+describe('dictionary failure and memory bounds', () => {
+  it('times out after headers if a response body stalls, and cancels that body', async () => {
+    let cancelled = false;
+    const fetchImpl = stubFetch(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('[{"word":"hello"'));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+    );
+    const service = createDictionaryService({ fetch: fetchImpl, timeoutMs: 10 });
+    await expect(service.lookupWord('hello')).resolves.toBeNull();
+    expect(cancelled).toBe(true);
+  });
+
+  it('one caller can abort without cancelling a shared lookup for another', async () => {
+    let deliver!: (response: Response) => void;
+    const fetchImpl = stubFetch(
+      () =>
+        new Promise<Response>((resolve) => {
+          deliver = resolve;
+        }),
+    );
+    const service = createDictionaryService({ fetch: fetchImpl });
+    const controller = new AbortController();
+    const first = service.lookupWord('hello', controller.signal);
+    const second = service.lookupWord('hello');
+    controller.abort();
+    expect(await first).toBeNull();
+    expect(fetchImpl.calls[0]?.init?.signal?.aborted).toBe(false);
+    deliver(entryJson('hello'));
+    expect(await second).not.toBeNull();
+    expect(fetchImpl.calls).toHaveLength(1);
+  });
+
+  it('does not send cookies, page referrers or follow dictionary redirects', async () => {
+    const fetchImpl = stubFetch(() => entryJson('hello'));
+    await createDictionaryService({ fetch: fetchImpl }).lookupWord('hello');
+    expect(fetchImpl.calls[0]?.init).toMatchObject({
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      redirect: 'error',
+    });
+  });
+
+  it('bounds actual response bytes without trusting Content-Length', async () => {
+    let cancelled = false;
+    const fetchImpl = stubFetch(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new Uint8Array(300_000));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          { headers: { 'content-length': '1' } },
+        ),
+    );
+    expect(await createDictionaryService({ fetch: fetchImpl }).lookupWord('hello')).toBeNull();
+    expect(cancelled).toBe(true);
+  });
+
+  it('evicts least-recently-used cached words and rejects huge selections', async () => {
+    const fetchImpl = stubFetch(() => entryJson('word'));
+    const service = createDictionaryService({ fetch: fetchImpl, cacheEntries: 2 });
+    for (const word of ['first', 'second', 'first', 'third', 'second'])
+      await service.lookupWord(word);
+    expect(fetchImpl.calls).toHaveLength(4);
+    expect(await service.lookupWord('a'.repeat(129))).toBeNull();
+    expect(await service.lookupWord('a'.repeat(5000))).toBeNull();
+    expect(fetchImpl.calls).toHaveLength(4);
+  });
+});

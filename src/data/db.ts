@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { BookLifecycle } from '~/domain/book';
 import type { AnnotationKind, BookFormat, LocatorKind, ReadingStatus } from '~/domain/enums';
+import { normalizeTagName } from '~/domain/collections';
 
 /**
  * Dexie row types.
@@ -32,6 +33,8 @@ export interface BookRow {
   /** Indexed copy of the lifecycle state; see docs/decisions/0002. */
   lifecycle: BookLifecycle;
   addedAt: number;
+  /** Per-field clocks retain provenance across merged snapshots. */
+  metadataHlcs?: Record<string, string>;
   updatedHlc: string;
   archivedAt?: number;
   deletedAt?: number;
@@ -80,7 +83,7 @@ export interface DeviceStateRow {
 }
 
 export type TransferDirection = 'upload' | 'download';
-export type TransferState = 'queued' | 'running' | 'failed' | 'complete';
+export type TransferState = 'queued' | 'running' | 'failed' | 'complete' | 'cancelled';
 
 export interface FileTransferRow {
   id: string;
@@ -91,6 +94,10 @@ export interface FileTransferRow {
   uploadId?: string;
   partState?: string;
   retryAfter?: number;
+  attempts?: number;
+  error?: string;
+  retryable?: boolean;
+  authExpired?: boolean;
   updatedAt: number;
 }
 
@@ -180,7 +187,7 @@ export const DB_SCHEMA_VERSION = 2;
  * The LOCAL IndexedDB (Dexie) schema version. It advances for local-only tables
  * too, so it can run ahead of the replicated {@link DB_SCHEMA_VERSION}.
  */
-export const DB_LOCAL_VERSION = 3;
+export const DB_LOCAL_VERSION = 4;
 export const DEFAULT_DB_NAME = 'book-reader';
 
 export class LibraryDatabase extends Dexie {
@@ -230,6 +237,20 @@ export class LibraryDatabase extends Dexie {
     this.version(3).stores({
       progressConflicts: 'bookId',
     });
+
+    // v4 rebuilds only derived tag lookup keys with deterministic Unicode
+    // lowercasing. Preserve identities, user labels, HLCs, memberships and
+    // immutable outbox bytes (including already-accepted change IDs).
+    this.version(4)
+      .stores({})
+      .upgrade((tx) =>
+        tx
+          .table<TagRow, string>('tags')
+          .toCollection()
+          .modify((tag) => {
+            tag.normalizedName = normalizeTagName(tag.name);
+          }),
+      );
   }
 }
 
@@ -254,6 +275,11 @@ export const LOCAL_MIGRATIONS: readonly LocalMigration[] = [
     version: 3,
     description:
       'Local-only progressConflicts table for progress-divergence prompts (not replicated). v1/v2 tables unchanged.',
+  },
+  {
+    version: 4,
+    description:
+      'Locale-independent tag lookup keys. Preserves tag IDs, labels, clocks, memberships and immutable outbox payloads; wire schema stays v2.',
   },
 ];
 

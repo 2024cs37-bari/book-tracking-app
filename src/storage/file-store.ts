@@ -1,7 +1,7 @@
 import { AppError } from '~/domain/errors';
 import { assertSha256Hex } from '~/domain/ids';
 
-export type FileStoreKind = 'opfs' | 'indexeddb' | 'memory';
+export type FileStoreKind = 'opfs' | 'indexeddb' | 'memory' | 'native';
 
 export interface StoredFileInfo {
   readonly key: string;

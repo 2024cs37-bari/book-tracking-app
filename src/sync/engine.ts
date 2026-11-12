@@ -1,7 +1,8 @@
 import type { Clock } from '~/domain/hlc';
-import type { LibraryDatabase } from '~/data/db';
+import { DB_SCHEMA_VERSION, type LibraryDatabase } from '~/data/db';
 import type { ChangeRepository } from '~/data/repositories/change-repository';
 import type { SyncMetaRepository } from '~/data/repositories/sync-meta-repository';
+import { SyncHttpError } from './http-transport';
 import { applyPullPage } from './apply';
 import { buildPushRequest } from './protocol';
 import { isCursorExpiredError, type SyncTransport } from './transport';
@@ -34,6 +35,7 @@ export interface SyncEngineOptions {
   readonly pullLimit?: number;
   /** Backstop against a server that never reports caught-up. */
   readonly maxPages?: number;
+  readonly maxPushBatches?: number;
 }
 
 /**
@@ -52,7 +54,8 @@ export class SyncEngine {
     this.options = {
       pushBatchSize: 100,
       pullLimit: 200,
-      maxPages: 10_000,
+      maxPages: 20,
+      maxPushBatches: 10,
       persistClock: options.persistClock,
       ...options,
     };
@@ -67,20 +70,33 @@ export class SyncEngine {
   }
 
   private async run(): Promise<SyncResult> {
-    const pushed = await this.pushOutbox();
+    const { pushed, error } = await this.pushOutbox();
     const { applied, caughtUp, bootstrapped } = await this.pullAndApply();
     if (this.options.persistClock) await this.options.persistClock();
+    if (error !== undefined) throw error;
     return { pushed, applied, caughtUp, bootstrapped };
   }
 
-  private async pushOutbox(): Promise<number> {
+  private async pushOutbox(): Promise<{ pushed: number; error?: SyncHttpError }> {
     let pushed = 0;
-    for (;;) {
+    for (let round = 0; round < this.options.maxPushBatches; round += 1) {
       const batch = await this.options.changes.listPending(this.options.pushBatchSize);
       if (batch.length === 0) break;
       const response = await this.options.transport.push(
         buildPushRequest(this.options.deviceId, batch),
       );
+      const requested = new Set(batch.map((row) => row.id));
+      const answered = new Set(response.outcomes.map((row) => row.id));
+      if (
+        answered.size !== response.outcomes.length ||
+        answered.size !== requested.size ||
+        response.outcomes.some((row) => !requested.has(row.id))
+      ) {
+        throw new SyncHttpError('Server returned mismatched push acknowledgements.', {
+          retryable: false,
+          code: 'bad_response',
+        });
+      }
       const acknowledged = response.outcomes
         .filter((outcome) => outcome.status === 'accepted' || outcome.status === 'duplicate')
         .map((outcome) => outcome.id);
@@ -91,9 +107,20 @@ export class SyncEngine {
       // If the server did not acknowledge the whole batch, the rest is
       // retryable or rejected; stop so a later cycle retries with backoff
       // rather than spinning on the same unacknowledged rows.
-      if (acknowledged.length < batch.length) break;
+      if (acknowledged.length < batch.length) {
+        const rejected = response.outcomes.find((row) => row.status === 'rejected');
+        return {
+          pushed,
+          error: new SyncHttpError(
+            rejected
+              ? `A local change was rejected (${rejected.code ?? 'validation'}). Local data is retained.`
+              : 'Some local changes were not accepted yet. Retrying later.',
+            { retryable: rejected === undefined, code: rejected?.code },
+          ),
+        };
+      }
     }
-    return pushed;
+    return { pushed };
   }
 
   private async pullAndApply(): Promise<{
@@ -126,6 +153,28 @@ export class SyncEngine {
     for (let page = 0; page < this.options.maxPages; page += 1) {
       const since = await this.options.syncMeta.getPullCursor();
       const response = await this.options.transport.pull(since, this.options.pullLimit);
+      if (response.schema_version !== DB_SCHEMA_VERSION) {
+        throw new SyncHttpError('Sync server schema does not match this application.', {
+          retryable: false,
+          code: 'schema_mismatch',
+        });
+      }
+      let previous = since;
+      for (const change of response.changes) {
+        if (change.seq <= previous || change.seq > response.next_cursor) {
+          throw new SyncHttpError('Sync page has invalid sequence ordering.', {
+            retryable: false,
+            code: 'bad_response',
+          });
+        }
+        previous = change.seq;
+      }
+      if (response.next_cursor < since || (response.has_more && response.next_cursor <= since)) {
+        throw new SyncHttpError('Sync cursor did not advance.', {
+          retryable: false,
+          code: 'bad_response',
+        });
+      }
       if (response.changes.length > 0) {
         await applyPullPage(
           this.options.db,

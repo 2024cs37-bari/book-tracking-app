@@ -129,3 +129,19 @@ describe('HLC clock', () => {
     expect(clock.last()?.wallMs).toBe(5000);
   });
 });
+
+describe('HLC boundary recovery', () => {
+  it('observes a high counter before the first local event', () => {
+    const clock = createClock({ deviceId: 'a', now: () => 1 });
+    const remote = { wallMs: 100, counter: 200, deviceId: 'z' };
+    clock.observe(remote);
+    expect(compareHlc(clock.next(), remote)).toBeGreaterThan(0);
+  });
+  it('rolls the wall component forward when the counter is exhausted', () => {
+    const clock = createClock({ deviceId: 'a', now: () => 100 });
+    clock.restore({ wallMs: 100, counter: 0x7fffffff, deviceId: 'a' });
+    const next = clock.next();
+    expect(next).toEqual({ wallMs: 101, counter: 0, deviceId: 'a' });
+    expect(parseHlc(formatHlc(next))).not.toBeNull();
+  });
+});

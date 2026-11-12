@@ -1,101 +1,79 @@
-# Local and remote storage
+# Storage and offline availability
 
-## 1. Responsibilities
+## Responsibilities
 
-The storage layer preserves metadata, original file bytes, and queued work independently. It must distinguish library metadata presence from local file availability and cloud file availability.
+Metadata uses Dexie/IndexedDB; original bytes use a `BookFileStore`; transfer queues and pins are
+local device state. A metadata row does not prove the original exists locally or remotely.
+Originals are unchanged bytes addressed by SHA-256; covers are replaceable derivatives.
 
-| Data                                                        | Initial local storage                         | Remote storage                                |
-| ----------------------------------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Book metadata, progress, collections, annotations, sessions | Dexie/IndexedDB                               | D1 after sync                                 |
-| Browser book bytes                                          | OPFS when supported; tested fallback required | Private R2 after upload                       |
-| Desktop book bytes                                          | Tauri app data directory                      | Private R2 after upload                       |
-| Pinned/last-opened state                                    | Per-device local database                     | None                                          |
-| Outbox, cursor, transfer queue                              | Local database                                | Server idempotency/change-log state as needed |
-| Cover thumbnail                                             | Local cache/object store                      | Private R2 derivative or regenerated copy     |
+Browser storage selection probes OPFS, then a separate durable IndexedDB byte store, then memory. Each
+startup uses independent probe keys so concurrent windows cannot remove one another's checks. An
+unanswered optional persistence request is bounded so startup can proceed. The UI distinguishes
+durable fallback from memory-only storage. Browser quotas, private mode, eviction and clearing
+site data still apply; persistence permission and pins are not absolute disk guarantees.
 
-## 2. Local metadata database
+## Import and repair
 
-Use Dexie over IndexedDB for the initial implementation. It is mature for browser persistence, supports indexed queries and transactions, and avoids making a WebAssembly SQLite deployment prerequisite for the PWA. Keep domain logic behind repositories so a later database change is possible without rewriting UI behavior.
+Import bounds file size, detects content, hashes bytes, extracts metadata, writes/verifies the
+original, then commits metadata/outbox. Crashes between file and metadata steps can leave an
+unreferenced file; reconciliation reports it. Re-import of identical content repairs missing or
+corrupt bytes without replacing user-edited metadata.
 
-Requirements:
+The file store and metadata database cannot share a transaction. Do not remove staged originals
+merely because a later metadata operation failed. Portable restore follows the same recoverable
+ordering. See [Backup](BACKUP.md).
 
-- Declare explicit Dexie schema versions and tested upgrade functions.
-- Use transactions for replicated entity + outbox writes and pull page + cursor writes.
-- Avoid large binary blobs in the metadata tables when OPFS is available.
-- Provide a local export before destructive reset or risky migration.
-- Detect unavailable/quota-exceeded storage and surface actionable errors.
+## Pins and local cache removal
 
-Original bytes have a separate native IndexedDB fallback database, `book-reader-files` (version 2,
-object store `files`, keyPath `key`), used only after OPFS capability/write probing fails. It stores
-ArrayBuffers plus MIME under the existing file-store keys and resolves writes after transaction
-commit, recreating Blobs on read. Released binary v1 Blob rows are retained and lazily converted
-on successful read; inaccessible legacy Blobs may require an online read to convert. It does not
-add binary data to the released Dexie metadata tables. See [ADR 0004](decisions/0004-durable-file-fallback.md).
+Pinning is a per-device decision. The book must be present, hash-verified and in a durable store
+before it is marked pinned. Unpinning changes only the pin; it does not remove bytes.
 
-IndexedDB is not a guaranteed durable disk. Browser eviction, private browsing, user clearing, and platform-specific behavior must be handled. `navigator.storage.persist()` may be requested where available; the app must work if permission is denied.
+Settings lets the user select a target original-file budget and explicitly free space. Cleanup
+walks least-recently-opened candidates and only removes originals when:
 
-An unanswered persistence permission request is bounded to 1.5 seconds at startup; `null` means
-permission is still unknown, not granted. The probe order is OPFS, durable IndexedDB, then an
-explicitly reported memory-only last resort. Normal archive/tombstone operations never remove
-bytes from any store.
+- The book is not pinned or tombstoned.
+- No reader, importer, backup or transfer holds a shared file lease.
+- An exclusive Web Lock can protect removal from other tabs.
+- The configured server currently confirms a trusted original with matching hash and size.
 
-## 3. File store and content identity
+Failed network verification stops removal. A previous completed upload alone is insufficient.
+After remote verification, cleanup resolves current book references by content hash and checks
+their lifecycle and pins again. It keeps a short metadata transaction open across local removal,
+so sync canonicalization or a concurrent tombstone cannot invalidate that final check. Network
+verification never holds that transaction. Pinning and import completion also resolve the current
+content identity after file IO, avoiding stale device-state records when sync replaces a UUID.
+Metadata, progress, annotations and covers remain. If protected data exceeds the target, report
+that the target could not be reached; never force removal. Without cross-tab locks, browser cache
+cleanup is unavailable. No automatic removal occurs merely because browser quota is low.
 
-The file-store interface should support writing, reading, deleting local cache copies, existence checks, byte counts, and streaming hash verification. Implementations:
+## Reconciliation
 
-- Web: OPFS when capability checks and browser tests pass. Provide a fallback strategy based on actual supported browsers and expected maximum file sizes.
-- Tauri: application data directory, accessed through narrow native commands or an approved plugin.
+Settings reports missing local originals, unreferenced files and estimated usage. Tombstoned books
+continue to reference originals so recovery remains possible. Cleanup rechecks references under
+exclusive file leases before removing recognized orphan originals. Unknown file keys and cover
+artifacts are retained for review; stale reports are not deletion authority.
 
-Original files are stored unmodified and keyed by the lowercase SHA-256 of their bytes. The hash is the deduplication identity and R2 object key. Hash while streaming where practical to avoid unnecessary memory copies. Verify the hash after import and download. A cover thumbnail is a derivative and must not replace the original or be mistaken for the book's content hash.
+`filePresent` is advisory device state; opening a reader and storage diagnostics check actual
+availability. A missing book can be downloaded or re-imported. Save-original and portable backups
+provide recovery outside the origin's browser storage.
 
-Filesystem writes and IndexedDB metadata cannot share a transaction. Import must therefore use a recoverable staged workflow: write temporary file, verify content, commit metadata/outbox, then atomically promote where supported; or persist an import journal that can reconcile orphaned files and rows after a crash. Never leave ambiguous half-imported state silently.
+## Transfers
 
-## 4. Availability state
+File jobs are keyed by direction and hash, survive restart, retain errors/retry deadlines, and can
+be cancelled. Explicit download requests can requeue a previously completed download after eviction.
+Automatic discovery does not reset a failed job's backoff or revive a cancelled job.
 
-Represent separately:
+The current protocol restarts interrupted whole-file work. Multipart upload IDs/parts require a
+future versioned state machine, server expiry and abandoned-part cleanup. Current request and backup
+limits are documented independently in [API](API.md) and [Backup](BACKUP.md).
 
-- Metadata present locally.
-- Original present locally and verified.
-- Upload state (`not_started`, `queued`, `uploading`, `available_remote`, `failed`).
-- Download state (`not_requested`, `queued`, `downloading`, `available_local`, `failed`).
-- Device pin state.
+## Platform stores and future work
 
-A UI label such as “Available offline” is shown only when the local original exists and integrity checks pass. A failed hash verification marks the file unavailable and offers re-download/re-import.
+The native runtime selects the implemented Tauri adapter in app-owned directories. It preserves
+file identity through bounded IPC, hash checks and atomic publication, and treats startup failure
+as fatal instead of falling back to a separate browser store. Metadata remains in the WebView
+IndexedDB profile. Browser-to-native migration uses the validated portable backup flow; it does
+not copy browser profiles implicitly. See [Desktop](DESKTOP.md) for runtime and recovery evidence.
 
-## 5. Selective offline and quota management
-
-Initial offline policy:
-
-- Never evict the currently open file or a pinned file.
-- Keep recently opened unpinned books up to a configurable budget when storage permits.
-- Download remote-only books on demand.
-- Keep metadata and small covers available locally where possible.
-- Evict least-recently-used unpinned file bytes first; do not delete metadata or annotations.
-- Warn before a pin cannot be honored because of quota; do not silently mark it pinned but absent.
-
-Budget estimates are advisory because browsers may impose independent quotas. Query storage estimates where supported, handle write failures, and reconcile reported byte counts against actual store contents periodically. Avoid automatically downloading the entire library in the initial release.
-
-## 6. Transfer queues
-
-Upload/download jobs are durable local records. Each job contains content hash, direction, state, completed bytes or parts, retry timing, and an opaque multipart upload ID if needed. Signed URLs are short-lived and must not be persisted longer than necessary. On restart, renew authorization and resume only if server-side multipart state remains valid; otherwise restart cleanly and clean up abandoned parts through a server policy.
-
-Queue processing is bounded by concurrency, respects connectivity and battery/data-saving signals where available, and can be paused by the user. Metadata sync remains independent.
-
-## 7. Server object storage
-
-R2 is private. The Worker authorizes an upload/download request and issues a short-lived URL or mediates a download if direct signed operations cannot satisfy the security model. The Worker does not proxy large book bodies by default. Confirm object size, expected hash, and completion state before publishing file availability to clients. See [Backend](BACKEND.md).
-
-## 8. Export and restore
-
-Manual export is the initial backup path:
-
-- JSON export includes schema/version metadata, books, progress, collections, annotations, and sessions.
-- Markdown export contains human-readable annotations and locator context.
-- Optional archive export includes original files, mapped by content hash, with a manifest.
-- Export is generated locally and must remain possible when the server is unavailable.
-
-Restore validates the manifest, hashes, schema version, and relationships before modifying current state. Prefer import into a staging area and show counts/errors before merge. Automated external backup is deferred until restore is tested and credential handling is designed.
-
-## 9. Data removal and cleanup
-
-Archiving does not remove bytes. Metadata tombstones and remote object deletion are separate. Local cache eviction may remove bytes without changing replicated metadata. Permanent remote deletion requires explicit confirmation, and any future garbage collection must account for all metadata references and retention policy. See [ADR 0002](decisions/0002-data-lifecycle.md).
+Streaming backups, large-file range reads and additional platform adapters remain future work.
+Each needs recovery and platform tests; native storage alone does not establish their behavior.

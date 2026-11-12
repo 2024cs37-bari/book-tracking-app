@@ -1,0 +1,185 @@
+/* Shell motion only: do not animate the renderer, its parents' geometry, or
+   saved reading positions. Visible elements have a fully visible base state. */
+:root {
+  --motion-fast: 160ms;
+  --motion-enter: 240ms;
+}
+
+@keyframes shell-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shell-view-in {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shell-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Opacity-only route entry leaves anchors and fixed-position descendants in
+   place. There is no delayed or retained fill state. */
+.library,
+.details,
+.settings-refined,
+.stats {
+  animation: shell-view-in var(--motion-enter) ease-out;
+}
+
+.library-filter-panel {
+  transition:
+    grid-template-rows var(--motion-enter) var(--ease-out),
+    opacity var(--motion-fast) ease,
+    visibility 0s var(--motion-enter);
+}
+.library-filter-panel[data-open='true'] {
+  transition-delay: 0s;
+}
+
+/* Native details remain responsible for focus and collapsed semantics. Older
+   engines get entry motion; supported engines also interpolate their height. */
+:is(.details-edition, .details-management, .settings-disclosure, .stats-method)[open]
+  > :not(summary),
+.details .diagnostics[open] > :not(summary),
+.reader-layout-options[open] > :not(summary),
+.settings-rename-form {
+  animation: shell-fade-in var(--motion-enter) ease-out;
+}
+
+@supports (interpolate-size: allow-keywords) and selector(details::details-content) {
+  :is(.details-edition, .details-management, .settings-disclosure, .stats-method),
+  .details .diagnostics,
+  .reader-layout-options {
+    interpolate-size: allow-keywords;
+  }
+  :is(.details-edition, .details-management, .settings-disclosure, .stats-method)::details-content,
+  .details .diagnostics::details-content,
+  .reader-layout-options::details-content {
+    height: 0;
+    overflow: clip;
+    overflow-clip-margin: 6px;
+    transition:
+      height var(--motion-enter) var(--ease-out),
+      content-visibility var(--motion-enter) allow-discrete;
+  }
+  :is(
+      .details-edition,
+      .details-management,
+      .settings-disclosure,
+      .stats-method
+    )[open]::details-content,
+  .details .diagnostics[open]::details-content,
+  .reader-layout-options[open]::details-content {
+    height: auto;
+  }
+}
+
+/* The sidebar takes its final width immediately. Fading its content never
+   causes repagination or races saved-position restoration. */
+.reader-sidebar > .reader-sidebar-heading,
+.reader-sidebar > .reader-sidebar-tabs,
+.reader-sidebar > .reader-sidebar-body,
+.reader-sidebar-body > :first-child,
+.reader-scrim {
+  animation: shell-fade-in var(--motion-enter) ease-out;
+}
+.reader-settings-popover[open] > .reader-settings {
+  animation: shell-sheet-in var(--motion-enter) var(--ease-out);
+}
+
+/* Animate decoration rather than shrinking or moving button hit areas. */
+.library-status-tab::after {
+  opacity: 0;
+  transform: scaleX(0.4);
+  transform-origin: center;
+  transition:
+    opacity var(--motion-fast) ease,
+    transform var(--motion-enter) var(--ease-out);
+}
+.library-status-tab[aria-pressed='true']::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+.reader-shell .reader-tab.active {
+  box-shadow: none;
+}
+.reader-shell .reader-tab::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 1.5px;
+  content: '';
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transition:
+    opacity var(--motion-fast) ease,
+    transform var(--motion-enter) var(--ease-out);
+}
+.reader-shell .reader-tab.active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+.reader-layout-options > summary > svg,
+.settings-disclosure > summary > svg,
+.details-edition > summary > svg,
+.details-management > summary > svg,
+.stats-method > summary > svg {
+  transition: transform var(--motion-enter) var(--ease-out);
+}
+.app-main .button > svg,
+.reader-shell .reader-icon-button > svg,
+.reader-shell .reader-close > svg {
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.app-main .button:active:not(:disabled) > svg,
+.reader-shell .reader-icon-button:active:not(:disabled) > svg,
+.reader-shell .reader-close:active > svg {
+  transform: scale(0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.library, .details, .settings-refined, .stats, .reader-shell),
+  :is(.library, .details, .settings-refined, .stats, .reader-shell) *,
+  :is(.library, .details, .settings-refined, .stats, .reader-shell) *::before,
+  :is(.library, .details, .settings-refined, .stats, .reader-shell) *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .library .book-card a:hover .cover,
+  .library .book-card a:focus-visible .cover,
+  .library .book-open-hint,
+  .app-main .button:active:not(:disabled) > svg,
+  .reader-shell .reader-icon-button:active:not(:disabled) > svg,
+  .reader-shell .reader-close:active > svg {
+    transform: none;
+  }
+  @supports selector(details::details-content) {
+    :is(
+      .details-edition,
+      .details-management,
+      .settings-disclosure,
+      .stats-method
+    )::details-content,
+    .details .diagnostics::details-content,
+    .reader-layout-options::details-content {
+      transition: none !important;
+    }
+  }
+}

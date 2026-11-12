@@ -1,8 +1,13 @@
-import { unzipSync, strFromU8 } from 'fflate';
+import { strFromU8 } from 'fflate';
+import { MAX_EPUB_BYTES, openEpubArchive } from './epub-archive';
+import { normalizeReaderSettings, READER_FONTS } from './settings';
+import { AnnotationDiagnostics } from './annotation-diagnostics';
 import { assertLocator, createCfiLocator, type Locator } from '~/domain/locator';
 import {
   DEFAULT_READER_SETTINGS,
   type Highlight,
+  type AnnotationAnchor,
+  type AnnotationAnchorStatus,
   type ReaderPage,
   type ReaderSettings,
   type Renderer,
@@ -40,6 +45,10 @@ interface FoliateView extends HTMLElement {
   book: EpubBook;
   renderer: {
     setStyles?(css: string): void;
+    render?(): void;
+    start?: number;
+    end?: number;
+    viewSize?: number;
     setAttribute(name: string, value: string): void;
     goTo(target: { index: number; anchor?: unknown }): Promise<void>;
     getContents(): { index: number; doc?: Document; overlayer?: unknown }[];
@@ -126,7 +135,13 @@ export class EpubRenderer implements Renderer {
   readonly supportsThumbnails = false;
   private overlayerModule?: OverlayerModule;
   private highlights: readonly Highlight[] = [];
+  private readonly annotationDiagnostics = new AnnotationDiagnostics();
   private currentFraction = 0;
+  get fixedLayout(): boolean {
+    return this.view?.isFixedLayout ?? false;
+  }
+  private flowTurning = false;
+  private flowTurnTimer?: ReturnType<typeof setTimeout>;
   /** Spine index of the section currently on screen, tracked from relocate. */
   private visibleIndex = 0;
   private readonly selectionCallbacks = new Set<(selection: SelectionInfo | null) => void>();
@@ -158,11 +173,15 @@ export class EpubRenderer implements Renderer {
   private readonly handleCreateOverlay = (event: Event) => {
     const { index } = (event as CustomEvent<{ index: number }>).detail;
     queueMicrotask(() => {
+      if (this.dead) return;
+      this.checkAnnotationAnchors();
       this.reapplyHighlights();
       const doc = this.view?.renderer.getContents().find((c) => c.index === index)?.doc;
       if (doc) {
         this.attachSelection(doc, index);
         this.attachContextMenu(doc);
+        doc.addEventListener('wheel', this.onFlowWheel, { passive: false });
+        doc.addEventListener('keydown', this.onBookKey);
       }
     });
   };
@@ -196,7 +215,12 @@ export class EpubRenderer implements Renderer {
     if (next === this.settings.fontSizePx) return;
     clearTimeout(this.pinchTimer);
     this.pinchTimer = setTimeout(() => {
-      if (!this.dead) this.applySettings({ ...this.settings, fontSizePx: next });
+      if (!this.dead && !this.fixedLayout) {
+        this.applySettings({ ...this.settings, fontSizePx: next });
+        this.host?.dispatchEvent(
+          new CustomEvent('reader-settings-change', { detail: { fontSizePx: next } }),
+        );
+      }
     }, 120);
   };
 
@@ -227,7 +251,12 @@ export class EpubRenderer implements Renderer {
     if (next === this.settings.fontSizePx) return;
     clearTimeout(this.pinchTimer);
     this.pinchTimer = setTimeout(() => {
-      if (!this.dead) this.applySettings({ ...this.settings, fontSizePx: next });
+      if (!this.dead && !this.fixedLayout) {
+        this.applySettings({ ...this.settings, fontSizePx: next });
+        this.host?.dispatchEvent(
+          new CustomEvent('reader-settings-change', { detail: { fontSizePx: next } }),
+        );
+      }
     }, 150);
   };
   private pointerDistance(): number {
@@ -255,16 +284,9 @@ export class EpubRenderer implements Renderer {
     this.overlayerModule = overlayerModule as unknown as OverlayerModule;
     if (this.dead) return;
     // A bounded archive loader avoids upstream's ZIP worker/WASM dependencies.
-    if (file.size > 256 * 1024 * 1024) throw new Error('EPUB exceeds the 256 MiB reader limit.');
-    let expanded = 0;
-    const files = unzipSync(new Uint8Array(await file.arrayBuffer()), {
-      filter: (entry) => {
-        expanded += entry.originalSize;
-        if (entry.originalSize > 64 * 1024 * 1024 || expanded > 256 * 1024 * 1024)
-          throw new Error('EPUB expanded content exceeds reader limits.');
-        return true;
-      },
-    });
+    if (file.size > MAX_EPUB_BYTES) throw new Error('EPUB exceeds the 256 MiB reader limit.');
+    const files = openEpubArchive(new Uint8Array(await file.arrayBuffer())).extractAll();
+    if (this.dead) return;
     const loader = {
       loadText: (name: string) => (files[name] ? strFromU8(files[name]) : null),
       loadBlob: (name: string, type: string) =>
@@ -428,6 +450,63 @@ export class EpubRenderer implements Renderer {
     this.selectionCallbacks.add(callback);
     return () => this.selectionCallbacks.delete(callback);
   }
+  setAnnotationAnchors(annotations: readonly AnnotationAnchor[]): void {
+    this.annotationDiagnostics.setAnchors(annotations);
+    this.checkAnnotationAnchors();
+  }
+  onAnnotationStatus(callback: (states: readonly AnnotationAnchorStatus[]) => void): () => void {
+    return this.annotationDiagnostics.subscribe(callback);
+  }
+  private checkAnnotationAnchors(): void {
+    const view = this.view;
+    if (!view || this.dead) return;
+    const contents = view.renderer.getContents?.() ?? [];
+    for (const annotation of this.annotationDiagnostics.anchors) {
+      const unresolved = () =>
+        this.annotationDiagnostics.report(
+          annotation.id,
+          'unresolved',
+          'The saved anchor could not be found in this book. Your annotation is kept.',
+        );
+      try {
+        const target =
+          annotation.locator.kind === 'cfi'
+            ? view.resolveNavigation(annotation.locator.value)
+            : undefined;
+        if (
+          !target ||
+          !Number.isInteger(target.index) ||
+          target.index < 0 ||
+          target.index >= view.book.sections.length
+        ) {
+          unresolved();
+          continue;
+        }
+        if (!annotation.locator.value.includes('!') && annotation.kind !== 'highlight') {
+          this.annotationDiagnostics.report(annotation.id, 'resolved');
+          continue;
+        }
+        const doc = contents.find((content) => content.index === target.index)?.doc;
+        if (!doc) continue; // An unloaded chapter is unchecked, never orphaned.
+        const range =
+          typeof target.anchor === 'function'
+            ? (target.anchor as (doc: Document) => Range | undefined)(doc)
+            : undefined;
+        if (
+          !range ||
+          range.startContainer?.ownerDocument !== doc ||
+          range.endContainer?.ownerDocument !== doc ||
+          (annotation.kind === 'highlight' && range.collapsed)
+        ) {
+          unresolved();
+          continue;
+        }
+        this.annotationDiagnostics.report(annotation.id, 'resolved');
+      } catch {
+        unresolved();
+      }
+    }
+  }
   applyHighlights(highlights: readonly Highlight[]): void {
     const previous = this.highlights;
     this.highlights = highlights;
@@ -450,7 +529,11 @@ export class EpubRenderer implements Renderer {
       // idempotent rather than duplicating overlays.
       void view
         .addAnnotation({ value: highlight.locator.value, color: highlight.color })
-        .catch(() => {});
+        .catch(() => {
+          // Errors resolving a loaded range are reported by the anchor checker.
+          // Do not diagnose an offscreen chapter merely because it has no overlay.
+          if (!this.dead) this.checkAnnotationAnchors();
+        });
     }
   }
   private attachSelection(doc: Document, index: number): void {
@@ -636,26 +719,95 @@ export class EpubRenderer implements Renderer {
       return '';
     }
   }
+  private readonly onBookKey = (event: KeyboardEvent): void => {
+    if (this.dead || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey)
+      return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (!['ArrowLeft', 'ArrowRight', 'f', 's', '[', 'Escape'].includes(event.key)) return;
+    const forwarded = new KeyboardEvent('keydown', { key: event.key, cancelable: true });
+    window.dispatchEvent(forwarded);
+    if (forwarded.defaultPrevented) event.preventDefault();
+  };
+  private readonly onFlowWheel = (event: WheelEvent): void => {
+    if (event.ctrlKey || this.settings.mode !== 'continuous' || this.fixedLayout || this.dead)
+      return;
+    const renderer = this.view?.renderer;
+    if (
+      !renderer ||
+      renderer.start === undefined ||
+      renderer.end === undefined ||
+      renderer.viewSize === undefined
+    )
+      return;
+    const atBoundary =
+      event.deltaY > 0 ? renderer.end >= renderer.viewSize - 2 : renderer.start <= 1;
+    if (!atBoundary || Math.abs(event.deltaY) < 2) return;
+    event.preventDefault();
+    if (this.flowTurning) return;
+    this.flowTurning = true;
+    const turn = event.deltaY > 0 ? this.view!.next() : this.view!.prev();
+    this.run(
+      turn.finally(() => {
+        if (this.dead) return;
+        this.flowTurnTimer = setTimeout(() => {
+          this.flowTurning = false;
+        }, 350);
+      }),
+    );
+  };
   applySettings(settings: ReaderSettings): void {
-    this.settings = settings;
+    this.settings = normalizeReaderSettings(settings);
+    settings = this.settings;
     const colors = {
-      light: ['#fff', '#171717'],
+      light: ['#fffefa', '#24251f'],
       sepia: ['#f4ecd8', '#403421'],
-      dark: ['#191919', '#eee'],
+      dark: ['#191b18', '#e8e9df'],
     }[settings.theme];
     if (this.view) this.view.style.background = colors[0]!;
-    if (this.view?.isFixedLayout) return;
-    this.view?.renderer?.setStyles?.(
-      `html { color-scheme: ${settings.theme === 'dark' ? 'dark' : 'light'}; background: ${colors[0]} !important; color: ${colors[1]} !important; } body { font-size: ${settings.fontSizePx}px !important; line-height: ${settings.lineHeight} !important; }`,
-    );
+    if (this.host) {
+      this.host.dataset.readingMode = settings.mode;
+      this.host.dataset.fixedLayout = String(this.fixedLayout);
+    }
+    const renderer = this.view?.renderer;
+    if (!renderer) return;
+    if (this.fixedLayout) {
+      renderer.setAttribute('page-mode', settings.mode === 'double' ? 'double' : 'single');
+      renderer.setAttribute('zoom', 'fit-page');
+      return;
+    }
+    const family =
+      settings.fontFamily === 'publisher'
+        ? ''
+        : `font-family: ${READER_FONTS[settings.fontFamily]} !important;`;
+    const alignment =
+      settings.textAlign === 'publisher' ? '' : `text-align: ${settings.textAlign} !important;`;
+    // Publisher defaults remain intact until the reader explicitly overrides them.
+    const paragraph =
+      settings.paragraphSpacing > 0
+        ? `p { margin-block-end: ${settings.paragraphSpacing}em !important; }`
+        : '';
+    renderer.setStyles?.(`html { color-scheme: ${settings.theme === 'dark' ? 'dark' : 'light'}; background: ${colors[0]} !important; color: ${colors[1]} !important; }
+      body { font-size: ${settings.fontSizePx}px !important; line-height: ${settings.lineHeight} !important; ${family} }
+      body, p, li, blockquote { ${family} ${alignment} letter-spacing: ${settings.letterSpacing}em !important; }
+      ${paragraph}`);
     const gapPercent = (200 * settings.marginPx) / Math.max(200, this.host?.clientWidth ?? 800);
-    this.view?.renderer?.setAttribute('gap', `${gapPercent}%`);
-    this.view?.renderer?.setAttribute('margin', `${settings.marginPx}px`);
+    renderer.setAttribute('gap', `${gapPercent}%`);
+    renderer.setAttribute('margin', `${settings.marginPx}px`);
+    renderer.setAttribute('max-column-count', settings.mode === 'double' ? '2' : '1');
+    // A two-column spread should also form on a normal laptop, not just at 1440px.
+    renderer.setAttribute(
+      'max-inline-size',
+      `${settings.mode === 'double' ? Math.min(520, settings.textWidthPx) : settings.textWidthPx}px`,
+    );
+    renderer.setAttribute('flow', settings.mode === 'continuous' ? 'scrolled' : 'paginated');
+    renderer.render?.();
   }
   destroy(): void {
     if (this.dead) return;
     this.dead = true;
     clearTimeout(this.pinchTimer);
+    clearTimeout(this.flowTurnTimer);
     this.host?.removeEventListener('pointerdown', this.onPointerDown);
     this.host?.removeEventListener('pointermove', this.onPointerMove);
     this.host?.removeEventListener('pointerup', this.onPointerUp);
@@ -663,6 +815,7 @@ export class EpubRenderer implements Renderer {
     this.host?.removeEventListener('wheel', this.onWheel);
     this.pointers.clear();
     this.selectionCallbacks.clear();
+    this.annotationDiagnostics.clear();
     this.contextMenuCallbacks.clear();
     this.view?.removeEventListener('relocate', this.relocate);
     this.view?.removeEventListener('draw-annotation', this.handleDrawAnnotation);

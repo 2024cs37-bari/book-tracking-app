@@ -1,162 +1,87 @@
-# Synchronization protocol
+# Synchronization contract
 
-## 1. Goals and invariants
+## Invariants
 
-Sync transfers durable user intent between a user's devices. It is asynchronous, resumable, idempotent, and subordinate to local availability.
+1. Local entity + immutable outbox event commit together.
+2. Local reads/edits and reading do not wait for network success.
+3. A retry reuses the original change ID and payload bytes.
+4. A validated pull page, reference reconciliation, clock checkpoint and cursor commit together.
+5. Remote application never writes an outgoing echo.
+6. File bytes travel separately from metadata and are independently verified.
+7. Meaningful progress divergence preserves a choice rather than silently discarding a position.
 
-Invariants:
+The detailed current scheduler/transport behavior is in [Sync implementation](SYNC-IMPLEMENTATION.md).
+The authoritative HTTP contract and error codes are in [API](API.md). These documents describe
+implemented behavior; future snapshot/compaction is not part of the current server.
 
-1. Local mutation plus local outbox entry commit atomically.
-2. The UI does not wait for the network to read or mutate local data.
-3. A push retry cannot duplicate a mutation.
-4. A pull cursor advances only after every change in the page has been applied transactionally.
-5. Applying remote changes does not re-enqueue them as local changes.
-6. File transfers are separate from metadata sync and independently resumable.
-7. Conflicts are deterministic and user-visible when automatic resolution could discard meaningful progress.
+## Delivery
 
-## 2. Device identity and HLC
+`POST /api/v1/sync/push` sends a versioned batch containing device ID, immutable event IDs, entity
+kind/ID, operation, HLC and canonical payload. The server validates envelopes/bounds and returns
+per-event outcomes. Only accepted/identical-duplicate IDs are acknowledged locally. Rejected and
+retryable events remain available for repair/retry; malformed acknowledgement sets cannot silently
+clear unrelated pending work.
 
-Each installation receives a random stable `device_id`. It is not an account credential. Reinstalling may create a new ID; device state is not trusted for authorization.
+`GET /api/v1/sync/pull?since=<seq>&limit=<n>` returns increasing sequence rows, next cursor and
+has-more. A cursor is exclusive. Clients validate schema, ordering, progression and payloads before
+applying anything. A bad row fails the page transaction and leaves the prior cursor intact.
+The D1 log is scoped by verified Access identity; event IDs cannot be used to read another user.
 
-Maintain a Hybrid Logical Clock tuple `(wall_ms, counter, device_id)`. On local events, advance it using local time and prior clock state. On receiving a remote HLC, merge according to the standard HLC update rule, then advance before creating subsequent local mutations. Compare tuples lexicographically, including device ID as a deterministic final tie-break. Validate clock fields and bound pathological future timestamps to prevent one corrupted clock from dominating indefinitely; retain diagnostic information when clamping is needed.
+The engine processes bounded batches/pages in a single-flight cycle. Browser Web Locks coordinate
+cycles across tabs; it then yields so the UI remains usable. Fresh clients bootstrap by pulling
+from zero with ordinary pagination. The current server retains the full log. An expired-cursor
+response triggers one guarded restart from zero; it cannot recover history a future server has
+actually discarded without a complete snapshot. Do not enable compaction without that protocol.
 
-## 3. Local mutation transaction
+## Conflict rules
 
-For every replicated mutation:
+| Entity             | Resolution                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| Book fields        | Per-field HLC registers, preserving provenance/explicit clears; deterministic ties |
+| Book identity      | One SHA-256 identity; canonical ID/alias/reference reconciliation                  |
+| Lifecycle          | Archive/delete tombstones with ordered lifecycle clock/timestamps                  |
+| Progress           | Ordered updates; substantial cross-device differences retained for user choice     |
+| Annotation         | ID identity, ordered edits, deletion tombstone                                     |
+| Shelf/tag          | Ordered display fields and tombstones                                              |
+| Membership         | Merge add/remove HLC; newer re-add survives older removal                          |
+| Session            | Append-only, ID-deduplicated activity fact                                         |
+| Pin/presence/queue | Local to each device; never replicated                                             |
 
-1. Validate input and allocate entity/change IDs.
-2. Advance local HLC.
-3. Update the entity row.
-4. Insert one immutable outbox row with canonical payload, HLC, device ID, and idempotency ID.
-5. Commit both together.
+The progress threshold is 0.1 of the book. The reader shows pending alternatives; staying here
+asserts local intent as a fresh change, while accepting the pulled position avoids an echo.
+New local reading dismisses the obsolete prompt. Format locators remain paired with fractions.
 
-If any step fails, neither entity update nor outbox event is visible. Local-only pin and cache state do not generate replicated changes.
+## Background work and user controls
 
-The change ID is unique and reused for every retry. Once acknowledged, a change is marked pushed (or removed only after a defined retention policy); an ambiguous network timeout must not mint a replacement ID.
+When `VITE_SYNC_URL` is configured, the app starts a scheduler. Launch, local outbox/queued-file
+changes, foreground and regained connectivity trigger work; bounded polling discovers remote
+changes. Retry backoff includes jitter and respects Retry-After. Authentication/permanent failures
+pause retry until an explicit user action; ordinary local reading continues.
 
-## 4. API envelope
+Settings exposes state, last successful cycle, retry time, errors, pause/resume and manual retry.
+Transfer queues preserve failure details and cancellation. Metadata acceptance precedes automatic
+upload discovery. Remote-only books do not cause an automatic whole-library download.
 
-All requests require Cloudflare Access identity. Payloads are schema-validated and size-limited. Example shapes are illustrative; generated TypeScript types and runtime validators should be introduced together.
+Changing server identity must reset delivery bookkeeping so one server's cursor, acknowledgements
+or completed uploads cannot imply another server has the same data. Device-specific caches and
+local records are retained. See implementation notes for the persisted configuration boundary.
 
-### Push
+## Files and recovery
 
-`POST /api/v1/sync/push`
+Current transfers use authenticated Worker-mediated PUT/GET to private R2 with a finite size cap.
+Upload hashing is checked before trusted completion; downloaded SHA-256 is checked before local
+presence. Restarting an interrupted whole-file transfer is supported; resumable multipart is future
+work. Pins are only granted to durable, verified local files. Cache removal rechecks trusted remote
+presence and size and protects readers through file leases.
 
-```json
-{
-  "device_id": "uuid",
-  "schema_version": 1,
-  "changes": [
-    {
-      "id": "uuid",
-      "entity": "progress",
-      "entity_id": "book-uuid",
-      "op": "upsert",
-      "hlc": "<wall_ms>:<counter>:<device_id>",
-      "payload": { "book_id": "book-uuid", "fraction": 0.42 }
-    }
-  ]
-}
-```
+Backup restoration generates fresh events for newly recovered records. Outbox repair never means
+silently deleting pending changes. On auth failure sign in then retry; on invalid state export a
+backup and diagnose the rejected payload rather than clearing the queue.
 
-Response includes per-change outcome (`accepted`, `duplicate`, `retryable`, `rejected`), stable server sequence when accepted, and machine-readable error codes. A batch may partially succeed; the client marks only accepted/duplicate IDs acknowledged. Permanent rejection is surfaced and retained for user repair rather than dropped.
+## Required evidence
 
-### Pull
-
-`GET /api/v1/sync/pull?since=<seq>&limit=<n>`
-
-```json
-{
-  "changes": [
-    {
-      "seq": 123,
-      "change_id": "uuid",
-      "entity": "progress",
-      "entity_id": "book-uuid",
-      "hlc": "...",
-      "payload": {}
-    }
-  ],
-  "next_cursor": 123,
-  "has_more": false,
-  "schema_version": 1
-}
-```
-
-`since` is an exclusive sequence cursor. The server returns changes in strictly increasing sequence order. The client applies the page and stores `next_cursor` in one local transaction. If application fails, it retries the same page.
-
-The limit and maximum response bytes are server-configured; the client follows `has_more` until caught up, yielding to foreground work between pages.
-
-## 5. Push/pull ordering
-
-A sync cycle:
-
-1. Acquire a local single-flight lock.
-2. Push a bounded batch of unacknowledged outbox entries.
-3. Mark only confirmed accepted/duplicate entries as acknowledged.
-4. Pull bounded pages from the last committed cursor.
-5. Apply each page atomically; ignore already-seen `change_id` values defensively.
-6. Persist cursor with applied entities.
-7. Schedule independent file transfers.
-
-A client may push and pull in another order only if tests preserve all invariants. Change ordering is by server sequence for delivery; entity resolution uses HLC rules, not arrival order.
-
-## 6. Conflict rules
-
-| Entity         | Rule                                                                                                                                                     |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Book metadata  | Per-field policy must preserve non-empty extracted/user-edited values; lifecycle fields use HLC and explicit archive/tombstone semantics.                |
-| Progress       | LWW by HLC for ordinary updates. If two device positions diverge by a configured fraction threshold, retain both candidates and prompt before resolving. |
-| Annotation     | Create by ID; edits LWW per annotation by HLC; deletion is a tombstone.                                                                                  |
-| Shelf/tag name | LWW by HLC; conflicting names may be presented in history if useful.                                                                                     |
-| Membership     | Add/remove events are ordered by HLC; a newer re-add wins over an older removal.                                                                         |
-| Session        | Append-only, deduplicated by session ID.                                                                                                                 |
-| Device state   | Never synchronized.                                                                                                                                      |
-
-For progress divergence, do not overwrite the local position with the remote candidate before recording the pending choice. The prompt should show device, last-updated time, and approximate reading position. A policy for dismissing/merging pending candidates must be explicit.
-
-## 7. Bootstrap and pagination
-
-A fresh device pulls from cursor zero. It paginates until caught up; it must not assume a single response contains the library. For very large libraries, a future snapshot/bootstrap endpoint may be added, but must include a consistent snapshot cursor and replay changes after that cursor. Do not add a snapshot path until ordinary pagination is measured.
-
-Server sequence allocation and event append must be transactionally ordered. If events can be compacted, server must retain a minimum supported cursor and return a specific `cursor_expired` response requiring snapshot/rebootstrap. Never silently return a partial history while claiming success.
-
-## 8. Retry, limits, and errors
-
-- Retry transient network errors, rate limits, and server errors with exponential backoff and jitter.
-- Respect `Retry-After` when supplied.
-- Use bounded batch size, request bytes, response bytes, and concurrency.
-- Permanent validation/auth/schema errors are not retried indefinitely; expose them and preserve local data.
-- Authentication expiry pauses network work and prompts for reauthentication without losing queues.
-- Background sync is opportunistic only; trigger on launch, foreground, regained connectivity, explicit refresh, and debounced reading progress.
-- Progress debounce is approximately 30 seconds while reading and on book close; local persistence happens more frequently enough to avoid loss on crash.
-
-## 9. File transfer relationship
-
-Metadata sync can announce file hash, size, and availability separately. Upload obtains short-lived authorization, transfers directly to private R2, verifies object size/checksum, and confirms completion. Download verifies SHA-256 before marking local presence. Transfer queues and multipart state persist locally and do not block metadata sync. See [Storage](STORAGE.md) and [Backend](BACKEND.md).
-
-## 10. Test invariants
-
-Required tests include:
-
-- Same push repeated produces one server mutation and one log event.
-- Partial batch success only acknowledges confirmed IDs.
-- Crash between entity application and cursor write cannot occur because both are transactional.
-- Replaying a pull page is safe.
-- Remote application does not generate an outgoing echo.
-- Out-of-order HLC operations converge deterministically.
-- Membership re-add after remove is active.
-- Progress divergence preserves both candidates until user choice.
-- A failed pull page does not advance the cursor.
-- Expired cursor requires explicit bootstrap and never claims data completeness.
-- Local-only pin state never overwrites another device's pin state.
-
-## 11. Decisions still required before production sync
-
-Choose concrete request/response validators, maximum payload and batch sizes, HLC future-drift bounds, retention/compaction policy, stale-client compatibility window, and exact progress divergence threshold. These values should be based on testing and deployed service limits, not invented as permanent constants in this baseline.
-
-Implemented baselines (tunable, not final):
-
-- **Progress divergence threshold** — `PROGRESS_DIVERGENCE_THRESHOLD = 0.1` (10% of the book) in `src/sync/apply.ts`. A newer remote position from a _different_ device that differs from the local one by at least this fraction is held as a pending `progressConflicts` row (local-only, Dexie v3, never replicated) instead of applied; the local position is left untouched. The reader prompts on open; "Stay here" re-asserts the local position as a fresh mutation (so the choice propagates), "Go to" accepts the remote one as pulled data (no outbox echo), and a later local read dismisses the prompt.
-- **Book metadata** — per-field merge (not whole-row LWW): non-empty extracted/user-edited values are preserved, differing non-empty values resolve by HLC, lifecycle fields follow the HLC winner (`mergeBook` in `src/sync/apply.ts`).
-- **Cursor expiry (§7)** — a `cursor_expired` pull response makes the engine reset the cursor to zero and re-bootstrap once; `SyncResult.bootstrapped` records it so completeness is never falsely claimed.
+Tests cover replay, partial acknowledgement, malformed pages, transaction rollback, duplicate-ID
+collisions, three-way field convergence, explicit clears, membership re-add, progress choices,
+clock recovery, timeout/backoff and checksum rejection. Configured browser integration must also
+exercise real local HTTP/CSP/CORS and Worker/D1/R2, while production Access still requires a deployed
+smoke test. [Development](DEVELOPMENT.md) records checks actually run.

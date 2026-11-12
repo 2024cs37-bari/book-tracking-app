@@ -1,6 +1,8 @@
 # Contributing
 
-Thank you for helping improve Personal Book Reader. The repository is documentation-first; no application runtime or automated checks have been scaffolded yet.
+Personal Book Reader contains a SolidJS web client, a separately deployed Cloudflare Worker,
+local persistence, reader adapters and automated regression suites. Documentation describes both
+implemented behavior and explicitly deferred capabilities; keep that distinction intact.
 
 ## Before proposing a change
 
@@ -23,8 +25,12 @@ A pull request should explain the user or maintenance need, summarize the design
 
 ## Code standards
 
-Run `npm run check` before opening a pull request; it type-checks, lints, verifies formatting, runs the
-tests and builds. CI runs the same command.
+Install both packages with `npm ci` and `npm ci --prefix server`, then run `npm run check:all`.
+It checks frontend types, lint, formatting, local documentation links, unit tests and build, followed by server types and local
+Worker tests. Use `npm run test:browser` for user-flow changes and `npm run test:sync-browser` for
+transport/convergence changes. Renderer changes also require the pinned corpus suite; acquisition
+is explicit through `npm run corpus:fetch`. Record unavailable engines or external sources rather
+than weakening assertions. CI separates client, server and corpus jobs.
 
 Requirements for new code:
 
@@ -35,8 +41,9 @@ Requirements for new code:
 - Validate external data at boundaries and handle offline/error states explicitly.
 - Add tests for domain rules, persistence atomicity and import/format behavior. Tests run in Node with
   `fake-indexeddb`, so use the harness in `tests/support/harness.ts` rather than mocking Dexie.
-- Generate test fixtures in memory (`tests/support/fixtures.ts`). Never commit book files: they cannot
-  be licensed for redistribution, and generated fixtures make the tested detail explicit.
+- Generate targeted fixtures in memory (`tests/support/fixtures.ts`). Keep real books outside the
+  repository; the external corpus has explicit provenance, licensing and pinned hashes. Never
+  commit private books. See `docs/READER-VALIDATION.md` before adding an upstream sample.
 - Avoid logging user book content or credentials.
 - Include migrations, tests, and recovery behavior for persisted data changes. Never edit a released
   Dexie schema version; add a new one.

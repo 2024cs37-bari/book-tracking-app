@@ -7,8 +7,8 @@ const THUMB_MAX_EDGE = 180;
 
 /**
  * One lazily-rendered thumbnail: it renders its page image only once scrolled
- * into view (IntersectionObserver), then caches it and revokes the object URL
- * on cleanup so a long book never holds hundreds of rasters at once.
+ * into view (IntersectionObserver), and revokes its URL when it leaves the
+ * viewport. Scrolling a long book never retains every thumbnail ever visited.
  */
 function ThumbnailCell(props: {
   page: ReaderPage;
@@ -19,15 +19,41 @@ function ThumbnailCell(props: {
   const [url, setUrl] = createSignal<string | null>(null);
   let disposed = false;
 
-  const observer = new IntersectionObserver((entries) => {
-    if (!entries.some((entry) => entry.isIntersecting)) return;
-    observer.disconnect();
-    void props.render(props.page.index, THUMB_MAX_EDGE).then((result) => {
-      if (result === null) return;
-      if (disposed) URL.revokeObjectURL(result);
-      else setUrl(result);
-    });
-  });
+  let generation = 0;
+  let visible = false;
+  let rendering = false;
+  const render = () => {
+    if (!visible || rendering || url() !== null || disposed) return;
+    rendering = true;
+    const token = generation;
+    void props
+      .render(props.page.index, THUMB_MAX_EDGE)
+      .then((result) => {
+        if (result === null) return;
+        if (disposed || !visible || token !== generation) URL.revokeObjectURL(result);
+        else setUrl(result);
+      })
+      .catch(() => {
+        /* An unavailable thumbnail leaves a navigable page label. */
+      })
+      .finally(() => {
+        rendering = false;
+        if (!disposed && visible && token !== generation) render();
+      });
+  };
+  const observer = new IntersectionObserver(
+    (entries) => {
+      visible = entries.some((entry) => entry.isIntersecting);
+      generation++;
+      if (visible) render();
+      else {
+        const current = url();
+        if (current !== null) URL.revokeObjectURL(current);
+        setUrl(null);
+      }
+    },
+    { rootMargin: '150px' },
+  );
 
   onCleanup(() => {
     disposed = true;

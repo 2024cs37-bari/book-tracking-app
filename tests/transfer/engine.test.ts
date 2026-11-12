@@ -180,3 +180,102 @@ describe('FileTransferEngine', () => {
     expect((await transfers.listPending()).length).toBe(0);
   });
 });
+
+describe('transfer recovery and failure policy', () => {
+  it('honors Retry-After and records a useful durable error', async () => {
+    const { FileTransferHttpError } = await import('~/transfer/http-transport');
+    const { sha, blob } = await makeBlob('retry');
+    await harness.files.put(bookFileKey(sha), blob);
+    const row = await transfers.enqueueUpload(sha);
+    let calls = 0;
+    const transport: FileTransport = {
+      beginUpload: async () => {
+        calls++;
+        throw new FileTransferHttpError('Too many uploads', {
+          retryable: true,
+          retryAfterMs: 60000,
+        });
+      },
+      upload: async () => {},
+      finishUpload: async () => {},
+      beginDownload: async () => ({ url: '' }),
+      download: async () => blob,
+    };
+    const engine = engineWith(transport);
+    await engine.run();
+    const failed = await transfers.get(row.id);
+    expect(failed?.retryAfter).toBeGreaterThanOrEqual(Date.now() + 59000);
+    expect(failed?.error).toBe('Too many uploads');
+    expect(failed?.attempts).toBe(1);
+    await engine.run();
+    expect(calls).toBe(1);
+  });
+  it('pauses permanent failures until explicit retry', async () => {
+    const { FileTransferHttpError } = await import('~/transfer/http-transport');
+    const { sha, blob } = await makeBlob('permanent');
+    await harness.files.put(bookFileKey(sha), blob);
+    const row = await transfers.enqueueUpload(sha);
+    let calls = 0;
+    const transport: FileTransport = {
+      beginUpload: async () => {
+        calls++;
+        throw new FileTransferHttpError('Sign in', { retryable: false, authExpired: true });
+      },
+      upload: async () => {},
+      finishUpload: async () => {},
+      beginDownload: async () => ({ url: '' }),
+      download: async () => blob,
+    };
+    await engineWith(transport).run();
+    await engineWith(transport).run();
+    expect(calls).toBe(1);
+    expect((await transfers.get(row.id))?.authExpired).toBe(true);
+    await transfers.retryFailed();
+    await engineWith(transport).run();
+    expect(calls).toBe(2);
+  });
+  it('cancels a live request and never marks its job complete', async () => {
+    const { sha, blob } = await makeBlob('cancel');
+    const row = await transfers.enqueueDownload(sha);
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const transport: FileTransport = {
+      beginUpload: async () => ({ alreadyAvailable: false }),
+      upload: async () => {},
+      finishUpload: async () => {},
+      beginDownload: async () => ({ url: '' }),
+      download: async (_ticket, signal) => {
+        started();
+        return new Promise<Blob>((_resolve, reject) =>
+          signal!.addEventListener(
+            'abort',
+            () => reject(new DOMException('Cancelled', 'AbortError')),
+            { once: true },
+          ),
+        );
+      },
+    };
+    const engine = engineWith(transport);
+    const running = engine.run();
+    await startedPromise;
+    await engine.cancel(row.id);
+    const result = await running;
+    expect(result.cancelled).toBe(1);
+    expect((await transfers.get(row.id))?.state).toBe('cancelled');
+    expect(await harness.files.has(bookFileKey(sha))).toBe(false);
+    expect(blob.size).toBeGreaterThan(0);
+  });
+  it('recovers a crashed running download and verifies an existing corrupt local file again', async () => {
+    const { sha, blob } = await makeBlob('repair');
+    await seedBook(sha, 'repair-book', blob.size);
+    await harness.files.put(bookFileKey(sha), new Blob(['corrupt']));
+    server.objects.set(sha, blob);
+    const row = await transfers.enqueueDownload(sha);
+    await transfers.setState(row.id, 'running');
+    await engineWith(server).run();
+    expect(await sha256Blob(await harness.files.get(bookFileKey(sha)))).toBe(sha);
+    expect((await transfers.get(row.id))?.state).toBe('complete');
+  });
+});

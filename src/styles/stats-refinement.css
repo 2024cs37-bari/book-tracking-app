@@ -1,0 +1,288 @@
+/* Reading activity is a journal, with emphasis on the numbers rather than cards. */
+.stats {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 3rem;
+}
+.stats-heading {
+  margin: 0 0 2.5rem;
+}
+.stats .stats-eyebrow {
+  margin: 0 0 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.stats .stats-heading h1 {
+  margin: 0;
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: clamp(2.3rem, 4vw, 3.5rem);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+}
+.stats-heading > p:last-child {
+  margin: 0.9rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.stats .stat-tiles {
+  display: grid;
+  grid-template-columns: 1.55fr repeat(3, minmax(0, 1fr));
+  gap: 1.5rem 2rem;
+  margin: 0 0 3rem;
+  padding: 2rem 0 2.5rem;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stats .stat-tile {
+  min-width: 0;
+  padding: 0;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.stats .stat-value {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 2.5rem;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.stats .stat-label {
+  margin-top: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.stats .stat-tile-featured {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 1.25rem;
+  border-right: 1px solid var(--border);
+}
+.stats .stat-tile-featured .stat-value {
+  font-size: clamp(2.8rem, 4.8vw, 4.2rem);
+  color: var(--accent-ink, var(--accent));
+}
+.stats .stat-tile-featured .stat-label {
+  margin-top: 0.75rem;
+}
+.stats-content {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr);
+  gap: 3.5rem;
+  align-items: start;
+}
+.stats-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-bottom: 1.3rem;
+}
+.stats .stats-section-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.stats-section-heading > span {
+  color: var(--text-muted);
+  font-size: 0.71rem;
+}
+.stats .stat-book-row {
+  display: block;
+  margin: 0 0 1.3rem;
+  padding: 0;
+  border: 0;
+}
+.stat-book-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.stats .stat-book-title {
+  min-width: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.stats .stat-book-title a {
+  color: var(--text);
+  text-decoration: none;
+}
+.stats .stat-book-title a:hover {
+  color: var(--accent-ink, var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.stats .stat-book-time {
+  color: var(--text-muted);
+  font-size: 0.77rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stat-book-track {
+  display: block;
+  overflow: hidden;
+  height: 4px;
+  width: 100%;
+  margin-top: 0.65rem;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+}
+.stat-book-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
+.stats .reading-days-table {
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.stats .reading-days-table th,
+.stats .reading-days-table td {
+  padding: 0.85rem 0.75rem 0.85rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.stats .reading-days-table thead th {
+  padding-top: 0;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+.stats .reading-days-table tbody th {
+  font-size: 0.76rem;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.stats .reading-days-table th:first-child {
+  width: 6.4rem;
+}
+.stats .reading-days-table th:nth-child(2) {
+  width: 4.6rem;
+}
+.stats .reading-days-table td:last-child {
+  color: var(--text-muted);
+  padding-right: 0;
+}
+.stats .reading-days-table tr:last-child th,
+.stats .reading-days-table tr:last-child td {
+  border-bottom: 0;
+}
+.stats-method {
+  margin-top: 2.8rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.77rem;
+  line-height: 1.7;
+}
+.stats-method > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  list-style: none;
+}
+.stats-method > summary::-webkit-details-marker {
+  display: none;
+}
+.stats-method > summary svg {
+  transition: transform 160ms ease;
+}
+.stats-method[open] > summary svg {
+  transform: rotate(180deg);
+}
+.stats-method > p {
+  max-width: 70ch;
+}
+.stats .stats-empty {
+  margin: 1rem 0;
+  padding: 2.5rem 1rem;
+  border: 0;
+  background: transparent;
+}
+.stats-empty > svg {
+  color: var(--accent-ink, var(--accent));
+  margin-bottom: 0.8rem;
+}
+.stats .stats-empty h2 {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.7rem;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+.stats-empty p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+.stats-empty .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  text-decoration: none;
+}
+@media (max-width: 900px) {
+  .stats-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.5rem;
+  }
+  .stats .stat-tiles {
+    gap: 1.4rem 1.1rem;
+  }
+  .stats .stat-value {
+    font-size: 2.1rem;
+  }
+}
+@media (max-width: 560px) {
+  .stats-heading {
+    margin-bottom: 1.6rem;
+  }
+  .stats .stat-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.6rem 0.75rem;
+    padding-top: 1.7rem;
+  }
+  .stats .stat-tile-featured {
+    grid-row: auto;
+    grid-column: 1 / -1;
+    padding: 0 0 1.5rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .stats .stat-tile-featured .stat-value {
+    font-size: 3.5rem;
+  }
+  .stats .stat-value {
+    font-size: 2rem;
+  }
+  .stats .stat-label {
+    font-size: 0.68rem;
+    line-height: 1.5;
+  }
+  .stats .reading-days-table {
+    font-size: 0.75rem;
+  }
+  .stats .reading-days-table th:first-child {
+    width: 6rem;
+  }
+  .stats .reading-days-table th:nth-child(2) {
+    width: 3.8rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stats-method > summary svg {
+    transition: none;
+  }
+}

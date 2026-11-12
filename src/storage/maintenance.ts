@@ -1,5 +1,6 @@
 import { bookFileKey, isBookFileKey, isCoverFileKey, type BookFileStore } from './file-store';
 import type { LibraryDatabase } from '~/data/db';
+import { bookFileLeases } from './book-file-leases';
 
 export interface OrphanReport {
   readonly orphanKeys: readonly string[];
@@ -25,7 +26,7 @@ export async function inspectStorage(
   const unreachableBooks: { bookId: string; sha256: string }[] = [];
 
   for (const book of books) {
-    if (book.lifecycle === 'deleted') continue;
+    // Tombstones still own originals: restoring metadata must not discover a cleanup deleted them.
     const key = bookFileKey(book.sha256);
     referenced.add(key);
     if (book.coverKey !== undefined) {
@@ -51,6 +52,25 @@ export async function inspectStorage(
   }
 
   return { orphanKeys, orphanBytes, unreachableBooks };
+}
+
+/** Revalidate a stale report before deletion and protect imports/readers with shared file leases. */
+export async function cleanOrphanFiles(db: LibraryDatabase, store: BookFileStore): Promise<number> {
+  const report = await inspectStorage(db, store);
+  let removed = 0;
+  for (const key of report.orphanKeys) {
+    // Unknown keys may belong to another subsystem; never delete them opportunistically.
+    const match = /^books\/([0-9a-f]{64})\.bin$/.exec(key);
+    if (match === null) continue;
+    const hash = match[1]!;
+    const result = await bookFileLeases.tryExclusive(hash, async () => {
+      if ((await db.books.where('sha256').equals(hash).count()) > 0) return false;
+      await store.remove(key);
+      return true;
+    });
+    if (result === true) removed++;
+  }
+  return removed;
 }
 
 /** Removes the given storage keys. Returns how many were removed. */

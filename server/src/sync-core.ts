@@ -36,18 +36,24 @@ export async function handlePush(
   }
 
   const appended = toAppend.length > 0 ? await store.append(user, toAppend) : [];
-  const byId = new Map(appended.map((result) => [result.changeId, result]));
-
+  let index = 0;
   const outcomes: PushOutcome[] = request.changes.map((change) => {
-    const id = typeof (change as { id?: unknown }).id === 'string' ? (change.id as string) : '';
-    const result = byId.get(id);
-    if (result === undefined) {
-      // Only structurally invalid changes are missing from the append results.
+    if (!validatePushChange(change)) {
+      const raw = change as unknown;
+      const id =
+        typeof raw === 'object' && raw !== null && 'id' in raw && typeof raw.id === 'string'
+          ? raw.id
+          : '';
       return { id, status: 'rejected', code: 'invalid_change' };
     }
-    return result.seq === undefined
-      ? { id: result.changeId, status: result.status }
-      : { id: result.changeId, status: result.status, seq: result.seq };
+    // Keep results positional: repeated IDs in the same batch can have different outcomes.
+    const result = appended[index++]!;
+    return {
+      id: result.changeId,
+      status: result.status,
+      ...(result.seq === undefined ? {} : { seq: result.seq }),
+      ...(result.code === undefined ? {} : { code: result.code }),
+    };
   });
 
   return { outcomes };

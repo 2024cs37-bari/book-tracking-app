@@ -38,11 +38,11 @@ describe('FileTransferRepository', () => {
     expect(revived.state).toBe('queued');
   });
 
-  it('leaves a completed job completed on re-enqueue', async () => {
+  it('requeues a completed download after eviction on explicit request', async () => {
     const job = await repo.enqueueDownload(SHA_A);
     await repo.markComplete(job.id, 100);
     const again = await repo.enqueueDownload(SHA_A);
-    expect(again.state).toBe('complete');
+    expect(again.state).toBe('queued');
   });
 
   it('lists pending (queued or failed) oldest first', async () => {

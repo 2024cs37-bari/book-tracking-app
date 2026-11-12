@@ -1,3 +1,8 @@
+import { DiagnosticsService } from '~/services/diagnostics-service';
+import Dexie from 'dexie';
+import { BackgroundSync } from '~/sync/background';
+import { recoverClock } from '~/sync/clock-recovery';
+import { OfflineStorageService } from '~/services/offline-storage-service';
 import { createClock, type Clock } from '~/domain/hlc';
 import { createDatabase, type LibraryDatabase } from '~/data/db';
 import { createMutationContext } from '~/data/mutations';
@@ -68,6 +73,10 @@ export interface AppServices {
   /** Set when a non-durable or degraded storage adapter is in use. */
   readonly storageWarning: string | null;
   readonly persistentStorage: boolean | null;
+  readonly background: BackgroundSync | null;
+  readonly offline: OfflineStorageService;
+  readonly diagnostics: DiagnosticsService;
+  subscribeLibraryChanges(listener: () => void): () => void;
   /** Persists the clock so a restart cannot reissue an earlier HLC. */
   persistClockState(): Promise<void>;
 }
@@ -97,6 +106,7 @@ export async function createAppServices(
     clock.restore(storedClock);
   }
 
+  await recoverClock(db, clock);
   const context = createMutationContext(clock);
 
   const selection =
@@ -158,10 +168,63 @@ export async function createAppServices(
           books,
           deviceState,
           transport: createHttpFileTransport({ baseUrl: syncBaseUrl }),
+          lockName: `book-reader:transfers:${db.name}`,
         })
       : null;
 
+  // Transfer confirmations and pull cursors belong to one server. A changed
+  // target replays retained outbox history and verifies/uploads originals again.
+  if (syncBaseUrl.length > 0) {
+    const identity = syncBaseUrl.replace(/\/+$/, '');
+    const prior = await syncMeta.get('sync_server_url');
+    if (prior !== identity) {
+      await db.transaction('rw', db.changes, db.fileTransfers, db.syncMeta, async () => {
+        await db.changes.toCollection().modify({ pushedAt: 0 });
+        await db.fileTransfers.where('direction').equals('upload').delete();
+        await syncMeta.setPullCursor(0);
+        await syncMeta.set('sync_server_url', identity);
+      });
+    } else await syncMeta.set('sync_server_url', identity);
+  }
+  const background =
+    sync && fileTransfer
+      ? new BackgroundSync({
+          db,
+          sync,
+          transfer: fileTransfer,
+          transfers: fileTransfers,
+          files: selection.store,
+        })
+      : null;
+  const offline = new OfflineStorageService({
+    db,
+    files: selection.store,
+    deviceState,
+    verifyRemote: fileTransfer ? (hash, size) => fileTransfer.hasRemoteCopy(hash, size) : undefined,
+  });
+  const subscribeLibraryChanges = (listener: () => void) => {
+    const onMutation = (parts: Record<string, unknown>) => {
+      if (
+        Object.keys(parts).some(
+          (key) => key.includes(`/${db.name}/`) && !key.includes('/syncMeta/'),
+        )
+      )
+        listener();
+    };
+    Dexie.on('storagemutated', onMutation);
+    return () => Dexie.on('storagemutated').unsubscribe(onMutation);
+  };
   return {
+    background,
+    offline,
+    diagnostics: new DiagnosticsService({
+      db,
+      files: selection.store,
+      persistentStorage,
+      syncConfigured: sync !== null,
+      syncStatus: background ? () => background.getStatus() : undefined,
+    }),
+    subscribeLibraryChanges,
     db,
     books,
     progress,
@@ -176,8 +239,8 @@ export async function createAppServices(
     sessions,
     files: selection.store,
     imports: new ImportService({ db, books, progress, files: selection.store }),
-    exports: new ExportService(db),
-    restores: new RestoreService(db),
+    exports: new ExportService(db, selection.store),
+    restores: new RestoreService(db, { files: selection.store, clock }),
     renderers,
     reader: new ReaderService({
       books,
@@ -186,6 +249,7 @@ export async function createAppServices(
       files: selection.store,
       renderers,
       persistClock: persistClockState,
+      storageNamespace: db.name,
     }),
     clock,
     deviceId,

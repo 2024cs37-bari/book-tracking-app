@@ -2,6 +2,8 @@ import { A, useLocation } from '@solidjs/router';
 import { createEffect, onCleanup, Show, type ParentProps } from 'solid-js';
 import { useApp } from '~/app/context';
 import { Toaster } from './toast';
+import OfflineAppStatus from './OfflineAppStatus';
+import Icon from './Icon';
 
 export default function Layout(props: ParentProps) {
   const app = useApp();
@@ -18,7 +20,16 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="app-shell">
-      <a class="skip-link" href="#main">
+      <a
+        class="skip-link"
+        href="#main"
+        onClick={(event) => {
+          event.preventDefault();
+          const main = document.getElementById('main');
+          main?.focus({ preventScroll: true });
+          main?.scrollIntoView({ block: 'start' });
+        }}
+      >
         Skip to content
       </a>
 
@@ -27,7 +38,10 @@ export default function Layout(props: ParentProps) {
       <Show when={!isReader()}>
         <header class="app-header">
           <A class="app-title" href="/">
-            Personal Book Reader
+            <Icon name="book" size={24} />
+            <span>
+              Book Reader<span class="app-title-caption">A personal library</span>
+            </span>
           </A>
           <nav class="app-nav" aria-label="Main">
             <A href="/" end>
@@ -41,23 +55,30 @@ export default function Layout(props: ParentProps) {
         <Show when={app.storageWarning}>
           {(warning) => (
             <p class="banner banner-warning" role="status">
-              <strong>Storage limitation:</strong> {warning()} Books imported now are kept in memory
-              only and will be lost when this page is closed. Browser storage may be unavailable in
-              private windows or when site data is blocked.
+              <strong>Storage notice:</strong> {warning()}
+              <Show when={!app.files.durable}>
+                {' '}
+                Books imported now will be lost when this page is closed. Export your originals
+                before leaving, or use a browser with local storage enabled.
+              </Show>
             </p>
           )}
         </Show>
       </Show>
 
-      <main id="main" class="app-main" classList={{ 'app-main-reader': isReader() }}>
+      <main id="main" tabIndex={-1} class="app-main" classList={{ 'app-main-reader': isReader() }}>
         {props.children}
       </main>
 
       <Show when={!isReader()}>
         <footer class="app-footer">
-          <p>
-            Local-first: your library lives in this browser. Nothing is sent anywhere until sync is
-            configured.
+          <OfflineAppStatus />
+          <p class="footer-privacy">
+            <span class="status-dot" aria-hidden="true" />
+            Your books, your space.{' '}
+            <A href="/settings#settings-backups">
+              Back up your library <Icon name="arrow-right" size={14} />
+            </A>
           </p>
         </footer>
       </Show>

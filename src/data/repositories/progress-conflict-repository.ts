@@ -1,3 +1,4 @@
+import { resolveBookId } from '~/sync/identity';
 import { compareHlc, parseHlc } from '~/domain/hlc';
 import type { LibraryDatabase, ProgressConflictRow } from '../db';
 import type { ProgressRepository } from './progress-repository';
@@ -40,7 +41,7 @@ export class ProgressConflictRepository {
   }
 
   async get(bookId: string): Promise<ProgressConflictRow | undefined> {
-    return this.db.progressConflicts.get(bookId);
+    return this.db.progressConflicts.get(await resolveBookId(this.db, bookId));
   }
 
   async count(): Promise<number> {
@@ -48,11 +49,14 @@ export class ProgressConflictRepository {
   }
 
   async resolve(bookId: string, choice: ProgressConflictChoice): Promise<void> {
+    bookId = await resolveBookId(this.db, bookId);
     const conflict = await this.db.progressConflicts.get(bookId);
     if (conflict === undefined) return;
 
     if (choice === 'remote') {
       await this.db.transaction('rw', this.db.progress, this.db.progressConflicts, async () => {
+        const current = await this.db.progressConflicts.get(bookId);
+        if (!current || current.remote.updatedHlc !== conflict.remote.updatedHlc) return;
         const local = await this.db.progress.get(bookId);
         // Accept the remote candidate as pulled data (no outbox): it already
         // exists on the server and will propagate to other devices by LWW.
@@ -73,6 +77,8 @@ export class ProgressConflictRepository {
         locator: { kind: local.locatorKind, value: local.locatorValue, fraction: local.fraction },
         status: local.status,
       });
+    } else if (local !== undefined) {
+      await this.progress.setStatus(bookId, local.status);
     }
     await this.db.progressConflicts.delete(bookId);
   }

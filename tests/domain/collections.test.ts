@@ -29,6 +29,9 @@ describe('normalizeTagName', () => {
     expect(normalizeTagName('  Sci-Fi ')).toBe('sci-fi');
     expect(normalizeTagName('Science   Fiction')).toBe('science fiction');
   });
+  it('uses Unicode default casing for language-sensitive letters', () => {
+    expect(normalizeTagName('I İ Ì I\u0301')).toBe('i i\u0307 ì i\u0301');
+  });
 });
 
 describe('assertCollectionName', () => {

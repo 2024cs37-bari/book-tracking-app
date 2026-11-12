@@ -1,51 +1,35 @@
-# Local tooling metadata
-.zcode/
-
-# Dependencies
 node_modules/
-.pnpm-store/
-
-# Build output
-.dist/
 dist/
-build/
+dist-desktop/
+src-tauri/target/
+src-tauri/gen/
 coverage/
 test-results/
 playwright-report/
-*.tsbuildinfo
-
-# Local environment and secrets
-.env
-.env.*
-!.env.example
 .wrangler/
-.dev.vars
-
-# Local data and book files
-*.sqlite
-*.sqlite3
-*.db
+.env*
+!.env.example
+.dev.vars*
+!.dev.vars.example
+.zcode/
+.claude/
+*.log
 *.epub
+*.pdf
 *.mobi
 *.azw3
-*.pdf
 *.fb2
 *.cbz
-books/
-local-data/
+*.sqlite*
+*.db
 
-# Logs and temporary files
-*.log
-npm-debug.log*
-pnpm-debug.log*
-yarn-debug.log*
-*.tmp
-*.part
+.sync-test-dist/
 
-# Editor / OS
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
-*.swo
+# Isolated production bundle for browser regressions
+.browser-test-dist/
+
+.accessibility-test-results/
+.sync-test-results/
+
+# Native desktop bundle
+dist-desktop/

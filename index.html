@@ -3,14 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta
+      id="app-csp"
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-src blob:; img-src 'self' blob: data:; font-src 'self' blob: data:; style-src 'self' blob: 'unsafe-inline'; connect-src 'self' ws:; worker-src 'self' blob:; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-src blob:; img-src 'self' blob: data:; font-src 'self' blob: data:; style-src 'self' blob: 'unsafe-inline'; connect-src 'self'; worker-src 'self' blob:; form-action 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
       content="Offline-first personal book reader and library tracker. Local-first, private, no tracking."
     />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icons/reader.svg" />
+    <link rel="apple-touch-icon" href="/icons/reader-192.png" />
+    <meta name="theme-color" content="#14665b" />
     <meta name="color-scheme" content="light dark" />
     <title>Personal Book Reader</title>
   </head>

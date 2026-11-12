@@ -1,3 +1,4 @@
+import { resolveBookId } from '~/sync/identity';
 import { AppError } from '~/domain/errors';
 import { formatHlc } from '~/domain/hlc';
 import { newId } from '~/domain/ids';
@@ -29,7 +30,12 @@ export class AnnotationRepository {
   ) {}
 
   async listByBook(bookId: string): Promise<Annotation[]> {
-    const rows = await this.db.annotations.where('bookId').equals(bookId).toArray();
+    const rows = await this.db.transaction('r', [this.db.annotations, this.db.syncMeta], async () =>
+      this.db.annotations
+        .where('bookId')
+        .equals(await resolveBookId(this.db, bookId))
+        .toArray(),
+    );
     return rows
       .filter((row) => !row.deleted)
       .sort((left, right) => left.fraction - right.fraction)
@@ -58,10 +64,17 @@ export class AnnotationRepository {
       updatedHlc: hlc,
       deleted: false,
     };
-    await this.db.transaction('rw', this.db.annotations, this.db.changes, async () => {
-      await this.db.annotations.add(row);
-      await this.db.changes.add(makeChangeRow(this.context, 'annotation', row.id, 'upsert', row));
-    });
+    await this.db.transaction(
+      'rw',
+      this.db.annotations,
+      this.db.changes,
+      this.db.syncMeta,
+      async () => {
+        row.bookId = await resolveBookId(this.db, row.bookId);
+        await this.db.annotations.add(row);
+        await this.db.changes.add(makeChangeRow(this.context, 'annotation', row.id, 'upsert', row));
+      },
+    );
     return toAnnotation(row);
   }
 

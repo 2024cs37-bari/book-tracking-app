@@ -1,0 +1,1738 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-07",
+  "recordedAt": "2026-11-07T14:09:22.086542+00:00",
+  "scope": "Advanced reader page modes, geometry and typography controls, focus/full-screen controls and device-local preference migration",
+  "state": "complete",
+  "features": [
+    "Single, facing and continuous PDF modes with bounded nearby surfaces",
+    "Single/two-column/scrolled EPUB with section-boundary wheel navigation",
+    "PDF fit width/page/actual, zoom, rotation, cover pairing, page direction and inversion",
+    "EPUB typeface, size, alignment, measure and spacing",
+    "Direct page/section jump, focus mode and full screen",
+    "Preserved original-based locators, highlights and local preferences"
+  ],
+  "verification": {
+    "code": {
+      "clientTests": 506,
+      "clientFiles": 52,
+      "serverTests": 28,
+      "serverFiles": 5,
+      "types": true,
+      "lint": true,
+      "format": true,
+      "docs": true,
+      "productionBuild": true
+    },
+    "generatedBrowser": {
+      "passed": 210,
+      "failed": 0,
+      "skipped": 0,
+      "casesPerEngine": 70,
+      "engines": ["chromium", "firefox", "webkit"],
+      "summary": "210 passed (8.4m)",
+      "newModeCases": 21
+    },
+    "corpus": {
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0,
+      "summary": "27 passed (2.8m)",
+      "scope": "Existing hash-pinned real-book corpus and generated 240-page stress test, at mobile-sized viewports; baseline single-page workflow, with advanced mode coverage supplied by generated browser and native tests"
+    },
+    "accessibility": {
+      "passed": 4,
+      "failed": 0,
+      "summary": "4 passed (26.5s)",
+      "scope": "Populated chrome at 1280px and 390px including expanded typography controls and focus mode; keyboard/focus and dark/accent checks. Imported book subtree excluded."
+    }
+  },
+  "repairs": [
+    "Mode rebuilds commit after painting, leaving the prior content and locator intact on error",
+    "Canceled fetched pages and distant continuous surfaces release resources",
+    "Background neighbor errors do not repeatedly retry",
+    "Delayed resize work preserves pending page navigation",
+    "Full-screen custom dropdowns mount inside the full-screen subtree",
+    "Mobile settings disclosure has an explicit accessible name; focus shortcut uses full-contrast text; focus return is explicit"
+  ],
+  "harnessChanges": [
+    "Legacy combined font/PDF zoom controls replaced by format-specific controls; corpus PDF value 36 changed to 200 percent to retain its 2x zoom workload",
+    "Bitmap-cap test checks doubled display width while preserving pixel bounds; offset-rounding test derives canonical points from rendered scale",
+    "EPUB wheel test proves real wheel movement then uses the paginator public anchor method to position at the boundary; oversized synthetic wheel deltas were coalesced differently by Firefox",
+    "The independent-import sync test now shares one generated Blob across devices. Regenerating a ZIP across a timestamp boundary produced different originals and invalidated the identical-content premise; production sync code is unchanged",
+    "Native WebDriver smoke waits for visible controls, settled finite animations and the loaded Read action; earlier harness quoting/readiness errors were corrected before the final fresh-profile pass"
+  ],
+  "native": {
+    "capabilities": {
+      "browserName": "wry",
+      "browserVersion": "0.57.1",
+      "platformName": "linux",
+      "acceptInsecureCerts": false,
+      "strictFileInteractability": false,
+      "setWindowRect": true,
+      "webkit:processID": 2692000,
+      "unhandledPromptBehavior": "dismiss and notify",
+      "pageLoadStrategy": "normal",
+      "proxy": {},
+      "timeouts": {
+        "script": 30000,
+        "pageLoad": 300000,
+        "implicit": 0
+      }
+    },
+    "passed": [
+      "PDF facing spread and cover-aware next navigation",
+      "Continuous PDF cache budget and saved page after close/reopen",
+      "PDF fit, rotation, zoom, theme and focus controls",
+      "EPUB facing/continuous flow, typography and section resume"
+    ],
+    "profile": "/tmp/book-advanced-native-3mxi0kea",
+    "pixels": 3998085,
+    "package": "src-tauri/target/release/bundle/deb/Book Reader_0.1.0_amd64.deb",
+    "sha256": "722048d31647648eff2034f066f2dd6a8aa75f1ffbbd8cb0bfc44b72b536fc9b",
+    "sizeBytes": 6238470,
+    "installed": false,
+    "scriptSha256": "b311d9678a4d110461c0dfe59df5a2fc15c8fc2ca089162c23e9b706e2cfcc30",
+    "scope": "Extracted development .deb on Linux Wry 0.57.1 with system WebKitWebDriver; isolated XDG directories, generated PDF and EPUB, no user library changes"
+  },
+  "commands": {
+    "code": "npm run check:all",
+    "browser": "npm run test:browser -- --output=/tmp/book-advanced-browser-results",
+    "corpus": "BOOK_CORPUS_DIR=/tmp/book-tracking-corpus-v1 npm run test:corpus -- --output=/tmp/book-advanced-corpus-results",
+    "accessibility": "npm run test:accessibility",
+    "desktop": "CARGO_BUILD_JOBS=2 npm run desktop:build -- -- --locked",
+    "native": "npx tsx /tmp/book-advanced-native.mts"
+  },
+  "environment": {
+    "browserCache": "/home/bari/.local/state/codex-profiles/agentrouter-bkhan0/desktop-cache/ms-playwright",
+    "browserVersions": {
+      "chromium": "156.0.8078.4",
+      "firefox": "157.0",
+      "webkit": "27.2"
+    },
+    "platform": "Linux x86_64",
+    "measurements": "Shared host; desktop compilation finished before corpus. Native smoke could overlap corpus; timings are observations, not isolated performance benchmarks."
+  },
+  "limits": [
+    "Fixed-layout EPUBs retain publisher spread rules and do not support text reflow or continuous mode",
+    "Continuous EPUB flow loads one section at a time; touch users can use Next/Previous at boundaries",
+    "PDF continuous steady display retains at most six surfaces/8M raster pixels; detached in-flight canvases, placeholders, worker/source/font/GPU allocations and sidebar thumbnails are not a total-memory cap",
+    "Corpus decode-limited pages remain known visible failures; broader conformance, physical mobile hardware and assistive-technology sessions are not certified",
+    "Existing desktop experimental status and native authentication/signing limits remain"
+  ],
+  "screenshots": [
+    "reader-modes-2026-11-07/epub-typography.png",
+    "reader-modes-2026-11-07/native-pdf.png",
+    "reader-modes-2026-11-07/pdf-facing-settings.png",
+    "reader-modes-2026-11-07/pdf-settings-mobile.png"
+  ],
+  "logsSha256": {
+    "code": "fa5930d1586a3e56e5ed7d7055c9963e5cc5806ec5d7ee6769bbc17a6d85f695",
+    "browser": "8a67644c9a1119c14c9313c1c8b533f11bae0ec50f0b992459cdb7981dc08306",
+    "corpus": "a446b1ba6c5f1c63b2a39dddd49cbef7c7c4358bbc62ce12948d0b7ddc0df6d3",
+    "accessibility": "8910cf63d739af8fedfa3b4ed66ce7f1b9d27d2314a170a33ee2e679ce9a33f7",
+    "desktopBuild": "8ae4c410a3e8769e78aa61161c456cdeeb2a0eb681b7a01c5cbd7f4141f2b3ad",
+    "native": "bf2e28764cd66b73907e51df4ec0544866bb184ae3be688921450ccc5b67e2f0"
+  },
+  "sourceSha256": {
+    "package-lock.json": "6c6adee0636db9b84aafc2e1cad42b5255ef53d9a83cbb7d9e0d1ceb409f9c1e",
+    "package.json": "42b982c1ce2fd2c18a395040c176816ca077204268a67e4466b0e4ba14736dba",
+    "src/app/App.tsx": "f288817f82430114923c4e25d3fbb4cf99a813fe6683b16e6e1da66728757f74",
+    "src/app/context.tsx": "034fa6cd749116c09c2c42e6422f10e40f315e24e45b30653dce7297f0d1d5f6",
+    "src/app/index.tsx": "ee4b946d89a66c647b62f412f38f07427770b2cfc46ed49ac6592b45ce5d5dd4",
+    "src/app/native-lifecycle.ts": "daf475dc1377a99ceb1a0c775423359fa914565467f5a9066ff7f73c48fa68d8",
+    "src/app/service-worker.ts": "809f6dd067b341d8c1661aa7084eb1b5585fba643d5532c6855aae6f88b1e09d",
+    "src/app/services.ts": "020039e20cf5b8d3c119b0a48859ddde0197abaa2a55fd957bc27910d3c0b6e2",
+    "src/data/book-mapping.ts": "12994385a4a862d7351e71daa72b5cc84d61865328a6ddcf4101f115526c7ee8",
+    "src/data/db.ts": "d93599a9cb0586d21e8d5d0536c25d8c28d1b0c8944e91cf78fb5e0862fb2c71",
+    "src/data/mutations.ts": "54fc90316d432c8848524876ba5b498fc35105fd8d75f1278618785d81ae4122",
+    "src/data/replicated-validation.ts": "923d34d20d0a0b8bcdbaa71f841fc53ffc9de4a7069af8df128e25b331f64b1f",
+    "src/data/repositories/annotation-repository.ts": "cf173f4f27ac3fec08d63b75f8eae5b8135e5e1e71d9bc730c37c512cd8f69d9",
+    "src/data/repositories/book-repository.ts": "70b8f982a89051099c91fbcb11347198fe458b93be945c4452f240e688cb1f27",
+    "src/data/repositories/change-repository.ts": "fcea35fadd57a10576c43c52926f0e80c045df87ea3f1a9fb7703ced74e86e8f",
+    "src/data/repositories/device-state-repository.ts": "e538e86e8f3269feb5df4e472a7cf6ca25a07b0cd2c9349604ce9c5ddf93483b",
+    "src/data/repositories/file-transfer-repository.ts": "2b47b8469d2642e9d3ece3d42dcef3cd0ea43664a98467c687cbf7c6db0e20fe",
+    "src/data/repositories/progress-conflict-repository.ts": "48cab2ca6251b0e9ee04e033e252b4580c57719e7a70e5ee5d477a23b765da97",
+    "src/data/repositories/progress-repository.ts": "3ebbf339e29b4d8a92ce3c9c01299144e864282651b2fd1021fe5965c55c9739",
+    "src/data/repositories/session-repository.ts": "5d604f8aace23d5911ab0df719a7509b3c0ba9f74fa64faf8adefd5156527b85",
+    "src/data/repositories/shelf-repository.ts": "fddd131be4ff2ca3d11086a93afdf21bf5ae1e388b7e73079856f37904674573",
+    "src/data/repositories/sync-meta-repository.ts": "3cd30db34f451b8aa392bf7fdd40096fd41f2b850f857f25510e46ba54b68143",
+    "src/data/repositories/tag-repository.ts": "3dced1424081343c3d21315a0b0084e156d3314a384a8ea336bc0870ed6f914f",
+    "src/domain/annotation.ts": "dc7fae9068c2f029c37065c97c109cec34f5a86a8cb957453d004fd61560c200",
+    "src/domain/book.ts": "a8771a80a1e261000fc737632af0785eea66edbf1d0167cb428664dba01dbc05",
+    "src/domain/collections.ts": "fd77d005e33b3eb2f9a0b52efb4597121657659d2fdfda19d8f78b07e841c12c",
+    "src/domain/enums.ts": "1609e29cedd5e11485934db5ada89082a219486a77439f3ed12a44f9aaae128c",
+    "src/domain/errors.ts": "4517ae394e7eda287da4b518dcec2e07f3e9cd1ffb8bae0de216351163bdf587",
+    "src/domain/hlc.ts": "5d2b3b9b833eb5de20be2dc97392ed075d6367f9d971ff185bde01d1096ba78c",
+    "src/domain/ids.ts": "aa995d9f13d5849f6027159c0c28a66e616cd47e827befbf8ae9a075e1c910b8",
+    "src/domain/locator.ts": "ed7b5ac84705fa9afb189347465a5367309194927f0f45795ca7a6ff4895e775",
+    "src/domain/progress.ts": "1bb7cabf25651fe97b9f159d6d57a06cdde699318ab9ba16bf2db9c04fb0215b",
+    "src/domain/session.ts": "fe468233ff52f3f3f1a59d4b9e0bd8c8c8c9d48a6f665e1dcc1ce800db306b16",
+    "src/reader/annotation-diagnostics.ts": "0af6099975b8ac9c332111186d33f9260a1a57305b8f371c263066b21d5e12ed",
+    "src/reader/epub-archive.ts": "2794b9902f62bf4da595d91eb69996a687d7d67766a160aab6ed0dd8a031c0b4",
+    "src/reader/epub-renderer.ts": "9958f9af50358c9dd1b2e0a17d39e7b29d7fdaf7d8786779af2796d7ccb31664",
+    "src/reader/format-detect.ts": "45a08d3b86bbfeeff773df7dbcdeddb12a9b5bd4b4bfc3327c903a4ecd6e4980",
+    "src/reader/pdf-cover.ts": "181574810c22a5bb598e77a24f400adb33759a5f468461d51d3970caa12031bd",
+    "src/reader/pdf-layout.ts": "4ae2142285c317943cdb74954bfffbc955ef4be78e77fd7c2494347263acfedf",
+    "src/reader/pdf-outline.ts": "fd1e9460bdfbe57e260bdff0b1e978537ce0b1a30da4b32a23db1698c7f7a017",
+    "src/reader/pdf-renderer.ts": "d13b7d4cf260e2d07c0c18f496bb9a30921d3bba91e7f38a9b9867e1dd2204e4",
+    "src/reader/pdf-stream-errors.ts": "76d4489ec1a2c8751b680913a415fb9e8e2d4b1262b5250287d378263555f7c2",
+    "src/reader/renderer.ts": "e47eec09b52d86fd6ec9846fe826e66874533ef07449db362c71f9f4346bccd5",
+    "src/reader/settings.ts": "63ccdf551b2ed2e4010706d48d565bb07c12c37e9261e46b62beab2e362505ab",
+    "src/reader/tts.ts": "caf00181adeedce654e904f871e271834bcbd9378c9dbb60e4acb18a1680464d",
+    "src/services/backup-archive.ts": "09487ca63a5b4501cf13cf90290553cf31867aa565bf9123a14f1853c287bf2c",
+    "src/services/backup-validation.ts": "7354cacfb81865f7ca4118ab62adae9ef5ba8a46cfd60a353560f7e82dc08f37",
+    "src/services/diagnostics-service.ts": "310aa1604878585d316dcadd88f849ac5ac84f87ad3a1359ce52fdbb00b197fc",
+    "src/services/dictionary.ts": "3989e8f42050df5f46cd9325befdbfaccc1204542045230a89ae38c164880f52",
+    "src/services/export-service.ts": "d3a568d4ddea24423df4d6975c8c1279509c4471f5ee735f85a9ffc67ae04b4b",
+    "src/services/import-service.ts": "f5179da4fe6153c4106c033a6f29f647b6573b8fccc398d96114308d9786a93e",
+    "src/services/metadata/epub.ts": "f4bd679e5ba78ceeb15744e290254ca24017c1410abbe0b303ea36a50b80fa5c",
+    "src/services/metadata/index.ts": "d224905235b455c1798066697a3bb1c8c945968576edbabba6dcf815e0d2f839",
+    "src/services/metadata/pdf.ts": "fb8127c7388c3348e9f46b6857886746b750b1f5a704d24e5af0ed6288ae76b2",
+    "src/services/metadata/types.ts": "9214778232b71b57f4a5ac1c2c67d062c304f2dd71f62e7b7f3f74436eba178b",
+    "src/services/notes-markdown.ts": "fb296443c19d27ad537c6814f2495144af7031cb69e8b5fccf8600617be97349",
+    "src/services/offline-storage-service.ts": "67c0ea2a3257ec10f9a0640abb23c3affb9e551cd0db1762c3e89429bf1bf62d",
+    "src/services/position-journal.ts": "dd3af0b985c0c650351eb1e7736b8441600672033cdc6d2c2fa6c407644242e8",
+    "src/services/privacy-preferences.ts": "e010e9d7228d6e057cece7e9fbac1d0b47504c245c2e11c18c3826e7a76c1ad3",
+    "src/services/reader-service.ts": "df9b30e47d75aff0a0ce31f108df2a555519505906d057e6c1c3f28a12f38b60",
+    "src/services/reading-activity.ts": "7c99f74e18afe3f797498fb5d5a772d6eb21a224d042b7b202fa7079170a255e",
+    "src/services/restore-service.ts": "2ee1991552789cdd1e8d8e3fae93829c22f225dec64753b5e5a864604607bc57",
+    "src/storage/book-file-leases.ts": "fe4d15aed9fd4f9564dcad61edd37e96cae73d92e1fcceab2a46790bf213778c",
+    "src/storage/create-file-store.ts": "84637e96dcdce271f8c0d31767478ab013331d1e17e6d89414a69df24aa6336b",
+    "src/storage/file-store.ts": "392c35b1874dcbdb0bc0b44dffa4f5fa3ab6d3d2252573b4c6197c64ee879b3b",
+    "src/storage/indexeddb-file-store.ts": "c50480872c7f72bed97107706b11b25a0efb2f208d654b9b02e47148e4fa0c48",
+    "src/storage/maintenance.ts": "ecabb05d91ae353d9475f5b4d51f30d393a7ffe805f1a59546f5f5565d2dc0c7",
+    "src/storage/memory-file-store.ts": "d5fda1a7d901c3b36c7e5f154224c7551645a9762d54e4d3c1f20e7d330f8bc7",
+    "src/storage/mime.ts": "89ab5d9cbadf4245663d41cc4b838ed63151ab10609fd0f6fb3514ee6c336ffd",
+    "src/storage/native-file-store.ts": "0320ae27a2098b96eb46dd0a639b49d5ab42836f2cfbcf589bce47604ced88bb",
+    "src/storage/native-save-file.ts": "a977b418f27e79be3076b82c232216117c2ea7458b11b4363f28fab257d37024",
+    "src/storage/opfs-file-store.ts": "b42a66a0bb289f052fddda4743a7e01325906a9c01fb42d08077018dae0eccfd",
+    "src/storage/save-file.ts": "ebff9c435ff7a9c2f5d5e81527faf32b0fb8763dc26ff2285dcb1647a8856eb3",
+    "src/storage/sha256.ts": "79940bf5948d95cfe05e8426bbd8ebfd9d3107c5f4883c9851e76968d0d6a520",
+    "src/styles/details-refinement.css": "6674cde49e7494d0f7964e160ead9b2b7027c8eb65770e555714ea30110bb568",
+    "src/styles/global.css": "e116aff5e7f5b5ebba0c772effd220d904fb8652964b70ea0e8b5167c0f88cff",
+    "src/styles/library.css": "d9222c433e45eda7e94a7296b2a089213c85f81e5b8b12de0c794d4ecf9990ee",
+    "src/styles/motion.css": "541d311e3d3e5692ea5bada7f6abb160eef52389ff7c6f682ef66718644a04af",
+    "src/styles/reader-advanced.css": "552c9030207d21f31899e8ca739d62116be474b79171ec4b59e4e445fc5e69c5",
+    "src/styles/reader-refinement.css": "cdd890c81380de5cba4d295b46a7e5b277c7ec79a1cd19d6b99a876f9fe11baa",
+    "src/styles/select.css": "630e92a371bfa9202a760731d5477233d42b267b322583b8bada74cc4f4d0b7f",
+    "src/styles/settings-refinement.css": "feef45f49803ca0c1d5a90214a0e17f6a3c1c89aa2618b3ad7bf78f286ae9447",
+    "src/styles/stats-refinement.css": "2cf1a21a422baa319a1ce69b93ff2f94dc9583c9fb0aab629eaa1b242663e780",
+    "src/sync/apply.ts": "ab6c815f1aaca41d15e12a20a0c859286b8568cd4ad31c39b58088219a739336",
+    "src/sync/background.ts": "c14017feecea6d119c56dff78171b30e039243b9adb88e4acabf2c7f5a72245c",
+    "src/sync/book-merge.ts": "62f0ce9f71546fa4cf3b26035f473b68d0d1044e854447aef1b578cd0e331002",
+    "src/sync/clock-recovery.ts": "b113f612ae0e4554475fc4a52503429793d570121ad5ebe97ad5ecce09069ebf",
+    "src/sync/engine.ts": "5930b4375792d8def76d17cb4de42fce9b99816dbdc41dbe417732f4b4d4179e",
+    "src/sync/http-transport.ts": "a66f5b8340cab12fd4e524724640ad9bb4684c388dbeb7be515c4e31dfb33eab",
+    "src/sync/identity.ts": "f60011169a4a44ac107a412355e1924c97e0790941945183803de9c192b3bd56",
+    "src/sync/network.ts": "2bffdaf1e1bbefcb463d02bc3b534d7d7c3b953fe0d52260da28b466871470e4",
+    "src/sync/protocol.ts": "527a45f44af8512489fe64cb9d3caf447069a2c3bfd8f8b085952fe8ab37752a",
+    "src/sync/transport.ts": "bd1f9419afb7f691c5641eafb8b18c4d43cd4ad782f638f09e236f23a57f1b2d",
+    "src/sync/validate.ts": "5a8ae2db9e638f38fc8cf2bc6686cef9debc8b9a9bd9b6fec09beffa342f5ed7",
+    "src/transfer/engine.ts": "d7c07376134c2444a896c45a6c8f639d4eacd8ebb80303023c31512434aa83cd",
+    "src/transfer/http-transport.ts": "0ad47fd648346b1da38dae861b90379c1808da6ebb1f3f03a547fb4ee773fe8b",
+    "src/transfer/transport.ts": "aca0b2a948b9aaecf297d2059759c5eea24b84bbadbac03e6054ca771504a6f3",
+    "src/ui/BackupPanel.tsx": "b99c3be7d1de55e3cf5ca63140200f487d0f6179a086c62ca302410712a2f777",
+    "src/ui/BookCover.tsx": "ce5b47efb00c2a28a239e5273e7119fc6e38c2def2e1920ca1ef9c75df89b7c0",
+    "src/ui/BookDetailsView.tsx": "739895e92e1f62816b1367b2c04afd7666359e727b68abe31298cf0047774061",
+    "src/ui/Icon.tsx": "cf0ae5482ad911d31e1fc54139dfa205c7d16df76d04c04840e21fb5cf8ac58d",
+    "src/ui/Layout.tsx": "458973418352bc8a09391384e56f119b94d92a4be326b2917a9cd848ad7d45b3",
+    "src/ui/LibraryView.tsx": "2a872ae64873d52b4c614fa90e1ff50a9ea6f4a8ac017e5e5a2adbff024a7236",
+    "src/ui/NotFoundView.tsx": "1b1b23d9a5c69f2a589c97547d8c1efd573b02d7a6d10ddf70a86eb92e5b8b22",
+    "src/ui/OfflineAppStatus.tsx": "ed7aea9d2fec67571f7991a42cf4b8ba67f7b4d13c94f3166570a7d65a217161",
+    "src/ui/OfflineStoragePanel.tsx": "5e32fadcb974ae6c8b4b30be1b19e003917c864218b9b2b9fdcaada2e18eceb7",
+    "src/ui/ReaderAnnotations.tsx": "deb180c15c4960c874d5b6ffc794b596ae6806e7266ea246e60a65b5eb4f8aab",
+    "src/ui/ReaderContents.tsx": "0973195881ed415d8bb5ec8d32742467ae0bb78987e58562dcfd718d5445b902",
+    "src/ui/ReaderContextMenu.tsx": "b4a81b6fbe33430f8bd02f02d4a37a7c05f938f817aabbcfaefa5ee706dddd10",
+    "src/ui/ReaderPages.tsx": "19053de7a2bfc528d113c4ad54717153f675fd018cf6281d34b819694efd8358",
+    "src/ui/ReaderSettingsMenu.tsx": "58d5a581e51eceb8e8e1d2f15d9acf23611b0a88e50878babe72f2330c3dd1bc",
+    "src/ui/ReaderSidebar.tsx": "7762a14e7b4f4c80eed7b191457c95e40101c5f34e24f7c1601145c898b34185",
+    "src/ui/ReaderTts.tsx": "ced047d8fb616ff3304b89726265bab1906125be4c41483d9de6904b599e3816",
+    "src/ui/ReaderView.tsx": "4a103b10e4b298fde32278fd2285a80982fa20cb594c841e661524280b95707f",
+    "src/ui/Select.tsx": "b1ecd6bf8a33f35f42689da9c8c5920f027ba1cf38c27e37f7008c04dad69218",
+    "src/ui/SettingsView.tsx": "41ae441842bdf6c4ed27b13a0f0d416b0b70da6bb4afd489a7993eae024a2dcb",
+    "src/ui/StatsView.tsx": "f6ccb1f198573351635998ec10086d7ba8bdb363bf32075c83dc8e13be83549c",
+    "src/ui/SyncPanel.tsx": "3f04d819ecbae61fce36841f4474f6e5967b5f7b03310b43cbf2a53564932a88",
+    "src/ui/WordLookup.tsx": "a1943bea03234eeb7ee78009d1799eea02ebcfefc4a6433df565aa686deb569d",
+    "src/ui/badges.tsx": "d6ba0d42a5cc288593b92d8d06452d1c464ee3c3f13d483e4e6d46afaa61a6ac",
+    "src/ui/reader-annotations-model.ts": "c9aa0166c1ba0c75419536e170ba9bcd92c83ff8c9c964a435ace0a40838fec8",
+    "src/ui/theme.ts": "8a2a40c3f51428e7ad1619a4fe8552b3c05940dfde5c6b4cc229540443e5d4f7",
+    "src/ui/toast.tsx": "2f34676d31c98c96a4e8c17ef194451f165f2469b77409d753839e4d3ed02fb3",
+    "src/ui/use-library-revision.ts": "8dec542892affdc413a33fdfdc06b1660f50e97a8fa2f5f317d4a267c63933d5",
+    "tests/accessibility-browser/views.spec.ts": "2ed773f6cf03f175464a8f48d6d656e35f6760105707212055b4a00cf78e0440",
+    "tests/app/native-lifecycle.test.ts": "51978a9b341de5d28ddab74bd80db8b35d9ea744fdb893026c3020bd7c3d2feb",
+    "tests/browser/annotation-anchors.spec.ts": "63d3e1e758441691e7cdaded65882003c1a93ae73d3d178b07f91e1ef4fd89ee",
+    "tests/browser/annotations.spec.ts": "7db9819a4bf6ea202cff305f805dc22488d49be2d019c5f02252af422eedb3a6",
+    "tests/browser/book-notes.spec.ts": "d9a48585f4d3d3a8dbb8c2cae8bc5f6cb7dafa918340579212538552f25033f8",
+    "tests/browser/csp.spec.ts": "5f94cb1be681505234440a071d2adc1c447402aa1663ed5962d17acbe3521ed7",
+    "tests/browser/custom-select.spec.ts": "2cca4e4a9034b94dbaa4436ec003b37ecace89235de77c801485f965e5a9cb8a",
+    "tests/browser/dictionary-privacy.spec.ts": "cfcc6e10a4f368925ff97088dc9bcd4ef413e326cc85b14bed6eeb6331b95927",
+    "tests/browser/epub-assets.spec.ts": "713151a932120fdf11469dbc92bf4194ec459cd1d44817024e37efec0f6eb102",
+    "tests/browser/highlights.spec.ts": "413e2d8f44f094b5b5da8bb3d1bd2999398b402f0f50e543118a2ce45f3e93f8",
+    "tests/browser/keyboard.spec.ts": "b673f44e0defd9c7a64b64b881a238c5258735a3687f7bd2c862504563037a83",
+    "tests/browser/library-refresh.spec.ts": "5736b70e437ec7a89c0bd4e4c78154cec7ae3d745631c80e15da8e0b60abbf58",
+    "tests/browser/library.spec.ts": "2299b969f1438994cc5e7447ebb1c57a22580a2bdc45562f9d701e5f421a3be9",
+    "tests/browser/metadata.spec.ts": "05ea9a045f10419b26fda574fe05edb19a25c9997d925169d8d772ffdff8ae31",
+    "tests/browser/migration.spec.ts": "76e7010cde913a7d6ad4ac604916df3d998ff79ee7fc152081d699cf9a499a3f",
+    "tests/browser/notes-export.spec.ts": "06761f42a02a210d24a9b2e3284ec3ba749e7401175f8b412fc9ba736d9ce8d8",
+    "tests/browser/pdf-highlights.spec.ts": "b6d5796c9bd4366c055a957a4396166beaac3e7c8de1425920ab5c1c714289b3",
+    "tests/browser/pdf-outline.spec.ts": "2a98d1cf1b99654e7a895035769a1e0db0ddb81a927a89bcf01df2aa99eac9d2",
+    "tests/browser/pdf-text-layer.spec.ts": "1c14026507c4dae241c448b0549c624d628794b73e328470fee7a17dfcee240c",
+    "tests/browser/pwa.spec.ts": "bcdec2d441f3dd0ec51c3a29d7fe99ba27d89fd683bca8dc9eb48f91b77dabbe",
+    "tests/browser/reader-advanced.spec.ts": "dcbfa695a11d7b5ef4b6cbc0229e96731fb830c7cc389fd956c7d5cc6776065d",
+    "tests/browser/reader-context-menu.spec.ts": "f87230472c291c2df5bac624e1364d3b18d33f256f26743fbad33a3bf2ea6135",
+    "tests/browser/reader-durability.spec.ts": "6200b3eddf815e907e7e79a58290b7f254d6e874e6a5d747072fe36b8250f76e",
+    "tests/browser/reader-modes.spec.ts": "22934f804917825e0f6fe0c21db069adafcbfc21e01984a0926397d0d6db54d4",
+    "tests/browser/reader-progress-conflict.spec.ts": "b90b4107b56ea94cc3bf880e0fcbe9e77e8815a71918b779525a31147f5efdaa",
+    "tests/browser/reader-sidebar.spec.ts": "66cf350502db61eecb08fa85ac8533260c0d61685adfd25ead874ccb1b143485",
+    "tests/browser/reader.spec.ts": "ce87f32937da844a49e0d69e1a5f26ab6b031ac9d0dea33d81168ce9ba6ae837",
+    "tests/browser/recovery-offline.spec.ts": "a1f17040e661c805913638ee3f68b36ec1055b705cea9134061db7314a44cca2",
+    "tests/browser/search.spec.ts": "2185b7897cb6e86117cb12f3fc3c947b65a807c350e397b383a59c0c43af2b49",
+    "tests/browser/storage-fallback.spec.ts": "9ba93c7c79ae664cfe577f937e5a280ca0a103e20400c35a46c7b8d26f549c84",
+    "tests/browser/support.ts": "031a61afe43ca05a996e8c312adea5ec3c5cfb61aa84cf152c51eb44fb1a578f",
+    "tests/browser/sync-settings.spec.ts": "2e9f0387252f3245f4560bc41c78a55bba886c917db1de811b86dd6e2785e125",
+    "tests/corpus/evidence.ts": "a685d3dab0a48017540c5fa3dacaeecc044c395d00587783cd4a31d9a2844e38",
+    "tests/corpus/pdf.spec.ts": "f7a7b1a0c07c0fc4d6ab69ffb6de3a8679fa0d369d87a6c5b5e0706afa96a2b7",
+    "tests/corpus/reader.spec.ts": "9e94b7989be32f35fd71e37ebe041473a105f7cd06382fd9f5061bb9a7c7f55b",
+    "tests/data/canonical-references.test.ts": "6b72c9465ed8455dbafbb329affee3ab26e1422d493d6a2857039f1d61b19bed",
+    "tests/data/collections.test.ts": "645103dd1d387959e74bf6b2ecabb526d5cff12f433e947f934e69c0147066d0",
+    "tests/data/library.test.ts": "a1bd3eb88ffa2309976f5451535c84f23a3fb9e3127333e0358c9a55ad2a6fe8",
+    "tests/data/migration.test.ts": "2d93741d28d44d2eef43f14bcdd35684b27595314b9d436eaab13b1226e49765",
+    "tests/data/progress-conflict.test.ts": "94e7e3651f291271eaa7d0b46673bd9ec86e97371fad6309a66bb11082b792b0",
+    "tests/domain/collections.test.ts": "5dffb3dbfd357614000dd115a3775a66accdb0c31095b89a16f501cbb0e5a279",
+    "tests/domain/hlc.test.ts": "b3edaafc4b2451ae004a6e61b441935260efb58955225222eeec2c73871cc882",
+    "tests/domain/locator.test.ts": "258fa2559588a245b3040a7cab0d921659687a06da4f9b7f29ff9b7b39dbf99a",
+    "tests/domain/session.test.ts": "881fcec31c37a4908c85928c2fede3434debba84c369dfa8a33f28c5a83d4a52",
+    "tests/environment.test.ts": "a83d49b3ddaf6064454dabee4b47483ae36906ab1965707dfe8e2391c361046d",
+    "tests/network-policy.test.ts": "010341c36c43982b38144c8d0145a847f76e9fac9afddbba89b2b403a5da368f",
+    "tests/reader/epub-archive.test.ts": "b4939510a971aea4aec60f77e9fffa4f95632da276505413a2237208cd240f2f",
+    "tests/reader/epub-renderer.dom.test.ts": "be3bb66345812ac47018d298e2f7a35d35c705a10cd11f46e7b99be7886899b9",
+    "tests/reader/epub-search.dom.test.ts": "763ba9b15f1b7da6a364561218a89a21aeee12f0a22b3ff91419d60130839e22",
+    "tests/reader/format-detect.test.ts": "e0b37a00fcad8c0185c45e8a10e8ce4e94a81348dfe6f2c132ded02bbaa8232a",
+    "tests/reader/pdf-cover.dom.test.ts": "e1df3db4bfcc961148c3bf443a07e04a36a962a8bd72cc2b6d51f6c755995278",
+    "tests/reader/pdf-outline.test.ts": "330f87f25246d8d3a435edfa3aeed61a6871dbf95a1fc5c561938aeb2debd7f4",
+    "tests/reader/pdf-renderer.dom.test.ts": "5c82d1bbca1e92f79a00960c2be5f82df6953ebd9d4511b23d15a48fa6019aeb",
+    "tests/reader/pdf-search.dom.test.ts": "ba9514f48e4c13bfb8229d784f310b617cd6d8b376dd80d5164215d7d5941168",
+    "tests/reader/pdf-stream-errors.test.ts": "b5c53a345c15ea303694b4227132884a5848bb45ddbfbe0bb6b95515527f5c22",
+    "tests/reader/settings.test.ts": "8708f740cc1db020c622af490081098a8634f9347a921c7b292d493b12a178ae",
+    "tests/reader/tts.test.ts": "570339c2151ac94e70090dde6a44ec56212283b602caec45d7d196172580fe4f",
+    "tests/services/corpus-integrity.test.ts": "3b9bc486e065ed90775156801c9b8f93168640069fa1cb6bf9762b915b67272f",
+    "tests/services/diagnostics-service.test.ts": "da8a1e2a4cca9675486e1ea372ae52891eaf6e8a1a848b272a4edd81c5f5059f",
+    "tests/services/dictionary.test.ts": "069ed45d71ecd9041e7d2d87d8d447fb530844d3d1b9bb83e187b051246430e5",
+    "tests/services/import-service.test.ts": "debb54e728604e15a255c1593bdd35065c45aca5e4db363364377d44b766bb5f",
+    "tests/services/notes-markdown.test.ts": "ffc5e734d64c7890d8cc0bcd27b26b410eb87cc5615d5bf4b1ff78b5d15a72f2",
+    "tests/services/offline-storage.test.ts": "dd16faacd11e2e0c95011590af7059af5f1c01f7fd68871806a3fbbaee85b9ce",
+    "tests/services/pdf-metadata.test.ts": "6ac04eadfa9ac3e315a9f393091f0acd4114b5d02cefeb1ae253a446da7985b8",
+    "tests/services/position-journal.test.ts": "3bfb7513cf5dbd1c330bf31a1d7c5785ad872e4afd5c9b7e6e2c0bf5bdb09507",
+    "tests/services/reader-service.test.ts": "41accf53216fe22109512f1f352578673036d34b3a00ace6d28479ec72784994",
+    "tests/services/reading-activity.test.ts": "e2ce9570cfffc58586536e0ca1bc4d7cf7660146d7cf2970f4dbb236b05daa64",
+    "tests/services/restore-service.test.ts": "517c34e9a3d55d71fb83991c85f887c318e387304edc0d396c66acb336129433",
+    "tests/setup.ts": "394458513ddfec8df4b38429960dc5b8d9d01e024a78466be5be2548d169adac",
+    "tests/storage/indexeddb-file-store.test.ts": "b6e56a26efcb483593e6317f527c9d654e3d824d52c1aea9d17a3645108f70ee",
+    "tests/storage/maintenance.test.ts": "5231c6f2e0c942f33e4441eb80a1dfe40e389c620f13eb83a22ccecc6cd10449",
+    "tests/storage/native-file-store.test.ts": "7dea8505bd93dd36157717ef5f728a97102f082e434136db629f681ad9086a5e",
+    "tests/storage/native-save-file.test.ts": "103235eff18977e904c46b1aeddd3f4318979ee57adbe658ad37f40774bc9c81",
+    "tests/storage/sha256.test.ts": "49b522586e12d6d5b1aced43022157a5c05fe9bafb3b84e51ece7d6b673bacc3",
+    "tests/support/fixtures.ts": "51d770a9dcb08293ce94a545bc1a855840493e651196de4e1039a9041424b4c3",
+    "tests/support/harness.ts": "57f3595d59db12042fcc902c26aa471cf8582193263e41ea26279502490bb31d",
+    "tests/sync/apply.test.ts": "bdd2e6277e55c549e5c778098d4062c87f378a392c5fd000f4286224498c258c",
+    "tests/sync/background.test.ts": "978ade89e5899a9a9748f50e9c73eaa671d0919cc0061dfec568777c85d4dffc",
+    "tests/sync/engine.test.ts": "8b5bdbdbd1fa49df363677f2f94e495ea7902a6f0a2f23bbf2290fc393823d0e",
+    "tests/sync/http-integration.test.ts": "0daec86218cc5a2a33a3775c48196bee72d4ffac8ae3b30a89fd776e67df13ae",
+    "tests/sync/http-transport.test.ts": "a08b528ad1a17066054e4f69e1a33d5a251f06679ca7c013cdb1cfb662a8ebea",
+    "tests/sync/protocol.test.ts": "726f4b766f3b4aa67c4fbeeb8063e544a96eb54c33d35c04588397b5f036cca7",
+    "tests/sync/robustness.test.ts": "7f07facfe3d40bbccacf8a1e25cc284c3a458855abd63a5a6dfeb6df5f8642eb",
+    "tests/sync/validation.test.ts": "4e1271715fe8825a7f4689092b9d118f332e2bc95b24f0e124dd11c0b0c3af9f",
+    "tests/sync-browser/convergence.spec.ts": "7bf5578da39bb40555a3fcc1dd18adb5f4293a9178283693cab3d61df6f5b8ec",
+    "tests/transfer/engine.test.ts": "6f7d7018e6a7237c76baf3d204f056feadaaeb3cc69ba4f4e23cb24fed46c7bc",
+    "tests/transfer/file-transfer-repository.test.ts": "e4495e55947c31965d80b596129f6fb21eb17f5fb8f3a82fac034eee4da4972c",
+    "tests/transfer/http-transport.test.ts": "c24a1889a4ac69e66a66a039cb1451bf32e8f6028892988b8fe756cf7140144f",
+    "tests/ui/reader-annotations.test.ts": "44709440b4e8439410a25b2bba7dbac8fd288717fb48994e33617191e7d53f9a",
+    "tests/ui/theme.test.ts": "14482cd2c05bdd95b04681ff4575b4f4361a6111c3439bdf21dbea75a141358a",
+    "tooling/check-doc-links.ts": "ea62f9e09f4229408b6e906277f34c63509cc80c376be36a118d9a7ef4b41d19",
+    "tooling/corpus-files.ts": "2541b5fb09f8203498520b4ad8496635b4367563351dc523d3c658bd0e5461f2",
+    "tooling/corpus-manifest.ts": "0e45856c277d9c56547313a3dfbcf76a2b5bac84278bd16ac5f348ed73ed5722",
+    "tooling/fetch-corpus.ts": "bd017a06508bc606afe938d159be3867f2a0c161fb0d0fe5f8859aaeb19766a4",
+    "tooling/network-policy.ts": "db0011edc02386c1ebeeba0c5b0b5465a2b9776e9fa9a28f286c435e5ee64f47",
+    "tooling/reader-assets.ts": "8697b00bd1dfcf3429f86fe3455a6f5fcd159af0b9c0b08d391a25394d5513a0",
+    "tooling/service-worker.ts": "822c7dbee0acb40f85c58002e84ced5aec45dabdcf266ca5716d286a35298060",
+    "vendor/foliate-js/fixed-layout.js": "3fafd53003c196fe929850b261ac73f7dc745c00f51269e43a36042441114590",
+    "vendor/foliate-js/paginator.js": "c74bc8de73c2381a2d55ddb1e4814580ecbb3ee12c1338219c63fdc9f5db0458"
+  },
+  "corpusEvidence": {
+    "fileCount": 27,
+    "records": [
+      {
+        "path": "pdf-PDF-corpus-gnu-make-re-46d28-al-preservation-and-cleanup-chromium/attachments/pdf-corpus-evidence.json",
+        "sha256": "f5b75941a28deb56dc0681e71d545a9778fc140ffec6dba0bdf9a1caf38e2953",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "gnu-make",
+          "sha256": "a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3",
+          "actualPages": 229,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 3,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 7,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 8,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 9,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 10,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 11,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 12,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "intentional blank page; render completed"
+            }
+          ],
+          "scope": "first 12 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-gnu-make-re-46d28-al-preservation-and-cleanup-firefox/attachments/pdf-corpus-evidence.json",
+        "sha256": "f26f0c4f970abd5271c75cf9d7ce9a6296d81542e891361b0c4903f83158aed5",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "gnu-make",
+          "sha256": "a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3",
+          "actualPages": 229,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 3,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 7,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 8,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 9,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 10,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 11,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 12,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            }
+          ],
+          "scope": "first 12 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-gnu-make-re-46d28-al-preservation-and-cleanup-webkit/attachments/pdf-corpus-evidence.json",
+        "sha256": "48e4babcb494ba8eb33e671430e9297b221934a25a1ae4790166e33a6e4bea26",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "gnu-make",
+          "sha256": "a4bc06026984382815e392159e60a4bc356cac6c5b81e5ae84fa4f58f621f4d3",
+          "actualPages": 229,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 3,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            },
+            {
+              "page": 7,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 8,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 9,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 10,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 11,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 12,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "intentional blank page; render completed"
+            }
+          ],
+          "scope": "first 12 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-mozilla-rot-246da-al-preservation-and-cleanup-chromium/attachments/pdf-corpus-evidence.json",
+        "sha256": "51a7c7c701461f5117be631e3878e72e5437f5bac2f53bc75a956a275dd5f628",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "mozilla-rotated",
+          "sha256": "ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b",
+          "actualPages": 5,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 330270,
+              "width": 654,
+              "height": 505,
+              "aspectRatio": 1.295049504950495,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 330270,
+              "width": 654,
+              "height": 505,
+              "aspectRatio": 1.295049504950495,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "pixels": 330270,
+              "width": 654,
+              "height": 505,
+              "aspectRatio": 1.295049504950495,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 330270,
+              "width": 654,
+              "height": 505,
+              "aspectRatio": 1.295049504950495,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 330270,
+              "width": 654,
+              "height": 505,
+              "aspectRatio": 1.295049504950495,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 5 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-mozilla-rot-246da-al-preservation-and-cleanup-firefox/attachments/pdf-corpus-evidence.json",
+        "sha256": "215b1b0973b90bff4cfbbac22b854ec19aaeabce47404598607ecb624721d738",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "mozilla-rotated",
+          "sha256": "ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b",
+          "actualPages": 5,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 5 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-mozilla-rot-246da-al-preservation-and-cleanup-webkit/attachments/pdf-corpus-evidence.json",
+        "sha256": "b96793bcf241677f8e550b22a18cc018b3dd1f051f747f654cd9a941a47a7f83",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "mozilla-rotated",
+          "sha256": "ab0cb700cd5e5338fd676dfca25becae800acd2be03a4e57856485b8cfd2d28b",
+          "actualPages": 5,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 5 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-invalid-55508-al-preservation-and-cleanup-chromium/attachments/pdf-corpus-evidence.json",
+        "sha256": "4ee0c8bb062f28c90bc2659ef3028950f883cb111018cec9d72ab5b3162d7730",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-invalid",
+          "sha256": "60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889",
+          "observations": [
+            {
+              "result": "invalid structure rejected; original retained; no locator/canvas created"
+            }
+          ]
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-invalid-55508-al-preservation-and-cleanup-firefox/attachments/pdf-corpus-evidence.json",
+        "sha256": "6723688c3e6deab7e667a78a1c691b84bd26b595f5413cbf1165aee37c20194b",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-invalid",
+          "sha256": "60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889",
+          "observations": [
+            {
+              "result": "invalid structure rejected; original retained; no locator/canvas created"
+            }
+          ]
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-invalid-55508-al-preservation-and-cleanup-webkit/attachments/pdf-corpus-evidence.json",
+        "sha256": "1e73a7af35b5537f53e973be97a03252eb97b5ddccfe8f3cb969a389752fc57c",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-invalid",
+          "sha256": "60abfda66889f7ea7721f5b25bf5c189440a988411cb5363c0f616c800f1d889",
+          "observations": [
+            {
+              "result": "invalid structure rejected; original retained; no locator/canvas created"
+            }
+          ]
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-mixed-r-acbc6-al-preservation-and-cleanup-chromium/attachments/pdf-corpus-evidence.json",
+        "sha256": "fb8615c4d1ca92184f9a4b20e842ac8f73e869711746c551eeb778203ff94528",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-mixed",
+          "sha256": "7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840",
+          "actualPages": 3,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 455184,
+              "width": 654,
+              "height": 696,
+              "aspectRatio": 0.9396551724137931,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 52974,
+              "width": 654,
+              "height": 81,
+              "aspectRatio": 8.074074074074074,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            }
+          ],
+          "scope": "first 3 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-mixed-r-acbc6-al-preservation-and-cleanup-firefox/attachments/pdf-corpus-evidence.json",
+        "sha256": "6af047327f25266380245d62f350080ba48b138403c76bc5e09c20006827be3b",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-mixed",
+          "sha256": "7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840",
+          "actualPages": 3,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 497952,
+              "width": 684,
+              "height": 728,
+              "aspectRatio": 0.9395604395604396,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 58140,
+              "width": 684,
+              "height": 85,
+              "aspectRatio": 8.047058823529412,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            }
+          ],
+          "scope": "first 3 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-mixed-r-acbc6-al-preservation-and-cleanup-webkit/attachments/pdf-corpus-evidence.json",
+        "sha256": "507439befe6121fd2d720c4f5046ae51f08f969266b36ef83ab867ca2330d6da",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-mixed",
+          "sha256": "7277728ba5990f6da8a4a850f9f7963f57740dd526b51d8b7e0171abd8381840",
+          "actualPages": 3,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 497952,
+              "width": 684,
+              "height": 728,
+              "aspectRatio": 0.9395604395604396,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "pixels": 58140,
+              "width": 684,
+              "height": 85,
+              "aspectRatio": 8.047058823529412,
+              "result": "painted"
+            },
+            {
+              "page": 3,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            }
+          ],
+          "scope": "first 3 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-multipa-c866a-al-preservation-and-cleanup-chromium/attachments/pdf-corpus-evidence.json",
+        "sha256": "b2c756d0df3f423e52ba5c1da282cd5940b6a85ce2dac18f756fb4aadfa60569",
+        "evidence": {
+          "environment": {
+            "browser": "chromium",
+            "browserVersion": "156.0.8078.4",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-multipage",
+          "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+          "actualPages": 6,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 552630,
+              "width": 654,
+              "height": 845,
+              "aspectRatio": 0.7739644970414201,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            },
+            {
+              "page": 3,
+              "pixels": 178542,
+              "width": 654,
+              "height": 273,
+              "aspectRatio": 2.3956043956043955,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 178542,
+              "width": 654,
+              "height": 273,
+              "aspectRatio": 2.3956043956043955,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 553284,
+              "width": 654,
+              "height": 846,
+              "aspectRatio": 0.7730496453900709,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 330270,
+              "width": 654,
+              "height": 505,
+              "aspectRatio": 1.295049504950495,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 6 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-multipa-c866a-al-preservation-and-cleanup-firefox/attachments/pdf-corpus-evidence.json",
+        "sha256": "0cb7d3aec6fd2150dde041890d74f76707221594b55118b20ecdbf0a6f58bfda",
+        "evidence": {
+          "environment": {
+            "browser": "firefox",
+            "browserVersion": "157.0",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-multipage",
+          "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+          "actualPages": 6,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 603972,
+              "width": 684,
+              "height": 883,
+              "aspectRatio": 0.7746319365798414,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            },
+            {
+              "page": 3,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 6 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "pdf-PDF-corpus-ocr-multipa-c866a-al-preservation-and-cleanup-webkit/attachments/pdf-corpus-evidence.json",
+        "sha256": "a995ddb44b57a0bc04c0127649c83a3ddd299c0d89f5ca98780a8b2453715851",
+        "evidence": {
+          "environment": {
+            "browser": "webkit",
+            "browserVersion": "27.2",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            },
+            "deviceScaleFactor": 2,
+            "cpuThrottleRate": null,
+            "scope": "desktop runner, mobile-sized viewport; not physical mobile hardware"
+          },
+          "id": "ocr-multipage",
+          "sha256": "07987c44650938fa8dcf08c0937691712fdd800669b4607c2c7e3fee21cb1f80",
+          "actualPages": 6,
+          "observations": [
+            {
+              "page": 1,
+              "pixels": 603972,
+              "width": 684,
+              "height": 883,
+              "aspectRatio": 0.7746319365798414,
+              "result": "painted"
+            },
+            {
+              "page": 2,
+              "result": "explicit image decode limit; prior good page and locator retained"
+            },
+            {
+              "page": 3,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 4,
+              "pixels": 194940,
+              "width": 684,
+              "height": 285,
+              "aspectRatio": 2.4,
+              "result": "painted"
+            },
+            {
+              "page": 5,
+              "pixels": 605340,
+              "width": 684,
+              "height": 885,
+              "aspectRatio": 0.7728813559322034,
+              "result": "painted"
+            },
+            {
+              "page": 6,
+              "pixels": 361152,
+              "width": 684,
+              "height": 528,
+              "aspectRatio": 1.2954545454545454,
+              "result": "painted"
+            }
+          ],
+          "scope": "first 6 pages checked; remaining pages not claimed; limits retained"
+        }
+      },
+      {
+        "path": "reader-generated-240-page--2b681--and-page-turn-measurements-chromium/attachments/reader-measurements.json",
+        "sha256": "1ce9ce686471b6cd47315d0b35360b93e19a58530ad46e02878f839833f612f3",
+        "evidence": {
+          "sample": "generated 240-page image PDF: mobile-size raster bounds and page-turn measurements",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndFirstRender": 2481,
+            "pageTurnMedian": 86.40000000596046,
+            "pageTurnMax": 179.5
+          },
+          "resources": {
+            "inputBytes": 1276899,
+            "maxCanvasPixels": 553284,
+            "estimatedRgbaCanvasBytes": 2213136,
+            "pages": 240,
+            "cachedCanvases": 1
+          },
+          "input": {
+            "filename": "generated-image-stress.pdf",
+            "sha256": "de45f10cbe5f7fd00c5903a9ba9297a4d110839891792b6548d7f3abee9a7cea"
+          },
+          "metrics": {
+            "longTasksMs": [371, 304, 54],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 14782211,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-generated-240-page--2b681--and-page-turn-measurements-firefox/attachments/reader-measurements.json",
+        "sha256": "7297aa82c181bdeb2d0c695b191f138dc7d22c425f815c119dc79568bf46b7f1",
+        "evidence": {
+          "sample": "generated 240-page image PDF: mobile-size raster bounds and page-turn measurements",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndFirstRender": 3253,
+            "pageTurnMedian": 87,
+            "pageTurnMax": 135
+          },
+          "resources": {
+            "inputBytes": 1276899,
+            "maxCanvasPixels": 605340,
+            "estimatedRgbaCanvasBytes": 2421360,
+            "pages": 240,
+            "cachedCanvases": 1
+          },
+          "input": {
+            "filename": "generated-image-stress.pdf",
+            "sha256": "de45f10cbe5f7fd00c5903a9ba9297a4d110839891792b6548d7f3abee9a7cea"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-generated-240-page--2b681--and-page-turn-measurements-webkit/attachments/reader-measurements.json",
+        "sha256": "c8795b2e4c9e41c1ba12c6b2bd753d30905e1c8e6c233969d953463e690e04af",
+        "evidence": {
+          "sample": "generated 240-page image PDF: mobile-size raster bounds and page-turn measurements",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndFirstRender": 2302,
+            "pageTurnMedian": 120,
+            "pageTurnMax": 165
+          },
+          "resources": {
+            "inputBytes": 1276899,
+            "maxCanvasPixels": 605340,
+            "estimatedRgbaCanvasBytes": 2421360,
+            "pages": 240,
+            "cachedCanvases": 1
+          },
+          "input": {
+            "filename": "generated-image-stress.pdf",
+            "sha256": "de45f10cbe5f7fd00c5903a9ba9297a4d110839891792b6548d7f3abee9a7cea"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-moby-dick-3dd27-fline-resume-at-mobile-size-chromium/attachments/reader-measurements.json",
+        "sha256": "ba033aeab51086e841475100d23cc41d1fcf171801d24a39bbc351b15b605461",
+        "evidence": {
+          "sample": "real-file moby-dick: metadata, navigation and offline resume at mobile size",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndOpen": 1707,
+            "interactionAndSave": 930.5
+          },
+          "resources": {
+            "inputBytes": 1628868
+          },
+          "input": {
+            "filename": "moby-dick.epub",
+            "sha256": "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"
+          },
+          "metrics": {
+            "longTasksMs": [144, 245],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 21407412,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-moby-dick-3dd27-fline-resume-at-mobile-size-firefox/attachments/reader-measurements.json",
+        "sha256": "5d40bbfc7a67e8c4fe7c557a3d3f580f1f0eb33d1081659393c64749219f4520",
+        "evidence": {
+          "sample": "real-file moby-dick: metadata, navigation and offline resume at mobile size",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 2708,
+            "interactionAndSave": 971
+          },
+          "resources": {
+            "inputBytes": 1628868
+          },
+          "input": {
+            "filename": "moby-dick.epub",
+            "sha256": "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-moby-dick-3dd27-fline-resume-at-mobile-size-webkit/attachments/reader-measurements.json",
+        "sha256": "641887b3ea088cf5d18d835c05149000829e6768e5dd4d9c63d3d5cc5f1fe0b8",
+        "evidence": {
+          "sample": "real-file moby-dick: metadata, navigation and offline resume at mobile size",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 1128,
+            "interactionAndSave": 922
+          },
+          "resources": {
+            "inputBytes": 1628868
+          },
+          "input": {
+            "filename": "moby-dick.epub",
+            "sha256": "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-mozilla-h-243a8-fline-resume-at-mobile-size-chromium/attachments/reader-measurements.json",
+        "sha256": "12c412852649e9ff084942ea57a22542347375b8d81193b540ed235b72e5d449",
+        "evidence": {
+          "sample": "real-file mozilla-hello: metadata, navigation and offline resume at mobile size",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndOpen": 1204,
+            "interactionAndSave": 1093.7999999821186
+          },
+          "resources": {
+            "inputBytes": 678
+          },
+          "input": {
+            "filename": "helloworld.pdf",
+            "sha256": "c9efcaa374939ff19fc37974131f1db6d457eb942700c02a63fc9dda983e1400"
+          },
+          "metrics": {
+            "longTasksMs": [],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 16184938,
+            "viewport": {
+              "width": 844,
+              "height": 390,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-mozilla-h-243a8-fline-resume-at-mobile-size-firefox/attachments/reader-measurements.json",
+        "sha256": "bc38009cbae2ba66d85df1ab33047825ad6ff24c4f96320b6184dff105347171",
+        "evidence": {
+          "sample": "real-file mozilla-hello: metadata, navigation and offline resume at mobile size",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 2614,
+            "interactionAndSave": 1103
+          },
+          "resources": {
+            "inputBytes": 678
+          },
+          "input": {
+            "filename": "helloworld.pdf",
+            "sha256": "c9efcaa374939ff19fc37974131f1db6d457eb942700c02a63fc9dda983e1400"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 844,
+              "height": 390,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-mozilla-h-243a8-fline-resume-at-mobile-size-webkit/attachments/reader-measurements.json",
+        "sha256": "1eb0a1d659578ff049e36d8fb839619fe50237eb11fc7aba6f0e8454b96d5d6d",
+        "evidence": {
+          "sample": "real-file mozilla-hello: metadata, navigation and offline resume at mobile size",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 943,
+            "interactionAndSave": 1071
+          },
+          "resources": {
+            "inputBytes": 678
+          },
+          "input": {
+            "filename": "helloworld.pdf",
+            "sha256": "c9efcaa374939ff19fc37974131f1db6d457eb942700c02a63fc9dda983e1400"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 844,
+              "height": 390,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-svg-in-sp-0d2a0-fline-resume-at-mobile-size-chromium/attachments/reader-measurements.json",
+        "sha256": "0a15aaaf32ee4cbcf2af896949fb96fa8aff7edd1613151b6332e6250c903b8f",
+        "evidence": {
+          "sample": "real-file svg-in-spine: metadata, navigation and offline resume at mobile size",
+          "browser": "chromium",
+          "browserVersion": "156.0.8078.4",
+          "cpuThrottleRate": 4,
+          "timingsMs": {
+            "importAndOpen": 1279,
+            "interactionAndSave": 952.6000000238419
+          },
+          "resources": {
+            "inputBytes": 687362
+          },
+          "input": {
+            "filename": "svg-in-spine.epub",
+            "sha256": "ed6b1b9e99245ac7747ced1a2f90bad1acab558280cffc7daed3e54ee48e49bb"
+          },
+          "metrics": {
+            "longTasksMs": [59],
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": 41257821,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-svg-in-sp-0d2a0-fline-resume-at-mobile-size-firefox/attachments/reader-measurements.json",
+        "sha256": "b8675a6d4b27fd06598395d9da096c4b4b12f7e3c3091e5381a41c6fa7626344",
+        "evidence": {
+          "sample": "real-file svg-in-spine: metadata, navigation and offline resume at mobile size",
+          "browser": "firefox",
+          "browserVersion": "157.0",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 2459,
+            "interactionAndSave": 939
+          },
+          "resources": {
+            "inputBytes": 687362
+          },
+          "input": {
+            "filename": "svg-in-spine.epub",
+            "sha256": "ed6b1b9e99245ac7747ced1a2f90bad1acab558280cffc7daed3e54ee48e49bb"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      },
+      {
+        "path": "reader-real-file-svg-in-sp-0d2a0-fline-resume-at-mobile-size-webkit/attachments/reader-measurements.json",
+        "sha256": "eeaa7b9a0d907576ac7a968045451ea39c013f4aa801dc34d65473acf3720485",
+        "evidence": {
+          "sample": "real-file svg-in-spine: metadata, navigation and offline resume at mobile size",
+          "browser": "webkit",
+          "browserVersion": "27.2",
+          "cpuThrottleRate": null,
+          "timingsMs": {
+            "importAndOpen": 1364,
+            "interactionAndSave": 929
+          },
+          "resources": {
+            "inputBytes": 687362
+          },
+          "input": {
+            "filename": "svg-in-spine.epub",
+            "sha256": "ed6b1b9e99245ac7747ced1a2f90bad1acab558280cffc7daed3e54ee48e49bb"
+          },
+          "metrics": {
+            "longTasksMs": null,
+            "longTaskWindow": "current document since last navigation/reload",
+            "jsHeapUsedBytes": null,
+            "viewport": {
+              "width": 390,
+              "height": 844,
+              "dpr": 2
+            }
+          },
+          "environment": "desktop runner, mobile-sized viewport; not physical mobile hardware",
+          "timingScope": "workflow timings include navigation/automation, fixture DataTransfer materialization and progress-save debounce; not Core Web Vitals",
+          "memoryScope": "JS heap is non-standard and excludes worker/native/GPU allocations; canvas bytes are estimated RGBA backing only"
+        }
+      }
+    ]
+  }
+}

@@ -1,5 +1,7 @@
 # ADR 0006: Client sync engine (push/pull/apply)
 
+> Implementation update (2026-11-07): the application now wires configured sync, background scheduling, verified file transfer, per-field book metadata clocks, duplicate-content canonicalization and progress-divergence prompts. Pull also persists its clock checkpoint atomically; startup recovers clocks from durable rows. The historical implementation-status statements below are superseded by [Sync implementation](../SYNC-IMPLEMENTATION.md). Production provisioning and snapshot/compaction remain separate work.
+
 - **Status:** Accepted
 - **Date:** 2026-10-10
 

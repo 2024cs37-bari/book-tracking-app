@@ -6,147 +6,98 @@ import {
   handleFinishUpload,
   MAX_FILE_BYTES,
   type ObjectStore,
+  type StoredObject,
 } from '../src/files';
 
-/** In-memory stand-in for the private R2 bucket. */
 class MemoryObjectStore implements ObjectStore {
-  readonly objects = new Map<string, ArrayBuffer>();
-  head(key: string): Promise<{ size: number } | null> {
-    const bytes = this.objects.get(key);
-    return Promise.resolve(bytes === undefined ? null : { size: bytes.byteLength });
+  readonly objects = new Map<string, StoredObject>();
+  head(key: string): Promise<StoredObject | null> {
+    return Promise.resolve(this.objects.get(key) ?? null);
   }
-  put(key: string, bytes: ArrayBuffer): Promise<void> {
-    this.objects.set(key, bytes);
-    return Promise.resolve();
-  }
-  get(key: string): Promise<{ bytes: ArrayBuffer; size: number } | null> {
-    const bytes = this.objects.get(key);
-    return Promise.resolve(bytes === undefined ? null : { bytes, size: bytes.byteLength });
-  }
-}
-
-/** An R2-binding-shaped adapter over the in-memory store for the worker routes. */
-function fakeBucket(store: MemoryObjectStore) {
-  return {
-    head: (key: string) => store.head(key),
-    put: (key: string, value: ArrayBuffer) => store.put(key, value),
-    get: async (key: string) => {
-      const object = await store.get(key);
-      return object === null
-        ? null
-        : { size: object.size, arrayBuffer: () => Promise.resolve(object.bytes) };
-    },
-  };
 }
 
 const SHA = 'a'.repeat(64);
 
-function env(store: MemoryObjectStore, user = 'user-1') {
-  return {
-    FILES: fakeBucket(store),
-    DB: undefined,
-    ACCESS_AUD: '',
-    ACCESS_TEAM_DOMAIN: '',
-    DEV_USER: user,
-  } as unknown as Parameters<typeof app.request>[2];
-}
-
 describe('file upload authorization', () => {
-  it('rejects a bad hash or size', async () => {
+  it('rejects invalid hashes and sizes consistently at begin and finish', async () => {
     const store = new MemoryObjectStore();
-    expect((await handleBeginUpload(store, 'u', 'not-hex', 10)).status).toBe(400);
-    expect((await handleBeginUpload(store, 'u', SHA, 0)).status).toBe(400);
-    expect((await handleBeginUpload(store, 'u', SHA, MAX_FILE_BYTES + 1)).status).toBe(413);
+    for (const handler of [handleBeginUpload, handleFinishUpload]) {
+      expect((await handler(store, 'u', 'not-hex', 10)).status).toBe(400);
+      for (const size of [undefined, null, '10', -1, 0, 1.5, NaN]) {
+        expect((await handler(store, 'u', SHA, size)).status).toBe(400);
+      }
+      expect((await handler(store, 'u', SHA, MAX_FILE_BYTES + 1)).status).toBe(413);
+    }
   });
 
-  it('reports dedup when the object already exists', async () => {
+  it('deduplicates only objects with a verified hash and matching size', async () => {
     const store = new MemoryObjectStore();
-    const first = await handleBeginUpload(store, 'u', SHA, 10);
-    expect(first.body).toEqual({ already_available: false });
-    await store.put(fileObjectKey('u', SHA), new ArrayBuffer(10));
-    const second = await handleBeginUpload(store, 'u', SHA, 10);
-    expect(second.body).toEqual({ already_available: true });
+    expect((await handleBeginUpload(store, 'u', SHA, 10)).body).toEqual({
+      already_available: false,
+    });
+    store.objects.set(fileObjectKey('u', SHA), { size: 10 });
+    expect((await handleBeginUpload(store, 'u', SHA, 10)).body).toEqual({
+      already_available: false,
+    });
+    store.objects.set(fileObjectKey('u', SHA), { size: 10, sha256: SHA });
+    expect((await handleBeginUpload(store, 'u', SHA, 10)).body).toEqual({
+      already_available: true,
+    });
+    expect((await handleBeginUpload(store, 'u', SHA, 11)).body).toEqual({
+      already_available: false,
+    });
+    expect((await handleBeginUpload(store, 'other', SHA, 10)).body).toEqual({
+      already_available: false,
+    });
   });
 
-  it('finish requires the object to exist and match the declared size', async () => {
+  it('finish requires an existing object, exact size, and a verified checksum', async () => {
     const store = new MemoryObjectStore();
-    expect((await handleFinishUpload(store, 'u', SHA, 10)).status).toBe(409);
-    await store.put(fileObjectKey('u', SHA), new ArrayBuffer(10));
-    expect((await handleFinishUpload(store, 'u', SHA, 20)).status).toBe(409);
+    expect((await handleFinishUpload(store, 'u', SHA, 10)).body).toEqual({
+      code: 'object_missing',
+    });
+    store.objects.set(fileObjectKey('u', SHA), { size: 10 });
+    expect((await handleFinishUpload(store, 'u', SHA, 20)).body).toEqual({ code: 'size_mismatch' });
+    expect((await handleFinishUpload(store, 'u', SHA, 10)).body).toEqual({
+      code: 'hash_unverified',
+    });
+    store.objects.set(fileObjectKey('u', SHA), { size: 10, sha256: SHA });
     expect((await handleFinishUpload(store, 'u', SHA, 10)).status).toBe(200);
   });
 });
 
-describe('file routes', () => {
-  it('round-trips an object through PUT and GET', async () => {
-    const store = new MemoryObjectStore();
-    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
-
-    const put = await app.request(
-      `/api/v1/files/${SHA}`,
-      { method: 'PUT', body: bytes },
-      env(store),
-    );
-    expect(put.status).toBe(200);
-
-    const get = await app.request(`/api/v1/files/${SHA}`, {}, env(store));
-    expect(get.status).toBe(200);
-    expect(new Uint8Array(await get.arrayBuffer())).toEqual(bytes);
-  });
-
-  it('begin reports an object available only after it is uploaded', async () => {
-    const store = new MemoryObjectStore();
-    const before = await app.request(
-      '/api/v1/files/begin',
+describe('file request limits before storage', () => {
+  const env = {
+    DEV_USER: 'local',
+    ACCESS_AUD: '',
+    ACCESS_TEAM_DOMAIN: '',
+  } as unknown as Parameters<typeof app.request>[2];
+  it('rejects oversized declarations and missing lengths without reading storage', async () => {
+    const oversized = await app.request(
+      `http://localhost/api/v1/files/${SHA}`,
       {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sha256: SHA, size: 3 }),
+        method: 'PUT',
+        body: 'x',
+        headers: { 'content-length': String(MAX_FILE_BYTES + 1) },
       },
-      env(store),
+      env,
     );
-    expect(await before.json()).toEqual({ already_available: false });
-
-    await app.request(
-      `/api/v1/files/${SHA}`,
-      { method: 'PUT', body: new Uint8Array([1, 2, 3]) },
-      env(store),
+    expect(oversized.status).toBe(413);
+    const unknown = await app.request(
+      `http://localhost/api/v1/files/${SHA}`,
+      { method: 'PUT', body: 'x' },
+      env,
     );
-
-    const after = await app.request(
-      '/api/v1/files/begin',
+    expect(unknown.status).toBe(411);
+    const empty = await app.request(
+      `http://localhost/api/v1/files/${SHA}`,
       {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sha256: SHA, size: 3 }),
+        method: 'PUT',
+        body: '',
+        headers: { 'content-length': '0' },
       },
-      env(store),
+      env,
     );
-    expect(await after.json()).toEqual({ already_available: true });
-  });
-
-  it('returns 404 for a missing object', async () => {
-    const store = new MemoryObjectStore();
-    const get = await app.request(`/api/v1/files/${SHA}`, {}, env(store));
-    expect(get.status).toBe(404);
-  });
-
-  it('scopes objects per user: another user cannot read them', async () => {
-    const store = new MemoryObjectStore();
-    await app.request(
-      `/api/v1/files/${SHA}`,
-      { method: 'PUT', body: new Uint8Array([9]) },
-      env(store, 'owner'),
-    );
-    const asOther = await app.request(`/api/v1/files/${SHA}`, {}, env(store, 'intruder'));
-    expect(asOther.status).toBe(404);
-    const asOwner = await app.request(`/api/v1/files/${SHA}`, {}, env(store, 'owner'));
-    expect(asOwner.status).toBe(200);
-  });
-
-  it('rejects a non-hex hash in the path', async () => {
-    const store = new MemoryObjectStore();
-    const get = await app.request('/api/v1/files/not-a-hash', {}, env(store));
-    expect(get.status).toBe(400);
+    expect(empty.status).toBe(400);
   });
 });

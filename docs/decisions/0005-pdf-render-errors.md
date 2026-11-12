@@ -16,7 +16,10 @@ settled capability. `RenderTask.promise` can still resolve despite the error.
 Retain the canvas and source-image pixel limits. Set `stopAtErrors` and intercept only the current
 document's `GetOperatorList` streams in `src/reader/pdf-stream-errors.ts`, before the display layer
 handles a rejection. Cancel the active render and propagate its original error to the reader shell.
-Do not globally modify pdf.js or change originals to make them render.
+Record failures per page for the lifetime of the immutable document: foreground renders and
+thumbnails share cached operator lists. A background failure must remain a failure when that
+page later becomes current, even if navigation generations changed. Failed thumbnails do not
+produce object URLs. Do not globally modify pdf.js or change originals to make them render.
 
 This uses the private `_transport.messageHandler.sendWithStream` bridge of the exactly pinned
 pdf.js version. Missing compatibility hooks fail explicitly. On SDK upgrades review this hook,

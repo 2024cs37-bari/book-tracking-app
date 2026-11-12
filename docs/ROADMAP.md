@@ -1,207 +1,120 @@
-# Roadmap
+# Roadmap and future application
 
-The roadmap is dependency-driven. A later phase must not hide unresolved storage, rendering, or recovery behavior from an earlier phase.
+This roadmap separates code capability from release evidence. Historical ADRs explain original
+choices; [Development](DEVELOPMENT.md) records actual changes/checks. The target remains a private
+single-user reader, not a public book platform.
 
-## Phase 0 — Documentation and contracts
+## Current implemented baseline
 
-**Status:** Complete
+- Local library/import, deduplication and repair, EPUB/PDF reading, contents/search/settings.
+- Bookmarks, notes, highlights, collections, metadata editing, archive and tombstones.
+- Reading activity and statistics; metadata/Markdown export; bounded portable backup/recovery.
+- Atomic local outbox, deterministic metadata sync, progress divergence and identity reconciliation.
+- Authenticated Worker/D1/R2 backend, verified file transfer and background retry scheduling.
+- Device-local pinning, conservative verified-remote cache cleanup and original-file export.
+- Offline production app shell, optional dictionary consent and browser-dependent read-aloud.
 
-Deliverables:
+These capabilities require continuing regression and real-file evidence. EPUB/PDF remain
+experimental; the existence of a renderer is not conformance certification. Production configuration
+still must be provisioned and validated in the owner's Cloudflare account.
 
-- Product scope and terminology.
-- Architecture and technology decisions.
-- Local/remote data model and lifecycle rules.
-- Sync and file-transfer contracts.
-- Format validation plan, operations expectations, and contribution rules.
+## Release gate A — Reliable local library
 
-Exit criteria: documentation is internally consistent, assumptions are marked, and implementation decisions can be reviewed without a generated app.
+Exit criteria:
 
-## Phase 1 — Local EPUB/PDF reader MVP
+1. Import failures cannot publish invalid originals; duplicates can repair missing bytes.
+2. Reader navigation/close/reopen retains the latest successfully saved position; failed saves are
+   visible and retryable without overwriting newer progress.
+3. Portable recovery validates all metadata and bytes before application; existing user data stays
+   intact. JSON-only recovery is explicit about absent originals.
+4. Archive/tombstone behavior, pinning and cleanup cannot silently destroy recoverable originals.
+5. Keyboard/focus behavior and narrow-screen layouts work in app chrome. Reading statistics remain
+   estimates of recorded visible activity, not a claim of eye-tracked attention.
+6. Typecheck/lint/format/unit/browser gates pass; regression tests cover failure and recovery paths.
 
-**Status:** In progress. Reader milestones verified with generated fixtures in Chromium, Firefox
-and Playwright WebKit; full Phase 1 real-file corpus and remaining features are not complete.
+Current hardening addresses these gates first. Physical-device/corpus work below is still required
+before removing experimental format labels.
 
-Done:
+## Release gate B — Private cross-device use
 
-- SolidJS/Vite/TypeScript scaffold with a full quality gate (typecheck, lint, format, tests, build)
-  and CI.
-- Dexie schema (v1), repositories, and an outbox written in the same transaction as every replicated
-  mutation.
-- Streaming SHA-256 and content-addressed file storage with OPFS, plus a probed memory fallback that
-  is surfaced in the UI rather than hidden.
-- Format detection by content, including MOBI vs KF8 (AZW3) discrimination.
-- Import pipeline: hashing, dedup by content hash, EPUB (OPF) and PDF (Info dictionary) metadata
-  extraction, cover storage, incomplete-metadata fallback to filename.
-- Library view with search, sort, reading-status filter, an archived-books shelf, status editing,
-  archive/restore, soft delete, and manual metadata editing.
-- Storage reconciliation report and JSON metadata export.
-- 197 Vitest tests across 23 files covering the original foundation plus DOM adapter
-  lifecycle/bounds, reader progress/debounce/outbox integration, metadata editing, PDF outline
-  conversion, PDF cover rendering and cancellable in-book search; 13 browser cases across Chromium,
-  Firefox and Playwright WebKit projects (39 checks).
-- CSP before rendering, with a hostile generated EPUB demonstrating script blocking.
-- Vendored upstream foliate-js at `78914aef4466eb960965702401634c2cb348e9b1` (ADR 0003).
-- EPUB/PDF adapters, `/read/:id`, reader settings, native locators plus fractions, debounced progress
-  and offline close/reopen/reload resume. PDF keeps one visible canvas with a 4-million-pixel cap.
-- Production app-shell precache, including local renderer assets and the PDF worker.
-- EPUB TOC UI: nested NCX/navigation entries, fragment-to-CFI translation, native keyboard controls,
-  unavailable destinations disabled, and generated-fixture offline navigation/resume evidence.
-- Generated EPUB asset/layout corpus: decoded PNG pixels, embedded CSS, a synthetic OpenType font,
-  single-page fixed layouts, missing/malformed image/font handling, script blocking and offline resume.
-- CI browser projects for Chromium, Firefox and Playwright WebKit; fixture bytes and font glyphs
-  are generated in memory, with no book/image/font binaries committed.
-- CSP blob-stylesheet allowance and documented upstream paginator lifecycle guards, with a
-  deterministic late-font-ready teardown regression.
-- Probed durable IndexedDB binary fallback when OPFS cannot write, and bounded optional persistence
-  permission waiting (ADR 0004); the released metadata schema remains unchanged.
-- External checksum-pinned Moby-Dick, SVG in Spine and Hello World PDF corpus, without committing
-  book files; mobile-sized checks and generated 240-page image-PDF resource measurements.
-- Chapter-level package-CFI restoration corrected using the real Moby-Dick TOC as a regression.
-- Five additional pinned PDFs: long embedded-font text, scans, mixed page sizes, rotation and an
-  invalid structure. Corpus suite has nine cases per browser (27 checks) alongside 39 generated
-  browser checks. Oversized-image cases assert explicit limits and recovery, not full readability.
-- Per-document pdf.js stream-error guard, failed-page progress protection and cancellation/resize
-  handling (ADR 0005); no schema changes or original-file deletion.
-- PDF outline/TOC extraction (pdf.js destinations resolved to page locators; unresolved entries kept
-  but disabled), lazy first-page PDF cover rendering bounded by edge and pixel caps, cancellable
-  in-book search for both EPUB (via vendored foliate-js) and PDF (page text scan), and manual
-  metadata editing wired to the transactional `updateMetadata` outbox path.
+Exit criteria:
 
-Evidence: [CI run 37742014444](https://github.com/2024cs37-bari/book-tracking-app/actions/runs/37742014444)
-on 2026-10-08 passed the full quality gate and all 39 browser checks. The local quality gate
-(typecheck, lint, format, build) now passes with 197 Vitest tests across 23 files, and the
-generated-file browser suite has been re-run against the new reader/library features — 42 checks
-pass on Chromium and Firefox. WebKit cannot launch on the current Arch dev host (missing system
-libraries), so WebKit/Safari remains CI- and hardware-validated only. The real-file corpus suite has
-not been re-run since the feature work below and should be before this milestone is declared complete.
+- Two independently populated clients converge after replay/reordering, disconnection, duplicate
+  content import, partial acknowledgement and concurrent edits; annotations and positions survive.
+- Background work is bounded, visible, pausable and respectful of auth expiry/backoff. A local edit
+  never waits on network success. Failed jobs remain inspectable and retryable.
+- Real local Worker/D1/R2 tests exercise the browser transport, CSP and CORS, not only mocked fetch.
+- Production Access is enforced on every API hostname, exact origins are configured, storage is
+  private, migration is applied and verified export/recovery is rehearsed.
+- Request/response and file limits are documented; large unsupported work fails clearly.
 
-**Next milestone selected: reader usability and validation (Phase 1 completion).**
-The remaining feature work for Phase 1 (PDF outline, in-book search, PDF covers, manual metadata
-editing, reading-status filter and an archived-books shelf) is now implemented and unit-tested.
-EPUB contents, generated assets and selected real-file corpus slices are implemented. Desktop
-mobile-sized measurements are recorded in [Reader validation](READER-VALIDATION.md). What remains is
-validation, not features: physical-device measurements, further PDF/oversized-image variants, and
-expanded obfuscated-font and layout coverage. Phase 2 bookmarks/annotations will build on these
-navigation and locator guarantees.
+Local tests establish local behavior. Actual Access login/cookie/CORS behavior must additionally be
+checked against the deployment; never infer deployment security from DEV_USER tests.
 
-Remaining:
+## Release gate C — Platform evidence
 
-- Re-run the **real-file corpus** suite against the new reader features (PDF outline navigation,
-  in-book search, generated covers) and extend it to cover those paths. The generated-file
-  cross-browser suite has been re-run and extended (new `library`, `metadata`, `pdf-outline` and
-  `search` specs) and passes on Chromium and Firefox.
-- Real-file format corpus, fixed-layout spreads/SVG, obfuscated fonts and mobile memory profiling.
-  The cross-browser generated-file suite covers offline reload; broader platform storage behavior,
-  browser restart and actual Safari/iOS/Android hardware validation remain pending (WebKit cannot
-  run on the local dev host).
+Run the pinned corpus and generated browser tests in Chromium, Firefox and Playwright WebKit. Then
+repeat import, offline navigation/reload, selection/annotation and recovery on real Android and
+Safari/iOS hardware. Record device/OS/browser, file hash, renderer version, timing and memory across
+several repetitions. Expand EPUB fixed spreads, RTL, obfuscated fonts and large-image PDF coverage.
 
-Acceptance criteria (unchanged):
+Add accessibility checks for zoom, keyboard-only use, focus restoration, contrast and assistive
+technology. Chromium desktop emulation is not a substitute for these measurements.
+See [Reader validation](READER-VALIDATION.md).
 
-- Import, close, restart, and reopen supported EPUB/PDF without a network.
-- A crashed/failed import can be reconciled without corrupting metadata or bytes.
-- Duplicate content does not create a second file identity.
-- Export can be produced while offline and can be validated by a clean import tool/test.
-- Unsupported/DRM-protected/malformed cases fail clearly and safely.
+## Next: large libraries and maintenance
 
-## Phase 2 — Collections and reading history
+1. **Streamed backups:** avoid whole-library buffers, allow a destination picker or chunked archive,
+   preserve manifest version/hash validation and partial-backup warnings. Prove restore of a library
+   exceeding current portable limits before increasing defaults.
+2. **Multipart transfer:** add resumable parts, durable upload IDs, part checksum rules, cancellation,
+   expiry and cleanup. Only mark originals available after final integrity verification. Interrupted
+   jobs must resume or explicitly restart; never label a whole-file retry as multipart resume.
+3. **History retention:** measure D1 growth first. Add snapshots with a consistent replay cursor and
+   compatibility floor before compaction. Test a long-offline client and tombstone propagation.
+4. **Operational diagnostics:** the allowlisted local diagnostic export is implemented. Add
+   owner-controlled aggregate alerts after deployment, with explicit retention and privacy rules.
+5. **Library scale:** benchmark large metadata collections, cover generation, search cancellation,
+   startup clock recovery and outbox growth before replacing repositories or introducing workers.
 
-**Dependencies:** Phase 1 local data boundaries.
+## Next: desktop delivery
 
-**Status:** In progress. The data layer landed first: Dexie schema **v2** (annotations, shelves,
-shelfBooks, tags, bookTags, sessions) with a tested v1→v2 migration, repositories that co-write the
-outbox for every replicated mutation (membership tracked by add/remove HLC, deletes tombstoned),
-reading-session recording with derived statistics, and export extended to every new entity. The UI
-has since landed too: shelf/tag management (in Settings) and tag/shelf membership plus manual
-metadata editing on the book page, a reading-status + shelf/tag library filter, a reading-stats
-view, and backup **restore** (the recovery counterpart to export: a snapshot `bulkPut` that writes
-no outbox and refuses a newer schema version), and reader annotations — bookmarks, notes and
-**EPUB text-selection highlights** (drawn via foliate's overlayer and re-applied per section on
-navigation). The reader also turns pages with the arrow keys and exports a book's bookmarks,
-highlights and notes as a Markdown file. **PDF highlights** have since landed too: a selectable
-pdf.js text layer over the canvas (the single bounded-canvas invariant is preserved), with
-highlights anchored by a character range into the page text (`<page>:<yOffset>:<start>:<end>`,
-still the `pdf` locator kind) and redrawn as positioned boxes at any zoom. Both reading formats now
-have text-selection highlights, so Phase 2's reader-annotation surface is feature-complete; the next
-milestone is Phase 3 sync.
+The Linux Tauri foundation now shares the web frontend and provides native original storage, bounded
+IPC, atomic checked writes, OS Save dialogs and guarded close/restart. See [Desktop](DESKTOP.md) for
+actual checks. It remains experimental and local-only: a configured desktop sync URL is rejected
+because Cloudflare Access authentication cannot reuse the web client's origin/cookie flow safely.
 
-Deliverables:
+Before a cross-device desktop release, define native sign-in, account identity matching, credential
+storage in the OS keychain, refresh/revocation and logout. Preserve exact-origin server validation;
+do not enable an arbitrary native HTTP proxy or ship shared service credentials. Test the resulting
+flow against an actual Access deployment and unauthenticated/expired/revoked sessions.
 
-- Shelves, tags, status workflows, archive view.
-- Annotations, bookmarks, TOC, and cancellable in-book search where renderer support is reliable.
-- Reading sessions and local statistics.
-- Progress divergence model/UI prepared for future sync.
+Additional acceptance includes verified migration from portable browser exports, repeated offline
+close/restart, platform-specific permissions, signed releases where required, safe updates and
+uninstall semantics that explain retained data. Package Linux first, then Windows/macOS with their
+own build/installation/recovery evidence. Drag/drop is an import UI, not an alternative identity or
+storage model.
 
-Acceptance criteria: all features work offline, are covered by migration tests, and export includes them.
+## Conditional future capabilities
 
-## Phase 3 — Authenticated sync backend
+- **MOBI/AZW3/FB2/CBZ readers:** promote one format at a time only after a legally distributable
+  corpus passes navigation, locators, annotations, offline restore and resource/error handling.
+- **Native mobile:** only when measured PWA storage/background/file limitations block the product;
+  keep one domain and sync protocol across clients.
+- **End-to-end encryption:** first decide key creation, multi-device transfer, recovery/loss,
+  authenticated manifests, rotation, and how encrypted hashes affect deduplication. No recoverable
+  design means no rollout.
+- **Automatic third-party backups:** use explicit provider authorization, encryption/retention and
+  restore exercises; preserve local export without vendor dependence.
+- **Nested folders or richer goals/statistics:** validate a concrete need, model membership and
+  conflicts explicitly, and avoid changing book identity or reading status semantics.
 
-**Dependencies:** stable schema, export, local mutation/outbox contracts.
+Public sharing, social feeds, DRM circumvention, sales, recommendations and multi-user collaboration
+remain out of scope. A license decision belongs to the owner before public contributions/releases.
 
-**Status:** In progress. The **client sync stack landed first** (server-free, fully tested — see
-[ADR 0006](decisions/0006-sync-client.md)): `src/sync/` has the push/pull wire protocol with runtime
-validators, a conflict-resolving apply path (LWW by HLC, add/remove-HLC membership merge, session
-dedupe, tombstones) that applies a page and advances the cursor in one transaction and writes no
-outbox echo, a single-flight `SyncEngine` cycle, and the real `createHttpSyncTransport` (Access-
-credentialed JSON with retryable/auth/cursor-expiry error classification). A two-device fake-server
-round-trip proves convergence; idempotent push, partial-batch acknowledgement, failed-pull cursor
-safety and transport error handling are covered too. The **Worker server** now exists in `server/`
-(Hono + D1 + Access): a durable, idempotent, sequenced change log with push/pull endpoints, per-user
-scoping from the verified Access identity, request validation, pure logic tested against an
-in-memory store, and a clean `wrangler` bundle. The client is already **wired** into the app behind
-a `VITE_SYNC_URL` build config (Settings shows a "Sync now" action when a server is configured, and
-"not configured" otherwise), so the engine goes live the moment a URL is set. Remaining: provision +
-**deploy** the Worker (`wrangler d1 create`, Access policy/vars — needs the account) and set
-`VITE_SYNC_URL`; progress-divergence prompting; per-field book-metadata policy; and bootstrap/
-cursor-expiry recovery.
+## Change policy
 
-Deliverables:
-
-- Cloudflare Access + Worker/Hono + D1 migrations.
-- Versioned push/pull API with runtime validation, idempotency, cursors, and bounded retries.
-- HLC implementation and deterministic conflict rules.
-- Pull bootstrap, auth expiry behavior, diagnostics, and integration tests.
-
-Acceptance criteria: two clients converge after reordering, replay, partial failure, offline periods, and conflict prompts; no local mutation is lost.
-
-## Phase 4 — Durable file transfer and PWA offline controls
-
-**Dependencies:** authenticated metadata sync and tested storage abstraction.
-
-Deliverables:
-
-- Private R2 upload/download authorization and completion flow.
-- Resumable transfer queue, checksum verification, duplicate handling, and abandoned-upload cleanup policy.
-- Service worker/app-shell updates and storage persistence request.
-- Pinning, LRU eviction, storage budget/status, remote-only indicators.
-
-Acceptance criteria: interrupted transfers resume or recover cleanly; pinned/current content is protected; browser quota failure is visible; metadata remains usable without file bytes.
-
-## Phase 5 — Desktop delivery
-
-**Dependencies:** stable web UI and repository/file-store interfaces.
-
-Deliverables:
-
-- Tauri wrapper for Linux, Windows, and macOS.
-- Filesystem adapter, import/drop integration, update strategy, and platform security review.
-- Desktop-specific regression and packaging documentation.
-
-Acceptance criteria: desktop uses the same domain behavior, stores files durably in its app data area, and does not require a separate feature fork.
-
-## Phase 6 — Hardening and optional capabilities
-
-Deliverables:
-
-- Performance profiling and targeted optimization.
-- Automated backup only after restore is proven.
-- MOBI/AZW3 promotion from experimental only if corpus and platform tests pass.
-- Consider native mobile packaging or client-side encryption only with a new decision record and recovery design.
-- Security, accessibility, dependency, and cost reviews.
-
-## Deferred indefinitely unless justified
-
-Social/public sharing, multi-user collaboration, DRM circumvention, custom rendering engine, recommendations, nested folders, and mandatory online enrichment.
-
-## Milestone change policy
-
-A milestone is not complete because code exists. It requires its acceptance criteria, migration/restore story, documented limitations, and regression coverage. If an assumption fails, update the relevant ADR and roadmap rather than silently widening scope.
+A milestone closes only when user behavior, migration/recovery, tests and docs agree. Record
+unavailable external validation honestly. Preserve the previous stable artifact and migration
+history; additive features must not make an older supported client corrupt data. Prefer focused
+slices with explicit acceptance tests over expanding the feature list without evidence.

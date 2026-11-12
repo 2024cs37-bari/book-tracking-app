@@ -83,7 +83,7 @@ test('a selection context menu offers highlight colours, Bookmark, and Copy', as
   // An outside click dismisses it (and, like any click, clears the selection).
   await openContextMenu(page);
   await expect(menu).toBeVisible();
-  await page.locator('.reader-toolbar h2').click();
+  await page.locator('.reader-title').click();
   await expect(menu).toHaveCount(0);
 
   // Re-select, reopen, and choose a colour: it stores a highlight and closes.
