@@ -151,11 +151,28 @@ export default function ReaderView() {
   const [pages, setPages] = createSignal<readonly ReaderPage[]>([]);
   const [supportsThumbnails, setSupportsThumbnails] = createSignal(false);
   const initialPrefs = loadSidebarPrefs();
-  const [sidebarOpen, setSidebarOpen] = createSignal(initialPrefs.open);
+  const phoneViewport = window.matchMedia('(max-width: 767px)');
+  const [phone, setPhone] = createSignal(phoneViewport.matches);
+  // Desktop disclosure is a saved preference; a phone overlay is temporary.
+  // Entering a narrow viewport always returns to the book, even after rotation.
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = createSignal(initialPrefs.open);
+  const [phoneSidebarOpen, setPhoneSidebarOpen] = createSignal(false);
+  const sidebarOpen = () => (phone() ? phoneSidebarOpen() : desktopSidebarOpen());
+  const setSidebarOpen = (value: boolean | ((open: boolean) => boolean)) => {
+    const next = typeof value === 'function' ? value(sidebarOpen()) : value;
+    if (phone()) setPhoneSidebarOpen(next);
+    else setDesktopSidebarOpen(next);
+  };
+  const viewportChanged = (event: MediaQueryListEvent) => {
+    if (event.matches) setPhoneSidebarOpen(false);
+    setPhone(event.matches);
+  };
+  phoneViewport.addEventListener('change', viewportChanged);
+  onCleanup(() => phoneViewport.removeEventListener('change', viewportChanged));
   const [sidebarPanel, setSidebarPanel] = createSignal<SidebarPanel>(initialPrefs.panel);
   const [sidebarWidth, setSidebarWidth] = createSignal(initialPrefs.width);
   createEffect(() =>
-    saveSidebarPrefs({ open: sidebarOpen(), panel: sidebarPanel(), width: sidebarWidth() }),
+    saveSidebarPrefs({ open: desktopSidebarOpen(), panel: sidebarPanel(), width: sidebarWidth() }),
   );
   // Highlight the page/section at the current reading position: the last unit
   // whose fraction is at or before where we are.
@@ -560,7 +577,7 @@ export default function ReaderView() {
         tag === 'SELECT' ||
         target?.isContentEditable ||
         target?.closest(
-          '[role=dialog], [role=alertdialog], [role=menu], [role=tablist], [role=combobox], [role=listbox]',
+          'dialog, [role=dialog], [role=alertdialog], [role=menu], [role=tablist], [role=combobox], [role=listbox]',
         )
       ) {
         return;
@@ -821,10 +838,10 @@ export default function ReaderView() {
             type="button"
             class="reader-icon-button"
             id="reader-sidebar-toggle"
-            aria-controls={sidebarOpen() ? 'reader-sidebar' : undefined}
+            aria-controls={visibleSidebar() ? 'reader-sidebar' : undefined}
             aria-label="Toggle sidebar"
             title="Explore this book (S)"
-            aria-expanded={sidebarOpen()}
+            aria-expanded={visibleSidebar()}
             onClick={() => setSidebarOpen((open) => !open)}
           >
             <Icon name="sidebar" size={19} />

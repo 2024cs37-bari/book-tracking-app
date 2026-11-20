@@ -102,11 +102,18 @@ async function seed(page: Page) {
   return bookPath;
 }
 
-for (const width of [1280, 390]) {
-  test(`populated main views and reader chrome meet automated checks at ${width}px`, async ({
+for (const viewport of [
+  { width: 1280, height: 844 },
+  { width: 320, height: 568 },
+  { width: 360, height: 740 },
+  { width: 390, height: 844 },
+  { width: 768, height: 1024 },
+  { width: 844, height: 390 },
+]) {
+  test(`populated main views and reader chrome meet automated checks at ${viewport.width}×${viewport.height}`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width, height: 844 });
+    await page.setViewportSize(viewport);
     const bookPath = await seed(page);
     await scan(page);
     await noOverflow(page);
@@ -116,7 +123,15 @@ for (const width of [1280, 390]) {
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     for (const path of ['/', '/settings', '/stats']) {
       await page.goto(path);
-      await page.locator('.app-nav').waitFor();
+      await page.locator('.app-header').waitFor();
+      if (viewport.width <= 767) {
+        await expect(page.locator('#desktop-navigation')).toBeHidden();
+        await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+        await expect(page.getByRole('dialog', { name: 'Navigation', exact: true })).toBeVisible();
+        await scan(page);
+        await noOverflow(page);
+        await page.getByRole('button', { name: 'Close navigation', exact: true }).press('Escape');
+      }
       if (path === '/') await expect(page.locator('.library-toolbar')).toBeVisible();
       else await expect(page.locator('main h1')).toBeVisible();
       if (path === '/stats') await expect(page.locator('.reading-days-table')).toBeVisible();
@@ -154,6 +169,10 @@ for (const width of [1280, 390]) {
     await page.goto(bookPath);
     await page.getByRole('button', { name: 'Read', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+    if (viewport.width <= 767) {
+      await expect(page.locator('.reader-sidebar')).toHaveCount(0);
+      await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
+    }
     await scan(page, true);
     await noOverflow(page);
     await page.getByRole('button', { name: 'Close sidebar', exact: true }).click();

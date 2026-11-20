@@ -162,7 +162,7 @@ test('custom select typeahead matches multiple letters and cycles repeated initi
   await expect(show).toHaveAttribute('data-value', 'active');
 });
 
-test('portaled reader colour choices preserve the mobile appearance sheet and saved page', async ({
+test('portaled reader colour choices preserve the mobile settings drawer and saved page', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -175,14 +175,18 @@ test('portaled reader colour choices preserve the mobile appearance sheet and sa
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect.poll(async () => (await position(page)).locatorValue).toMatch(/^1:/);
   const saved = await position(page);
-  const sheet = page.locator('.reader-settings-popover');
-  const appearance = sheet.locator('summary').first();
-  await appearance.click();
-  const theme = page.getByRole('combobox', { name: 'Theme', exact: true });
+  const wrapper = page.locator('.reader-settings-popover');
+  const drawer = wrapper.locator('dialog.reader-settings');
+  const trigger = wrapper.getByRole('button', { name: 'Reader settings', exact: true });
+  await trigger.click();
+  await expect(drawer).toBeVisible();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const theme = drawer.getByRole('combobox', { name: 'Theme', exact: true });
   await theme.click();
   await containedMenu(page);
+  await expect(drawer.getByRole('listbox', { name: 'Theme', exact: true })).toBeVisible();
   await chooseSelect(theme, 'sepia');
-  await expect(sheet).toHaveAttribute('open', '');
+  await expect(drawer).toBeVisible();
   await expect(theme).toBeFocused();
   await theme.press('Enter');
   await theme.press('End');
@@ -190,13 +194,14 @@ test('portaled reader colour choices preserve the mobile appearance sheet and sa
   await theme.press('Escape');
   await expect(theme).toHaveAttribute('data-value', 'sepia');
   await expect(theme).toHaveAttribute('aria-expanded', 'false');
-  await expect(sheet).toHaveAttribute('open', '');
+  await expect(drawer).toBeVisible();
   await theme.press('Escape');
-  await expect(sheet).not.toHaveAttribute('open', '');
-  await expect(appearance).toBeFocused();
+  await expect(drawer).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(trigger).toBeFocused();
   await expect(page.getByRole('button', { name: 'Toggle sidebar', exact: true })).toHaveAttribute(
     'aria-expanded',
-    'true',
+    'false',
   );
   await expect(page.locator('.pdf-scroll canvas[data-render-state="ready"]')).toHaveAttribute(
     'aria-label',
@@ -283,6 +288,7 @@ test('dynamic speech voices remain reachable in a long menu without scrolling th
     'voices.pdf',
     'Voice choices',
   );
+  await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
   await page.getByRole('tab', { name: 'Listen', exact: true }).click();
   const voice = page.getByRole('combobox', { name: 'Voice', exact: true });
   await voice.click();

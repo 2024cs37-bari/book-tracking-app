@@ -3,7 +3,11 @@ import { buildImageHeavyPdfFixture } from '../support/fixtures';
 import { importBook, position } from './support';
 
 async function openSettings(page: Page) {
-  await page.locator('.reader-settings-popover > summary').click();
+  const wrapper = page.locator('.reader-settings-popover');
+  const trigger = wrapper.getByRole('button', { name: 'Reader settings', exact: true });
+  await trigger.click();
+  await expect(wrapper.locator('dialog.reader-settings')).toBeVisible();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 }
 async function jump(page: Page, number: number) {
   await page.getByRole('spinbutton', { name: 'Go to page', exact: true }).fill(String(number));

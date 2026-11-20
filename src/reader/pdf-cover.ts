@@ -1,4 +1,5 @@
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { PDF_MAX_SOURCE_IMAGE_PIXELS } from './pdf-limits';
 import type { ExtractedCover } from '~/services/metadata/types';
 
 /** Longest edge of a generated cover thumbnail, in CSS pixels. */
@@ -33,7 +34,9 @@ export async function renderPdfCover(file: Blob): Promise<ExtractedCover | null>
     cMapPacked: true,
     standardFontDataUrl: `${base}standard_fonts/`,
     wasmUrl: `${base}wasm/`,
-    maxImageSize: PDF_COVER_MAX_PIXELS,
+    maxImageSize: PDF_MAX_SOURCE_IMAGE_PIXELS,
+    canvasMaxAreaInBytes: PDF_COVER_MAX_PIXELS * 4,
+    isImageDecoderSupported: false,
   });
 
   try {

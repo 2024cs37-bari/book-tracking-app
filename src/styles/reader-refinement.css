@@ -6,14 +6,14 @@
 .reader-shell .reader-toolbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  min-height: 64px;
-  gap: 24px;
-  padding: 8px 24px;
+  min-height: 48px;
+  gap: 18px;
+  padding: 6px 16px;
   border: 0;
   background: var(--surface);
 }
 .reader-shell .reader-toolbar-group {
-  gap: 8px;
+  gap: 6px;
 }
 .reader-shell .reader-title {
   font-family: var(--font-serif, Georgia, serif);
@@ -24,13 +24,13 @@
 }
 .reader-shell .reader-icon-button,
 .reader-shell .reader-close {
-  min-width: 40px;
-  min-height: 40px;
-  height: 40px;
-  gap: 8px;
-  padding: 0 10px;
+  min-width: 36px;
+  min-height: 36px;
+  height: 36px;
+  gap: 6px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   background: transparent;
   color: var(--text-muted);
   font-size: 0.8rem;
@@ -56,9 +56,9 @@
   flex-shrink: 0;
 }
 .reader-shell .reader-settings-summary {
-  gap: 9px;
+  gap: 7px;
 }
-.reader-shell .reader-settings-popover[open] > summary {
+.reader-shell .reader-settings-summary[aria-expanded='true'] {
   color: var(--text);
   background: var(--surface-sunken);
 }
@@ -84,9 +84,9 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   flex: 0 0 auto;
-  min-height: 58px;
-  gap: 12px;
-  padding: 6px 20px;
+  min-height: 44px;
+  gap: 9px;
+  padding: 0 16px;
   color: var(--text-muted);
 }
 .reader-shell.reader-sidebar-open .reader-footer {
@@ -128,8 +128,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 58px;
-  padding: 10px 18px 2px 24px;
+  min-height: 44px;
+  padding: 6px 12px 2px 16px;
 }
 .reader-shell .reader-sidebar-heading > span {
   font-size: 0.67rem;
@@ -157,7 +157,7 @@
   justify-content: space-between;
   gap: 10px;
   overflow-x: auto;
-  padding: 4px 20px 8px;
+  padding: 4px 12px 6px;
   border: 0;
   scrollbar-width: thin;
 }
@@ -180,7 +180,7 @@
   box-shadow: inset 0 -1.5px var(--accent);
 }
 .reader-shell .reader-sidebar-body {
-  padding: 12px 20px 24px;
+  padding: 8px 12px 16px;
   scrollbar-width: thin;
 }
 .reader-shell .reader-sidebar-body:focus:not(:focus-visible) {
@@ -204,8 +204,8 @@
 }
 .reader-shell .contents-entry {
   width: 100%;
-  min-height: 42px;
-  padding: 10px 12px;
+  min-height: 36px;
+  padding: 7px 10px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -248,9 +248,9 @@
 }
 .reader-shell .reader-page-row {
   align-items: center;
-  gap: 16px;
-  min-height: 44px;
-  padding: 10px 12px;
+  gap: 12px;
+  min-height: 36px;
+  padding: 7px 10px;
   font-size: 0.8rem;
   border-radius: 5px;
 }
@@ -264,7 +264,7 @@
 }
 .reader-shell .reader-bookmarks-actions {
   gap: 4px;
-  margin-bottom: 28px;
+  margin-bottom: 18px;
 }
 .reader-shell .reader-bookmarks-actions .button {
   justify-content: flex-start;
@@ -302,14 +302,14 @@
   background: var(--surface-sunken);
 }
 .reader-shell .reader-annotation {
-  padding: 18px 0;
+  padding: 12px 0;
   border: 0;
   border-radius: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
   background: transparent;
 }
 .reader-shell .reader-annotation-excerpt {
-  margin: 14px 0;
+  margin: 10px 0;
   padding: 0 0 0 12px;
   border-left: 2px solid var(--accent-soft);
   font-family: var(--font-serif, Georgia, serif);
@@ -351,19 +351,6 @@
 }
 .reader-shell .reader-search-hit:hover {
   background: var(--surface-sunken);
-}
-.reader-shell .reader-settings {
-  top: calc(100% + 12px);
-  right: 0;
-  width: 300px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100dvh - 100px);
-  overflow-y: auto;
-  padding: 20px;
-  gap: 22px;
-  border: 0;
-  border-radius: 12px;
-  box-shadow: 0 14px 50px color-mix(in srgb, var(--text) 14%, transparent);
 }
 .reader-shell .reader-settings-heading {
   display: flex;
@@ -411,8 +398,8 @@
 .reader-shell .reader-tts .select-trigger {
   border: 0;
   border-radius: 5px;
-  min-height: 40px;
-  padding: 8px 12px;
+  min-height: 36px;
+  padding: 6px 10px;
   background: var(--surface-sunken);
   font-size: 0.8rem;
 }
@@ -436,19 +423,19 @@
   display: none;
 }
 .reader-shell .reader-layout-options[open] > summary {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 .reader-shell .reader-layout-options[open] > summary svg {
   transform: rotate(180deg);
 }
 .reader-shell .reader-layout-options label + label {
-  margin-top: 20px;
+  margin-top: 14px;
 }
 .reader-shell .reader-tts {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  padding: 8px 0;
+  gap: 16px;
+  padding: 6px 0;
   color: var(--text);
 }
 .reader-shell .reader-panel-intro h3 {
@@ -524,15 +511,18 @@
   .reader-shell .reader-close-label {
     display: none;
   }
+  .reader-shell .reader-footer {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
   .reader-shell .reader-footer-hint {
     visibility: hidden;
   }
 }
 @media (max-width: 767px) {
   .reader-shell .reader-toolbar {
-    min-height: 60px;
+    min-height: 52px;
     gap: 6px;
-    padding: 6px 8px;
+    padding: 4px 8px;
   }
   .reader-shell .reader-toolbar-group {
     gap: 0;
@@ -545,11 +535,44 @@
     padding: 0 8px;
   }
   .reader-shell .reader-title {
-    font-size: 0.92rem;
+    font-size: 1rem;
   }
   .reader-shell .reader-settings-summary {
-    font-size: 0.68rem;
-    gap: 5px;
+    gap: 0;
+  }
+  .reader-shell .reader-sidebar-heading,
+  .reader-shell .reader-sidebar-tabs {
+    flex-shrink: 0;
+  }
+  .reader-shell .reader-sidebar-close {
+    width: 44px;
+    height: 44px;
+  }
+  .reader-shell .reader-tab,
+  .reader-shell .contents-entry,
+  .reader-shell .reader-page-row,
+  .reader-shell .reader-bookmarks-actions .button,
+  .reader-shell .reader-filter-chip,
+  .reader-shell .reader-annotation-delete,
+  .reader-shell .reader-search-form .button {
+    min-height: 44px;
+    font-size: 0.875rem;
+  }
+  .reader-shell .reader-tab {
+    min-width: 44px;
+  }
+  .reader-shell .reader-sidebar-body {
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+  .reader-shell .reader-annotation-note,
+  .reader-shell .reader-search-form input[type='search'],
+  .reader-shell .reader-search-hit,
+  .reader-shell .reader-panel-intro p,
+  .reader-shell .reader-tts-controls .button,
+  .reader-shell .reader-tts-speed,
+  .reader-shell .reader-tts-voice {
+    font-size: 0.875rem;
   }
   .reader-shell .reader-main {
     padding: 0;
@@ -578,9 +601,30 @@
   .reader-shell .reader-nav {
     gap: 6px;
   }
-  .reader-shell .reader-settings {
-    right: 0;
-    top: calc(100% + 8px);
+}
+@media (max-width: 767px), (pointer: coarse) {
+  .reader-shell .reader-icon-button,
+  .reader-shell .reader-close {
+    min-width: 44px;
+    min-height: 44px;
+    height: 44px;
+  }
+  .reader-shell .contents-entry,
+  .reader-shell .reader-page-row,
+  .reader-shell .reader-bookmarks-actions .button,
+  .reader-shell .reader-annotation-delete,
+  .reader-shell .reader-filter-chip,
+  .reader-shell .reader-annotation-jump,
+  .reader-shell .reader-bookmark-go,
+  .reader-shell .reader-check-setting,
+  .reader-shell .select-trigger {
+    min-height: 44px;
+  }
+  .reader-shell .reader-sidebar-close,
+  .reader-shell .reader-colour-chip,
+  .reader-shell .reader-annotation-swatch {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

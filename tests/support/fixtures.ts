@@ -429,10 +429,18 @@ export function buildPdfFixture(options: PdfFixtureOptions = {}): Uint8Array<Arr
   return strToU8(text);
 }
 
-/** Generated stress PDF: many pages sharing a real 1200×1600 Flate RGB image. */
-export function buildImageHeavyPdfFixture(pageCount = 240): Uint8Array<ArrayBuffer> {
-  const width = 1200;
-  const height = 1600;
+/** Generated stress PDF: many pages sharing a real Flate RGB image. */
+export function buildImageHeavyPdfFixture(
+  pageCount = 240,
+  options: {
+    imageWidth?: number;
+    imageHeight?: number;
+    declaredImageWidth?: number;
+    declaredImageHeight?: number;
+  } = {},
+): Uint8Array<ArrayBuffer> {
+  const width = options.imageWidth ?? 1200;
+  const height = options.imageHeight ?? 1600;
   const pixels = new Uint8Array(width * height * 3);
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) {
@@ -474,7 +482,7 @@ export function buildImageHeavyPdfFixture(pageCount = 240): Uint8Array<ArrayBuff
   }
   object(
     imageId,
-    `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>`,
+    `<< /Type /XObject /Subtype /Image /Width ${options.declaredImageWidth ?? width} /Height ${options.declaredImageHeight ?? height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>`,
     image,
   );
   for (let index = 0; index < pageCount; index++) {

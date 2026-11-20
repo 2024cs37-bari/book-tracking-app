@@ -690,7 +690,6 @@ export default function BookDetailsView() {
                   <section class="collections">
                     <div class="details-section-heading">
                       <h2>Collections</h2>
-                      <span class="details-section-caption">Make it yours</span>
                     </div>
                     <Show when={collections()} fallback={<p class="note">Loading collections…</p>}>
                       {(data) => (

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { verifyAccess } from './access';
+import { passwordRoutes, passwordSession } from './password-auth';
 import { D1ChangeStore } from './d1-storage';
 import { handlePull, handlePush } from './sync-core';
 import { MAX_PUSH_BYTES, SCHEMA_VERSION, validatePushRequest, type PushRequest } from './protocol';
@@ -21,6 +22,7 @@ const MAX_FILE_METADATA_BYTES = 4096;
 export interface Env {
   readonly DB: D1Database;
   readonly FILES: R2Bucket;
+  readonly AUTH_MODE?: string;
   readonly ACCESS_AUD: string;
   readonly ACCESS_TEAM_DOMAIN: string;
   /** Local .dev.vars only. The bypass is also restricted to loopback request URLs. */
@@ -47,6 +49,10 @@ app.use('/api/*', async (c, next) => {
   c.header('X-Content-Type-Options', 'nosniff');
   c.header('Vary', 'Origin');
   const requestUrl = new URL(c.req.url);
+  if (c.env.AUTH_MODE && !['access', 'password'].includes(c.env.AUTH_MODE))
+    return c.json({ code: 'server_misconfigured' }, 503);
+  if (c.env.AUTH_MODE === 'password' && requestUrl.protocol !== 'https:' && !isLoopback(requestUrl))
+    return c.json({ code: 'https_required' }, 403);
   const configured = c.env.CLIENT_ORIGIN?.trim();
   let allowed = requestUrl.origin;
   if (configured) {
@@ -66,6 +72,8 @@ app.use('/api/*', async (c, next) => {
     allowed = configured;
   }
   const origin = c.req.header('Origin');
+  if (c.env.AUTH_MODE === 'password' && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && !origin)
+    return c.json({ code: 'origin_required' }, 403);
   // Reject mutations too, rather than relying solely on browser CORS reads.
   if (origin !== undefined && origin !== allowed && origin !== requestUrl.origin) {
     return c.json({ code: 'origin_forbidden' }, 403);
@@ -80,7 +88,16 @@ app.use('/api/*', async (c, next) => {
   })(c, next);
 });
 
+app.route('/api/auth', passwordRoutes);
+
 app.use('/api/v1/*', async (c, next) => {
+  if (c.env.AUTH_MODE === 'password') {
+    const session = await passwordSession(c.req.raw, c.env);
+    if (!session) return c.json({ code: 'unauthenticated' }, 401);
+    c.set('userId', session.user_id);
+    await next();
+    return;
+  }
   const devUser = c.env.DEV_USER;
   if (devUser && isLoopback(new URL(c.req.url))) {
     c.set('userId', devUser);

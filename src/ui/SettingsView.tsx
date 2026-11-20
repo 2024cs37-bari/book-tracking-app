@@ -210,9 +210,8 @@ export default function SettingsView() {
   return (
     <section class="settings settings-refined" aria-labelledby="settings-title">
       <header class="settings-header">
-        <p class="settings-eyebrow">Your reading space</p>
         <h1 id="settings-title">Settings</h1>
-        <p>Make yourself at home. These preferences belong to this device.</p>
+        <p>These preferences belong to this device.</p>
       </header>
       <div class="settings-layout">
         <nav class="settings-navigation" aria-label="Settings sections">
@@ -230,7 +229,6 @@ export default function SettingsView() {
             aria-labelledby="appearance-heading"
           >
             <h2 id="appearance-heading">Appearance</h2>
-            <p class="settings-description">Set the mood for your library.</p>
             <div class="settings-control-row">
               <div class="settings-control-copy">
                 <label for="app-theme">Theme</label>
@@ -250,7 +248,6 @@ export default function SettingsView() {
             <div class="settings-control-row">
               <div class="settings-control-copy">
                 <span id="accent-label">Accent colour</span>
-                <p>A small personal touch.</p>
               </div>
               <div class="accent-swatches" role="group" aria-labelledby="accent-label">
                 <For each={ACCENT_PRESETS}>
@@ -331,7 +328,6 @@ export default function SettingsView() {
                 aria-labelledby="collections-heading"
               >
                 <h2 id="collections-heading">Collections</h2>
-                <p class="settings-description">A little order for your shelves and tags.</p>
                 <Show when={renaming()}>
                   {(target) => (
                     <form

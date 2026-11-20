@@ -33,7 +33,7 @@ export async function importStoredBook(
   title: string,
 ): Promise<void> {
   await page.goto('/');
-  await page.locator('.app-nav').waitFor();
+  await page.locator('.app-header').waitFor();
   await page.evaluate(
     ({ base64, filename }) => {
       const transfer = new DataTransfer();

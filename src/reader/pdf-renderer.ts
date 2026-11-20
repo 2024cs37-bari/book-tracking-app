@@ -6,6 +6,7 @@ import type {
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { observePdfStreamErrors } from './pdf-stream-errors';
+import { friendlyPdfError, PDF_MAX_SOURCE_IMAGE_PIXELS } from './pdf-limits';
 import { invertPdfCanvas } from './pdf-colors';
 import {
   effectivePdfMode,
@@ -231,8 +232,9 @@ export class PdfRenderer implements Renderer {
       cMapPacked: true,
       standardFontDataUrl: `${base}standard_fonts/`,
       wasmUrl: `${base}wasm/`,
-      maxImageSize: PDF_MAX_CANVAS_PIXELS,
+      maxImageSize: PDF_MAX_SOURCE_IMAGE_PIXELS,
       canvasMaxAreaInBytes: PDF_MAX_CANVAS_PIXELS * 4,
+      isImageDecoderSupported: false,
     });
     try {
       const pdf = await this.loading.promise;
@@ -267,7 +269,7 @@ export class PdfRenderer implements Renderer {
       await this.schedule(index, offset);
     } catch (error) {
       this.destroy();
-      throw error;
+      throw friendlyPdfError(error);
     }
   }
 
@@ -950,7 +952,9 @@ export class PdfRenderer implements Renderer {
   }
   private report(error: unknown): void {
     this.host?.dispatchEvent(
-      new CustomEvent('reader-message', { detail: `PDF rendering failed: ${String(error)}` }),
+      new CustomEvent('reader-message', {
+        detail: `PDF rendering failed: ${String(friendlyPdfError(error))}`,
+      }),
     );
   }
   private move(index: number, offset = 0): void {

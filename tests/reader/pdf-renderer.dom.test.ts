@@ -2,6 +2,7 @@
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PdfRenderer, PDF_MAX_CANVAS_PIXELS } from '~/reader/pdf-renderer';
+import { friendlyPdfError, PDF_MAX_SOURCE_IMAGE_PIXELS } from '~/reader/pdf-limits';
 import { DEFAULT_READER_SETTINGS } from '~/reader/settings';
 import { PDF_CONTINUOUS_CACHE_LIMIT, PDF_TOTAL_CANVAS_PIXELS } from '~/reader/pdf-layout';
 import type { AnnotationAnchorStatus } from '~/reader/renderer';
@@ -35,7 +36,16 @@ const engine = vi.hoisted(() => {
     sendWithStream: (_action: string, _data: { pageIndex: number }): ReadableStream<unknown> =>
       new ReadableStream(),
   };
-  return { getPage, render, cleanupPage, cleanupDocument, destroy, messageHandler };
+  const getDocument = vi.fn((_options: unknown) => ({
+    promise: Promise.resolve({
+      numPages: 100,
+      getPage,
+      cleanup: cleanupDocument,
+      _transport: { messageHandler },
+    }),
+    destroy,
+  }));
+  return { getDocument, getPage, render, cleanupPage, cleanupDocument, destroy, messageHandler };
 });
 
 vi.mock('pdfjs-dist', () => ({
@@ -47,15 +57,7 @@ vi.mock('pdfjs-dist', () => ({
       return Promise.resolve();
     }
   },
-  getDocument: () => ({
-    promise: Promise.resolve({
-      numPages: 100,
-      getPage: engine.getPage,
-      cleanup: engine.cleanupDocument,
-      _transport: { messageHandler: engine.messageHandler },
-    }),
-    destroy: engine.destroy,
-  }),
+  getDocument: engine.getDocument,
 }));
 
 beforeEach(() => {
@@ -69,6 +71,64 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+});
+
+it('separates the finite source-image ceiling from the bounded reader output', async () => {
+  const renderer = new PdfRenderer();
+  renderer.mount(document.createElement('div'));
+  await renderer.open(new Blob([buildPdfFixture()]));
+  const options = engine.getDocument.mock.calls[0]![0];
+  expect(PDF_MAX_SOURCE_IMAGE_PIXELS).toBe(40_000_000);
+  expect(options).toMatchObject({
+    maxImageSize: PDF_MAX_SOURCE_IMAGE_PIXELS,
+    canvasMaxAreaInBytes: PDF_MAX_CANVAS_PIXELS * 4,
+    stopAtErrors: true,
+    isImageDecoderSupported: false,
+  });
+  expect(options).not.toHaveProperty('isOffscreenCanvasSupported');
+  renderer.destroy();
+  await vi.waitFor(() => expect(engine.destroy).toHaveBeenCalledOnce());
+});
+
+it.each(['load', 'render'])(
+  'explains oversized source images during %s and preserves the cause',
+  async (stage) => {
+    const error = new Error('Image exceeded maximum allowed size');
+    if (stage === 'load') {
+      engine.getDocument.mockReturnValueOnce({
+        promise: Promise.reject(error),
+        destroy: engine.destroy,
+      });
+    } else {
+      engine.render.mockImplementationOnce(() => ({
+        promise: Promise.reject(error),
+        cancel: vi.fn(),
+      }));
+    }
+    const renderer = new PdfRenderer();
+    const host = document.createElement('div');
+    renderer.mount(host);
+    const relocated = vi.fn();
+    renderer.onRelocate(relocated);
+    await expect(renderer.open(new Blob([buildPdfFixture()]))).rejects.toMatchObject({
+      message: expect.stringContaining('40 million pixel safety limit'),
+      cause: error,
+    });
+    expect(relocated).not.toHaveBeenCalled();
+    expect(host.querySelector('canvas')).toBeNull();
+    await vi.waitFor(() => expect(engine.destroy).toHaveBeenCalledOnce());
+  },
+);
+
+it('keeps unrelated PDF errors unchanged and handles serialized source-image errors', () => {
+  const unrelated = new Error('Invalid PDF structure');
+  expect(friendlyPdfError(unrelated)).toBe(unrelated);
+  expect(friendlyPdfError(null)).toBeNull();
+  const serialized = { message: 'Image exceeded maximum allowed size' };
+  expect(friendlyPdfError(serialized)).toMatchObject({
+    message: expect.stringContaining('Reduce the scan resolution'),
+    cause: serialized,
+  });
 });
 
 it('reports impossible PDF annotation anchors while leaving offscreen text ranges unchecked', async () => {
@@ -195,7 +255,10 @@ it('reports a rejected render, retains the last successful relocation and can re
   renderer.next();
   await vi.waitFor(() => expect(message).toHaveBeenCalled());
   expect((message.mock.calls[0]![0] as CustomEvent<string>).detail).toContain(
-    'Image exceeded maximum allowed size',
+    '40 million pixel safety limit',
+  );
+  expect((message.mock.calls[0]![0] as CustomEvent<string>).detail).toContain(
+    'Reduce the scan resolution',
   );
   // A rejected render now keeps the last good page on screen instead of
   // blanking the view (the previous page is only released once a new one is
@@ -344,7 +407,9 @@ it('retains a thumbnail operator-stream failure when the foreground later opens 
   expect(message).not.toHaveBeenCalled();
   renderer.next();
   await vi.waitFor(() => expect(message).toHaveBeenCalledOnce());
-  expect((message.mock.calls[0]![0] as CustomEvent<string>).detail).toContain(error.message);
+  expect((message.mock.calls[0]![0] as CustomEvent<string>).detail).toContain(
+    '40 million pixel safety limit',
+  );
   expect(host.querySelector('canvas')).toBe(firstCanvas);
   expect(relocated).toHaveBeenCalledOnce();
   renderer.next();

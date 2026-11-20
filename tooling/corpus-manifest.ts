@@ -75,7 +75,7 @@ export const PDF_CORPUS = [
     license: 'public-domain, as explicitly annotated by upstream REUSE.toml',
     attribution:
       'OCRmyPDF test-resource assembly; public-domain source scans and upstream notices retained',
-    limitedPages: [2],
+    limitedPages: [],
     blankPages: [],
     aspectRatios: [369.6 / 477.6, 1, 718.5 / 300, 718.5 / 300, 612 / 792, 792 / 612],
   },
@@ -92,7 +92,7 @@ export const PDF_CORPUS = [
     licenseUrl: OCR_LICENSE,
     license: 'CC-BY-SA-4.0 plus CC-BY-SA-3.0 component alternative (see original REUSE terms)',
     attribution: 'Euskaldunaa, James R. Barlow, Ellywa; unmodified OCRmyPDF three-image assembly',
-    limitedPages: [3],
+    limitedPages: [],
     blankPages: [],
     aspectRatios: [200 / 213.125, 144 / 18, 200 / 143.2],
   },

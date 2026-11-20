@@ -11,11 +11,19 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(() => expect(errors).toEqual([]));
 async function settings(page: Page) {
   const menu = page.locator('.reader-settings-popover');
-  if (!(await menu.evaluate((el) => (el as HTMLDetailsElement).open)))
-    await menu.locator(':scope > summary').click();
+  const dialog = menu.locator('dialog.reader-settings');
+  const trigger = menu.getByRole('button', { name: 'Reader settings', exact: true });
+  if (!(await dialog.isVisible())) await trigger.click();
+  await expect(dialog).toBeVisible();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 }
 async function closeSettings(page: Page) {
-  await page.getByRole('button', { name: 'Close reader settings' }).click();
+  await page.getByRole('button', { name: 'Close reader settings', exact: true }).click();
+  await expect(page.locator('.reader-settings-popover dialog')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Reader settings', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
 }
 async function mode(page: Page, name: string) {
   await settings(page);

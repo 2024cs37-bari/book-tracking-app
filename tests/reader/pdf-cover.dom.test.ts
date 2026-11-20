@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { Blob as NodeBlob } from 'node:buffer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { renderPdfCover, PDF_COVER_MAX_EDGE } from '~/reader/pdf-cover';
+import { renderPdfCover, PDF_COVER_MAX_EDGE, PDF_COVER_MAX_PIXELS } from '~/reader/pdf-cover';
+import { PDF_MAX_SOURCE_IMAGE_PIXELS } from '~/reader/pdf-limits';
 
 const engine = vi.hoisted(() => {
   const viewports: Array<{ width: number; height: number }> = [];
@@ -14,15 +15,16 @@ const engine = vi.hoisted(() => {
     render: () => ({ promise: Promise.resolve(), cancel: vi.fn() }),
     cleanup: vi.fn(),
   }));
-  return { getPage, viewports };
+  const getDocument = vi.fn((_options: unknown) => ({
+    promise: Promise.resolve({ numPages: 3, getPage, cleanup: vi.fn() }),
+    destroy: vi.fn(async () => {}),
+  }));
+  return { getDocument, getPage, viewports };
 });
 
 vi.mock('pdfjs-dist', () => ({
   GlobalWorkerOptions: {},
-  getDocument: () => ({
-    promise: Promise.resolve({ numPages: 3, getPage: engine.getPage, cleanup: vi.fn() }),
-    destroy: vi.fn(async () => {}),
-  }),
+  getDocument: engine.getDocument,
 }));
 
 beforeEach(() => {
@@ -56,9 +58,26 @@ it('renders the first page to a bounded JPEG cover', async () => {
   expect(cover!.extension).toBe('jpg');
   expect(cover!.bytes.byteLength).toBeGreaterThan(0);
   expect(engine.getPage).toHaveBeenCalledWith(1);
+  const options = engine.getDocument.mock.calls[0]![0];
+  expect(options).toMatchObject({
+    maxImageSize: PDF_MAX_SOURCE_IMAGE_PIXELS,
+    canvasMaxAreaInBytes: PDF_COVER_MAX_PIXELS * 4,
+    stopAtErrors: false,
+    isImageDecoderSupported: false,
+  });
+  expect(options).not.toHaveProperty('isOffscreenCanvasSupported');
 
   const rendered = engine.viewports.at(-1)!;
+  expect(rendered.width * rendered.height).toBeLessThanOrEqual(PDF_COVER_MAX_PIXELS);
   expect(Math.max(rendered.width, rendered.height)).toBeLessThanOrEqual(PDF_COVER_MAX_EDGE + 1);
+});
+
+it('contains oversized source-image failures as a best-effort cover', async () => {
+  stubCanvas(true);
+  engine.getPage.mockRejectedValueOnce(new Error('Image exceeded maximum allowed size'));
+  expect(await renderPdfCover(new Blob(['%PDF']))).toBeNull();
+  const loading = engine.getDocument.mock.results[0]!.value;
+  expect(loading.destroy).toHaveBeenCalledOnce();
 });
 
 it('returns null when the canvas cannot produce a blob', async () => {

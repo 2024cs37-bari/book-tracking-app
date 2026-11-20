@@ -179,7 +179,13 @@ export default function Select<T extends string>(props: SelectProps<T>) {
   function positionMenu() {
     if (!menu) return;
     const rect = trigger.getBoundingClientRect();
-    if (!trigger.isConnected || trigger.closest('[inert], [hidden]') || rect.width === 0) {
+    const dialog = trigger.closest('dialog');
+    if (
+      !trigger.isConnected ||
+      trigger.closest('[inert], [hidden]') ||
+      (dialog && !dialog.open) ||
+      rect.width === 0
+    ) {
       close();
       return;
     }
@@ -308,9 +314,10 @@ export default function Select<T extends string>(props: SelectProps<T>) {
       <Show when={present()}>
         <Portal
           mount={
-            document.fullscreenElement?.contains(trigger)
+            trigger.closest('dialog') ??
+            (document.fullscreenElement?.contains(trigger)
               ? (document.fullscreenElement as HTMLElement)
-              : document.body
+              : document.body)
           }
         >
           <div

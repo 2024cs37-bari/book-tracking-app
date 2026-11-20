@@ -171,7 +171,6 @@ export default function LibraryView() {
     <section class="library" aria-labelledby="library-heading">
       <header class="library-heading">
         <div>
-          <p class="eyebrow">A little space for your books</p>
           <h1 id="library-heading">Your library</h1>
         </div>
         <div class="library-import-action">
@@ -413,13 +412,7 @@ export default function LibraryView() {
                 when={data().hasAnyBooks}
                 fallback={
                   <div class="empty-state">
-                    <div class="empty-library-art" aria-hidden="true">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                    <p class="eyebrow">Make yourself at home</p>
-                    <h2>Your next chapter starts here.</h2>
+                    <h2>No books yet</h2>
                     <p>
                       Import an EPUB or PDF to get started. Originals are kept on this device
                       {app.background ? ' and backed up to your configured sync server.' : '.'}
@@ -430,7 +423,7 @@ export default function LibraryView() {
                       disabled={importing()}
                       onClick={() => importInput?.click()}
                     >
-                      Choose your first book <Icon name="arrow-right" size={18} />
+                      Choose books <Icon name="arrow-right" size={18} />
                     </button>
                   </div>
                 }
@@ -460,8 +453,12 @@ export default function LibraryView() {
                           </span>
                         </span>
                         <span class="book-card-text">
-                          <span class="book-title">{book().title}</span>
-                          <span class="book-author">{displayAuthor(book())}</span>
+                          <span class="book-title" title={book().title}>
+                            {book().title}
+                          </span>
+                          <span class="book-author" title={displayAuthor(book())}>
+                            {displayAuthor(book())}
+                          </span>
                           <span class="book-meta">
                             <StatusBadge status={data().progress.get(id)?.status ?? 'to_read'} />
                             <Show when={data().progress.get(id)?.locator}>
@@ -473,17 +470,17 @@ export default function LibraryView() {
                               </span>
                             </Show>
                           </span>
-                          <Show when={progressFraction(data().progress.get(id)) > 0}>
-                            <progress
-                              class="book-progress"
-                              max="1"
-                              value={progressFraction(data().progress.get(id))}
-                              aria-label="Reading progress"
-                            />
-                          </Show>
-                          <Show when={book().metadataIncomplete}>
-                            <span class="badge badge-warning">Metadata incomplete</span>
-                          </Show>
+                          <progress
+                            class="book-progress"
+                            max="1"
+                            value={progressFraction(data().progress.get(id))}
+                            aria-label="Reading progress"
+                          />
+                          <span class="book-card-notice">
+                            <Show when={book().metadataIncomplete}>
+                              <span class="badge badge-warning">Metadata incomplete</span>
+                            </Show>
+                          </span>
                         </span>
                       </A>
                     </li>

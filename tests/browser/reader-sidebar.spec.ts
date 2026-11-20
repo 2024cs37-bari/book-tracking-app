@@ -108,32 +108,45 @@ test('reader appearance is reachable on mobile and dismisses without moving the 
     'reader-appearance.pdf',
     'A long title for a small and quiet reading screen',
   );
-  // Page turns remain reachable even while the mobile navigation panel is open.
+  // Opening a mobile reader leaves the book visible instead of opening the overlay.
+  await expect(page.locator('.reader-sidebar')).toHaveCount(0);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.locator('.pdf-scroll canvas[data-render-state="ready"]')).toHaveAttribute(
     'aria-label',
     'Page 2 of 3',
   );
   const menu = page.locator('.reader-settings-popover');
-  const trigger = menu.locator('summary').first();
+  const trigger = menu.getByRole('button', { name: 'Reader settings', exact: true });
+  const dialog = menu.locator('dialog.reader-settings');
   await trigger.click();
-  await expect(page.getByLabel('Theme', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Margins', { exact: true })).toBeHidden();
-  await page.getByText('Page layout', { exact: true }).click();
-  await expect(page.getByLabel('Margins', { exact: true })).toBeVisible();
-  await page.getByLabel('Margins', { exact: true }).focus();
+  await expect(dialog).toBeVisible();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(dialog.getByLabel('Theme', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Margins', { exact: true })).toBeHidden();
+  await dialog.getByText('Page layout', { exact: true }).click();
+  await expect(dialog.getByLabel('Margins', { exact: true })).toBeVisible();
+  await dialog.getByLabel('Margins', { exact: true }).focus();
   await page.keyboard.press('Escape');
-  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await expect(trigger).toBeFocused();
-  await expect(page.getByRole('button', { name: 'Toggle sidebar' })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  );
+  const sidebarToggle = page.getByRole('button', { name: 'Toggle sidebar', exact: true });
+  await expect(sidebarToggle).toHaveAttribute('aria-expanded', 'false');
   await trigger.click();
-  // The sidebar heading is behind the appearance sheet on narrow screens;
-  // the toolbar toggle is an exposed outside target for ordinary dismissal.
-  await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
-  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(dialog).toBeVisible();
+  // A native modal makes the toolbar inert. A real backdrop gesture closes
+  // settings without also activating the sidebar button behind that gesture.
+  const outsideTarget = await sidebarToggle.boundingBox();
+  const drawer = await dialog.boundingBox();
+  expect(outsideTarget).not.toBeNull();
+  expect(drawer).not.toBeNull();
+  expect(drawer!.x).toBeGreaterThan(0);
+  await page.mouse.click(drawer!.x / 2, outsideTarget!.y + outsideTarget!.height / 2);
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(trigger).toBeFocused();
+  await expect(sidebarToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.reader-sidebar')).toHaveCount(0);
   await expect(page.locator('.pdf-scroll canvas[data-render-state="ready"]')).toHaveAttribute(
     'aria-label',
     'Page 2 of 3',

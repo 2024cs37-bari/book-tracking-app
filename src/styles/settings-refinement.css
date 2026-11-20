@@ -1,15 +1,15 @@
 .settings-refined {
   max-width: 68rem;
   margin: 0 auto;
-  padding: 1.25rem 0 3rem;
+  padding: 0 0 2.25rem;
 }
 
 .settings-header {
-  margin-bottom: 3.25rem;
+  margin-bottom: 1.25rem;
 }
 
 .settings-header .settings-eyebrow {
-  margin: 0 0 0.7rem;
+  margin: 0 0 0.5rem;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -17,11 +17,12 @@
 }
 
 .settings-header h1 {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.5rem;
   font-family: var(--font-serif, Georgia, serif);
-  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-size: var(--page-title-size);
   font-weight: 400;
   letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
 }
 
 .settings-header p {
@@ -33,12 +34,12 @@
 .settings-layout {
   display: grid;
   grid-template-columns: 11rem minmax(0, 1fr);
-  gap: clamp(2rem, 5vw, 5rem);
+  gap: clamp(1.5rem, 3.75vw, 3.75rem);
 }
 
 .settings-navigation {
   position: sticky;
-  top: 2rem;
+  top: 1.5rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -47,7 +48,7 @@
 }
 
 .settings-navigation-label {
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.5rem;
   color: var(--text-muted);
   font-size: 0.72rem;
   letter-spacing: 0.08em;
@@ -55,7 +56,10 @@
 }
 
 .settings-navigation a {
-  padding: 0.45rem 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0.3rem 0;
   color: var(--text-muted);
   font-size: 0.9rem;
   text-decoration: none;
@@ -73,8 +77,8 @@
 }
 
 .settings-refined .settings-section {
-  margin: 0 0 2.5rem;
-  padding: 0 0 2.5rem;
+  margin: 0 0 1.875rem;
+  padding: 0 0 1.875rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
   scroll-margin-top: 2rem;
 }
@@ -85,15 +89,15 @@
 }
 
 .settings-refined h2 {
-  margin: 0 0 0.6rem;
-  font-family: var(--font-serif, Georgia, serif);
-  font-size: 1.5rem;
-  font-weight: 400;
+  margin: 0 0 0.45rem;
+  font-family: var(--font-sans);
+  font-size: var(--section-title-size);
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 .settings-description {
-  margin: 0 0 1.25rem;
+  margin: 0 0 0.9rem;
   color: var(--text-muted);
   font-size: 0.93rem;
   line-height: 1.65;
@@ -102,7 +106,7 @@
 
 .settings-refined .note {
   padding: 0;
-  margin: 0 0 0.9rem;
+  margin: 0 0 0.65rem;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -112,8 +116,8 @@
 }
 
 .settings-refined .note-error {
-  margin-top: 1rem;
-  padding-left: 0.85rem;
+  margin-top: 0.75rem;
+  padding-left: 0.65rem;
   border-left: 2px solid var(--danger);
   color: var(--danger);
 }
@@ -122,7 +126,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  min-height: 36px;
+  gap: 0.4rem;
   font-size: 0.875rem;
 }
 
@@ -136,8 +141,8 @@
 }
 
 .settings-refined .panel-actions {
-  gap: 0.5rem;
-  margin: 1rem 0;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
 }
 
 .settings-control-row {
@@ -145,8 +150,8 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem 1.5rem;
-  padding: 1rem 0;
+  gap: 0.75rem 1.125rem;
+  padding: 0.75rem 0;
 }
 
 .settings-control-copy label,
@@ -160,7 +165,7 @@
 .settings-control-copy p,
 .settings-toggle-description {
   display: block;
-  margin: 0.3rem 0 0;
+  margin: 0.25rem 0 0;
   color: var(--text-muted);
   font-size: 0.83rem;
   line-height: 1.6;
@@ -171,9 +176,10 @@
   max-width: 100%;
 }
 .settings-control-row .select-trigger {
-  padding: 0.65rem 0.9rem;
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: var(--control-radius);
   background: var(--surface-sunken);
   color: var(--text);
   font: inherit;
@@ -305,7 +311,7 @@
 
 .settings-refined .manage-actions .button {
   padding: 0.35rem 0.55rem;
-  font-size: 0.8rem;
+  font-size: var(--control-font-size);
 }
 
 .settings-rename-form {
@@ -365,8 +371,8 @@
 .settings-diagnostics-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.75rem;
-  margin-top: 1.75rem;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
 }
 
 .settings-diagnostic-section {
@@ -396,8 +402,8 @@
 .settings-storage-totals {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 1.75rem 0 1.25rem;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0.875rem;
 }
 
 .settings-storage-totals dt {
@@ -429,8 +435,8 @@
 }
 
 .settings-refined .backup-preview {
-  padding: 1.25rem;
-  margin-top: 1.5rem;
+  padding: 0.875rem;
+  margin-top: 1.125rem;
   border: 0;
   border-radius: 0.5rem;
   background: var(--surface-sunken);
@@ -446,7 +452,7 @@
   }
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 1.75rem;
+    gap: 1.25rem;
   }
   .settings-navigation {
     position: static;
@@ -464,8 +470,8 @@
 
 @media (max-width: 520px) {
   .settings-refined .settings-section {
-    margin-bottom: 2rem;
-    padding-bottom: 2rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
   }
   .settings-diagnostics-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -481,6 +487,66 @@
   }
   .settings-toggle-row {
     gap: 1rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-refined {
+    padding: 0 0 1.25rem;
+  }
+  .settings-header {
+    margin-bottom: 1rem;
+  }
+  .settings-header h1 {
+    margin-bottom: 0.375rem;
+    font-size: var(--page-title-size);
+  }
+  .settings-refined h2,
+  .settings-refined .settings-summary-heading {
+    font-size: var(--section-title-size);
+  }
+  .settings-layout {
+    gap: 0.875rem;
+  }
+  .settings-navigation {
+    gap: 0.15rem 0.875rem;
+  }
+  .settings-refined .settings-section {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+  }
+  .settings-control-row {
+    gap: 0.5rem 0.75rem;
+    padding: 0.5rem 0;
+  }
+  .settings-privacy,
+  .settings-refined .collections-group {
+    margin-top: 0.875rem;
+  }
+  .settings-privacy h3,
+  .settings-refined .collections-group h3 {
+    margin-bottom: 0.625rem;
+  }
+  .settings-diagnostics-grid {
+    gap: 0.875rem;
+    margin-top: 0.875rem;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .settings-refined .button,
+  .settings-control-row .select-trigger,
+  .settings-navigation a,
+  .settings-toggle-row {
+    min-height: 44px;
+  }
+  .settings-navigation a {
+    min-width: 44px;
+  }
+  .settings-refined .accent-swatch,
+  .settings-refined .accent-custom input {
+    width: 44px;
+    height: 44px;
   }
 }
 

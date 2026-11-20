@@ -32,9 +32,7 @@ export default function StatsView() {
   return (
     <section class="stats">
       <header class="stats-heading">
-        <p class="stats-eyebrow">Your reading life</p>
         <h1>Reading statistics</h1>
-        <p>A little time with a good book adds up.</p>
       </header>
 
       <Show when={data.error}>
@@ -81,9 +79,8 @@ export default function StatsView() {
               when={loaded().stats.perBook.size > 0}
               fallback={
                 <div class="empty-state stats-empty">
-                  <Icon name="book" size={32} />
                   <h2>No reading recorded yet</h2>
-                  <p>Open a book and settle in. Your reading time will appear here.</p>
+                  <p>Open a book to start tracking reading time.</p>
                   <A class="button button-primary" href="/">
                     Browse your library <Icon name="arrow-right" size={17} />
                   </A>
